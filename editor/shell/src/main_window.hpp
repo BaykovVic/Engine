@@ -16,6 +16,7 @@ class ConsolePanel;
 class HierarchyPanel;
 class InspectorPanel;
 class ProjectPanel;
+class SceneView3D;
 class ViewportWidget;
 
 /// The editor shell: Unity-like main window with Hierarchy, Scene view,
@@ -51,6 +52,7 @@ private:
     ProjectPanel* project_ = nullptr;
     ConsolePanel* console_ = nullptr;
     ViewportWidget* viewport_ = nullptr;
+    SceneView3D* sceneView3d_ = nullptr;
     QToolButton* playButton_ = nullptr;
     QToolButton* pauseButton_ = nullptr;
     QToolButton* stopButton_ = nullptr;

@@ -27,6 +27,8 @@ enum class RenderResourceType {
 enum class RenderCommandType : std::uint8_t {
     BeginFrame,
     SetViewport,
+    /// `transform` carries the camera pose, `fovDegrees` the projection.
+    SetCamera,
     BindPipeline,
     DrawMesh,
     EndFrame,
@@ -40,6 +42,9 @@ struct RenderCommand {
     core::Transform transform;
     std::uint32_t viewportWidth = 0;
     std::uint32_t viewportHeight = 0;
+    /// Flat material colour until the material system lands.
+    core::Vec3 color{1.0f, 1.0f, 1.0f};
+    float fovDegrees = 60.0f;
 };
 
 /// Rendering Abstraction contract: the surface a frame is presented to —

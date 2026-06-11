@@ -14,6 +14,7 @@
 #include "sky/editor/tools/hierarchy_panel.hpp"
 #include "sky/editor/tools/inspector_panel.hpp"
 #include "sky/editor/tools/project_panel.hpp"
+#include "scene_view_3d.hpp"
 #include "viewport_widget.hpp"
 
 namespace sky::editor {
@@ -24,10 +25,14 @@ MainWindow::MainWindow(EditorContext& context)
     resize(1500, 900);
     setDockOptions(AllowNestedDocks | AllowTabbedDocks | AnimatedDocks);
 
-    // Central Scene view wrapped in a Unity-like tab strip.
+    // Central Scene view wrapped in a Unity-like tab strip: the 3D view
+    // renders through the engine's OpenGL backend; the 2D view keeps the
+    // transform gizmos.
     auto* sceneTabs = new QTabWidget(this);
+    sceneView3d_ = new SceneView3D(context_, sceneTabs);
     viewport_ = new ViewportWidget(context_, sceneTabs);
-    sceneTabs->addTab(viewport_, tr("Scene"));
+    sceneTabs->addTab(sceneView3d_, tr("Scene"));
+    sceneTabs->addTab(viewport_, tr("Scene 2D"));
     sceneTabs->addTab(new QLabel(tr("Game view renders here in play mode."), sceneTabs),
                       tr("Game"));
     setCentralWidget(sceneTabs);
@@ -41,8 +46,14 @@ MainWindow::MainWindow(EditorContext& context)
         onSelection(objectId);
         hierarchy_->selectObject(object::ObjectHandle{objectId});
     });
-    connect(viewport_, &ViewportWidget::transformEdited, this,
-            [this] { inspector_->refreshTransform(); });
+    connect(sceneView3d_, &SceneView3D::objectPicked, this, [this](quint64 objectId) {
+        onSelection(objectId);
+        hierarchy_->selectObject(object::ObjectHandle{objectId});
+    });
+    connect(viewport_, &ViewportWidget::transformEdited, this, [this] {
+        inspector_->refreshTransform();
+        sceneView3d_->update();
+    });
     connect(viewport_, &ViewportWidget::transformCommitted, this,
             [this](quint64 objectId, const core::Transform& before,
                    const core::Transform& after) {
@@ -86,6 +97,7 @@ void MainWindow::playFrames(int frames) {
         context_.playMode->tickFrame(1.0 / 60.0);
     }
     viewport_->update();
+    sceneView3d_->update();
     inspector_->refreshTransform();
 }
 
@@ -279,6 +291,7 @@ void MainWindow::buildDocks() {
     connect(inspector_, &InspectorPanel::objectEdited, this, [this] {
         hierarchy_->refresh();
         viewport_->update();
+        sceneView3d_->update();
     });
     connect(inspector_, &InspectorPanel::transformCommitted, this,
             [this](quint64 objectId, const core::Transform& before,
@@ -315,6 +328,7 @@ void MainWindow::refreshAfterHistory() {
         viewport_->setSelected(object::ObjectHandle::invalid());
     }
     viewport_->update();
+    sceneView3d_->update();
 }
 
 void MainWindow::updateUndoActions() {
@@ -361,6 +375,7 @@ void MainWindow::onFrameTick() {
     context_.playMode->tickFrame(1.0 / 60.0);
     if (context_.playMode->state() == PlayModeState::Playing) {
         viewport_->update();
+        sceneView3d_->update();
         inspector_->refreshTransform();
     }
 }
@@ -369,6 +384,7 @@ void MainWindow::onSelection(quint64 objectId) {
     const object::ObjectHandle object{objectId};
     inspector_->setObject(object);
     viewport_->setSelected(object);
+    sceneView3d_->setSelected(object);
 }
 
 void MainWindow::syncPlayButtons() {

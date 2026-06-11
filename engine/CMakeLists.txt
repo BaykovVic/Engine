@@ -89,8 +89,9 @@ target_link_libraries(sky_terrain       PUBLIC sky_asset sky_serialization sky_r
 target_link_libraries(sky_mapgen        PUBLIC sky_terrain sky_scene sky_asset)
 
 if(SKY_BUILD_OPENGL_BACKEND)
-    sky_add_module(sky_rendering_opengl rendering_opengl)
-    target_link_libraries(sky_rendering_opengl INTERFACE sky_rendering sky_platform)
+    sky_add_module(sky_rendering_opengl rendering_opengl
+        rendering_opengl/src/opengl_renderer.cpp)
+    target_link_libraries(sky_rendering_opengl PUBLIC sky_rendering sky_platform)
 endif()
 
 if(SKY_BUILD_VULKAN_BACKEND)

@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QPixmap>
+#include <QSurfaceFormat>
 #include <QTimer>
 
 #include "editor_context.hpp"
@@ -16,9 +17,20 @@ int main(int argc, char** argv) {
             qstrcmp(argv[i], "--screenshot-play") == 0) {
             screenshotPath = QString::fromLocal8Bit(argv[i + 1]);
             screenshotInPlayMode = qstrcmp(argv[i], "--screenshot-play") == 0;
-            qputenv("QT_QPA_PLATFORM", "offscreen");
+            // Default to the offscreen platform unless the caller chose one
+            // (e.g. xcb under Xvfb, which can create GL contexts).
+            if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) {
+                qputenv("QT_QPA_PLATFORM", "offscreen");
+            }
         }
     }
+
+    QSurfaceFormat format;
+    format.setVersion(3, 3);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setDepthBufferSize(24);
+    format.setSamples(4);
+    QSurfaceFormat::setDefaultFormat(format);
 
     QApplication app(argc, argv);
     sky::editor::applyDarkTheme(app);
