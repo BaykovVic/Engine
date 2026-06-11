@@ -1,6 +1,6 @@
-# Compile-time verification: every public contract header must compile
-# standalone under C++20. Editor contract headers are Qt-free by design, so
-# they are checked here even when SKY_BUILD_EDITOR=OFF.
+# Compile-time verification (header check) plus unit tests for implemented
+# modules. Editor contract headers are Qt-free by design, so they are
+# checked here even when SKY_BUILD_EDITOR=OFF.
 
 add_executable(sky_header_check header_check.cpp)
 target_link_libraries(sky_header_check PRIVATE sky::engine)
@@ -20,3 +20,15 @@ if(SKY_BUILD_VULKAN_BACKEND)
 endif()
 
 add_test(NAME header_check COMMAND sky_header_check)
+
+function(sky_add_test NAME)
+    add_executable(${NAME} ${NAME}.cpp)
+    target_link_libraries(${NAME} PRIVATE sky::engine)
+    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_test(NAME ${NAME} COMMAND ${NAME})
+endfunction()
+
+sky_add_test(core_tests)
+sky_add_test(platform_serialization_tests)
+sky_add_test(world_tests)
+sky_add_test(scene_tests)

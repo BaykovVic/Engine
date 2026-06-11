@@ -1,24 +1,54 @@
-# Native engine core modules. Each module exposes its public contracts as an
-# INTERFACE (header-only) target until the implementation lands behind them.
+# Native engine core modules. Modules with an implementation are STATIC
+# libraries; contract-only modules stay INTERFACE until code lands.
 
-function(sky_add_module NAME)
-    add_library(${NAME} INTERFACE)
+function(sky_add_module NAME DIR)
+    set(SOURCES ${ARGN})
+    if(SOURCES)
+        add_library(${NAME} STATIC ${SOURCES})
+        target_include_directories(${NAME} PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/include)
+        target_compile_features(${NAME} PUBLIC cxx_std_20)
+        set(SCOPE PUBLIC)
+    else()
+        add_library(${NAME} INTERFACE)
+        target_include_directories(${NAME} INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/include)
+        target_compile_features(${NAME} INTERFACE cxx_std_20)
+    endif()
     add_library(sky::${NAME} ALIAS ${NAME})
-    target_include_directories(${NAME} INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}/${ARGV1}/include)
-    target_compile_features(${NAME} INTERFACE cxx_std_20)
 endfunction()
 
-sky_add_module(sky_platform       platform)
-sky_add_module(sky_core           core)
+sky_add_module(sky_platform platform
+    platform/src/std_file_system.cpp
+    platform/src/chrono_timer_service.cpp
+    platform/src/std_threading.cpp
+    platform/src/headless_window_system.cpp)
+
+sky_add_module(sky_core core
+    core/src/console_logger.cpp
+    core/src/memory_config_service.cpp
+    core/src/event_bus.cpp
+    core/src/job_scheduler.cpp
+    core/src/diagnostics.cpp)
+
+sky_add_module(sky_serialization serialization
+    serialization/src/file_serialization_backend.cpp)
+
+sky_add_module(sky_object object
+    object/src/object_world.cpp)
+
+sky_add_module(sky_component component
+    component/src/component_world.cpp)
+
+sky_add_module(sky_ecs ecs
+    ecs/src/ecs_world.cpp)
+
+sky_add_module(sky_scene scene
+    scene/src/scene_world.cpp)
+
 sky_add_module(sky_project        project)
 sky_add_module(sky_package        package)
 sky_add_module(sky_asset          asset)
-sky_add_module(sky_serialization  serialization)
-sky_add_module(sky_scene          scene)
-sky_add_module(sky_object         object)
-sky_add_module(sky_component      component)
-sky_add_module(sky_ecs            ecs)
 sky_add_module(sky_physics        physics)
 sky_add_module(sky_rendering      rendering)
 sky_add_module(sky_scripting      scripting)
@@ -26,15 +56,15 @@ sky_add_module(sky_terrain        terrain)
 sky_add_module(sky_mapgen         mapgen)
 
 # Dependency edges mirror docs/modules/modules.md ("Межмодульные связи").
-target_link_libraries(sky_core          INTERFACE sky_platform)
-target_link_libraries(sky_serialization INTERFACE sky_platform sky_core)
+target_link_libraries(sky_core          PUBLIC sky_platform)
+target_link_libraries(sky_serialization PUBLIC sky_platform sky_core)
 target_link_libraries(sky_project       INTERFACE sky_serialization sky_core)
 target_link_libraries(sky_package       INTERFACE sky_project sky_serialization sky_asset)
 target_link_libraries(sky_asset         INTERFACE sky_serialization sky_core)
-target_link_libraries(sky_scene         INTERFACE sky_serialization sky_asset sky_object sky_component sky_ecs)
-target_link_libraries(sky_object        INTERFACE sky_core)
-target_link_libraries(sky_component     INTERFACE sky_object sky_scripting sky_serialization)
-target_link_libraries(sky_ecs           INTERFACE sky_core sky_physics sky_rendering)
+target_link_libraries(sky_scene         PUBLIC sky_serialization sky_asset sky_object sky_component sky_ecs)
+target_link_libraries(sky_object        PUBLIC sky_core)
+target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_serialization)
+target_link_libraries(sky_ecs           PUBLIC sky_core sky_physics sky_rendering)
 target_link_libraries(sky_physics       INTERFACE sky_core sky_object)
 target_link_libraries(sky_rendering     INTERFACE sky_asset sky_platform)
 target_link_libraries(sky_scripting     INTERFACE sky_core sky_object)
