@@ -1,4 +1,16 @@
-add_library(sky_editor_shell INTERFACE)
-add_library(sky::editor_shell ALIAS sky_editor_shell)
-target_include_directories(sky_editor_shell INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(sky_editor_shell INTERFACE sky::engine Qt5::Widgets)
+set(CMAKE_AUTOMOC ON)
+
+add_executable(sky_editor
+    src/main.cpp
+    src/editor_context.cpp
+    src/main_window.cpp
+    src/viewport_widget.cpp
+    src/theme.cpp
+    src/editor_context.hpp
+    src/main_window.hpp
+    src/viewport_widget.hpp
+    src/theme.hpp)
+target_include_directories(sky_editor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(sky_editor PRIVATE
+    Qt5::Widgets sky::engine sky::viewport_bridge sky::editor_tools)

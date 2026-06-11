@@ -22,7 +22,9 @@ sky_add_module(sky_platform platform
     platform/src/std_file_system.cpp
     platform/src/chrono_timer_service.cpp
     platform/src/std_threading.cpp
-    platform/src/headless_window_system.cpp)
+    platform/src/headless_window_system.cpp
+    platform/src/virtual_file_system.cpp
+    platform/src/pak_archive.cpp)
 
 sky_add_module(sky_core core
     core/src/console_logger.cpp
