@@ -13,6 +13,7 @@
 #include "sky/editor/tools/console_panel.hpp"
 #include "sky/editor/tools/hierarchy_panel.hpp"
 #include "sky/editor/tools/inspector_panel.hpp"
+#include "sky/editor/tools/package_panel.hpp"
 #include "sky/editor/tools/project_panel.hpp"
 #include "scene_view_3d.hpp"
 #include "viewport_widget.hpp"
@@ -20,7 +21,7 @@
 namespace sky::editor {
 
 MainWindow::MainWindow(EditorContext& context)
-    : context_(context), undoStack_(context) {
+    : context_(context), undoStack_(context), commandBus_(createToolCommandBus()) {
     setWindowTitle(tr("Sky Engine — SampleScene"));
     resize(1500, 900);
     setDockOptions(AllowNestedDocks | AllowTabbedDocks | AnimatedDocks);
@@ -29,12 +30,12 @@ MainWindow::MainWindow(EditorContext& context)
     // renders through the engine's OpenGL backend; the 2D view keeps the
     // transform gizmos.
     auto* sceneTabs = new QTabWidget(this);
-    sceneView3d_ = new SceneView3D(context_, sceneTabs);
+    sceneView3d_ = new SceneView3D(context_, false, sceneTabs);
     viewport_ = new ViewportWidget(context_, sceneTabs);
+    gameView_ = new SceneView3D(context_, true, sceneTabs);
     sceneTabs->addTab(sceneView3d_, tr("Scene"));
     sceneTabs->addTab(viewport_, tr("Scene 2D"));
-    sceneTabs->addTab(new QLabel(tr("Game view renders here in play mode."), sceneTabs),
-                      tr("Game"));
+    sceneTabs->addTab(gameView_, tr("Game"));
     setCentralWidget(sceneTabs);
 
     buildDocks();
@@ -77,6 +78,63 @@ MainWindow::MainWindow(EditorContext& context)
     frameTimer_->setInterval(16);
     connect(frameTimer_, &QTimer::timeout, this, &MainWindow::onFrameTick);
     frameTimer_->start();
+
+    // Authoring actions of the menus/panels run through the documented
+    // IToolCommandBus contract.
+    commandBus_->setUndoDelegate([this] {
+        if (!undoStack_.canUndo()) {
+            return false;
+        }
+        performUndo();
+        return true;
+    });
+    commandBus_->setRedoDelegate([this] {
+        if (!undoStack_.canRedo()) {
+            return false;
+        }
+        performRedo();
+        return true;
+    });
+    commandBus_->registerHandler("gameobject.create-empty", [this](const ToolCommand&) {
+        const auto object = context_.createEmpty("GameObject");
+        undoStack_.push(makeCreateCommand(object, "GameObject", {}, false));
+        hierarchy_->refresh();
+        onSelection(object.value);
+        return true;
+    });
+    commandBus_->registerHandler("gameobject.create-cube", [this](const ToolCommand&) {
+        const auto name = QString("Cube %1").arg(++crateCounter_).toStdString();
+        const auto crate = context_.createCrate(name, {0.0f, 5.0f, 0.0f});
+        undoStack_.push(makeCreateCommand(crate, name, {0.0f, 5.0f, 0.0f}, true));
+        hierarchy_->refresh();
+        onSelection(crate.value);
+        console_->logger().info("Scene", "Cube created");
+        return true;
+    });
+    commandBus_->registerHandler("object.delete", [this](const ToolCommand& command) {
+        deleteObject(std::stoull(command.payload));
+        return true;
+    });
+    commandBus_->registerHandler("object.duplicate", [this](const ToolCommand& command) {
+        duplicateObject(std::stoull(command.payload));
+        return true;
+    });
+
+    connect(sceneView3d_, &SceneView3D::backendInitialized, this,
+            [this](const QString& backend) {
+                console_->logger().info(
+                    "Renderer", QString("Active graphics backend: %1 (available: %2)")
+                                    .arg(backend)
+                                    .arg(QString::fromStdString([this] {
+                                        std::string joined;
+                                        for (const auto& name :
+                                             context_.renderers->availableBackends()) {
+                                            joined += joined.empty() ? name : ", " + name;
+                                        }
+                                        return joined;
+                                    }()))
+                                    .toStdString());
+            });
 
     console_->logger().info("Editor", "Sky Engine editor started");
     console_->logger().info("Scene", "SampleScene loaded: ground, crates, camera, light");
@@ -122,18 +180,10 @@ void MainWindow::buildMenus() {
 
     auto* gameObjectMenu = menuBar()->addMenu(tr("&GameObject"));
     gameObjectMenu->addAction(tr("Create Empty"), this, [this] {
-        const auto object = context_.createEmpty("GameObject");
-        undoStack_.push(makeCreateCommand(object, "GameObject", {}, false));
-        hierarchy_->refresh();
-        onSelection(object.value);
+        commandBus_->execute({"gameobject.create-empty", ""});
     });
     gameObjectMenu->addAction(tr("3D Object / Cube"), this, [this] {
-        const auto name = QString("Cube %1").arg(++crateCounter_).toStdString();
-        const auto crate = context_.createCrate(name, {0.0f, 5.0f, 0.0f});
-        undoStack_.push(makeCreateCommand(crate, name, {0.0f, 5.0f, 0.0f}, true));
-        hierarchy_->refresh();
-        onSelection(crate.value);
-        console_->logger().info("Scene", "Cube created");
+        commandBus_->execute({"gameobject.create-cube", ""});
     });
 
     auto* windowMenu = menuBar()->addMenu(tr("&Window"));
@@ -249,21 +299,31 @@ void MainWindow::buildDocks() {
     auto* consoleDock = new QDockWidget(tr("Console"), this);
     consoleDock->setWidget(console_);
     addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+
+    packagePanel_ = new PackagePanel(*context_.packages, context_.packagesRoot, this);
+    auto* packagesDock = new QDockWidget(tr("Packages"), this);
+    packagesDock->setWidget(packagePanel_);
+    addDockWidget(Qt::BottomDockWidgetArea, packagesDock);
+    connect(packagePanel_, &PackagePanel::packageActivated, this,
+            [this](const QString& packageId) {
+                console_->logger().info("Packages",
+                                        ("Activated " + packageId).toStdString());
+            });
+    connect(packagePanel_, &PackagePanel::packageDeactivated, this,
+            [this](const QString& packageId) {
+                console_->logger().info("Packages",
+                                        ("Deactivated " + packageId).toStdString());
+            });
+
     tabifyDockWidget(projectDock, consoleDock);
+    tabifyDockWidget(consoleDock, packagesDock);
     projectDock->raise();
 
     connect(hierarchy_, &HierarchyPanel::objectSelected, this, &MainWindow::onSelection);
-    connect(hierarchy_, &HierarchyPanel::createEmptyRequested, this, [this] {
-        const auto object = context_.createEmpty("GameObject");
-        undoStack_.push(makeCreateCommand(object, "GameObject", {}, false));
-        hierarchy_->refresh();
-    });
-    connect(hierarchy_, &HierarchyPanel::createCrateRequested, this, [this] {
-        const auto name = QString("Cube %1").arg(++crateCounter_).toStdString();
-        const auto crate = context_.createCrate(name, {0.0f, 5.0f, 0.0f});
-        undoStack_.push(makeCreateCommand(crate, name, {0.0f, 5.0f, 0.0f}, true));
-        hierarchy_->refresh();
-    });
+    connect(hierarchy_, &HierarchyPanel::createEmptyRequested, this,
+            [this] { commandBus_->execute({"gameobject.create-empty", ""}); });
+    connect(hierarchy_, &HierarchyPanel::createCrateRequested, this,
+            [this] { commandBus_->execute({"gameobject.create-cube", ""}); });
     connect(hierarchy_, &HierarchyPanel::objectRenamed, this,
             [this](quint64 objectId, const QString& oldName, const QString& newName) {
                 undoStack_.push(makeRenameCommand(object::ObjectHandle{objectId},
@@ -384,6 +444,7 @@ void MainWindow::onFrameTick() {
     if (context_.playMode->state() == PlayModeState::Playing) {
         viewport_->update();
         sceneView3d_->update();
+        gameView_->update();
         inspector_->refreshTransform();
     }
 }

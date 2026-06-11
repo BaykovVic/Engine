@@ -36,6 +36,11 @@ int main(int argc, char** argv) {
     sky::editor::applyDarkTheme(app);
 
     sky::editor::EditorContext context;
+    for (int i = 1; i < argc - 1; ++i) {
+        if (qstrcmp(argv[i], "--renderer") == 0) {
+            context.config->set("engine.renderer", argv[i + 1]);
+        }
+    }
     sky::editor::MainWindow window(context);
     window.show();
 

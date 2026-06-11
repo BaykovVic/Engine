@@ -5,6 +5,7 @@
 
 #include "editor_commands.hpp"
 #include "editor_context.hpp"
+#include "sky/editor/viewport/tool_command_bus.hpp"
 
 class QAction;
 class QToolButton;
@@ -15,6 +16,7 @@ namespace sky::editor {
 class ConsolePanel;
 class HierarchyPanel;
 class InspectorPanel;
+class PackagePanel;
 class ProjectPanel;
 class SceneView3D;
 class ViewportWidget;
@@ -50,9 +52,11 @@ private:
     HierarchyPanel* hierarchy_ = nullptr;
     InspectorPanel* inspector_ = nullptr;
     ProjectPanel* project_ = nullptr;
+    PackagePanel* packagePanel_ = nullptr;
     ConsolePanel* console_ = nullptr;
     ViewportWidget* viewport_ = nullptr;
     SceneView3D* sceneView3d_ = nullptr;
+    SceneView3D* gameView_ = nullptr;
     QToolButton* playButton_ = nullptr;
     QToolButton* pauseButton_ = nullptr;
     QToolButton* stopButton_ = nullptr;
@@ -60,6 +64,7 @@ private:
     QTimer* frameTimer_ = nullptr;
     int crateCounter_ = 0;
     UndoStack undoStack_;
+    std::unique_ptr<ToolCommandBus> commandBus_;
     QAction* undoAction_ = nullptr;
     QAction* redoAction_ = nullptr;
 };

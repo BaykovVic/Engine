@@ -440,4 +440,15 @@ std::unique_ptr<OpenGlRenderer> createOpenGlRenderer(const GlLoader& loader) {
     return std::make_unique<OpenGlRendererImpl>(loader);
 }
 
+void registerOpenGlBackend(rendering::IRendererRegistry& registry) {
+    registry.registerBackend(
+        "opengl",
+        [](const rendering::BackendInit& init) -> std::unique_ptr<rendering::IRenderer> {
+            if (init.resolveGlProc == nullptr) {
+                return nullptr;
+            }
+            return createOpenGlRenderer(init.resolveGlProc);
+        });
+}
+
 } // namespace sky::rendering_opengl

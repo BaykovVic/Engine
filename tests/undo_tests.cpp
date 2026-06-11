@@ -2,6 +2,7 @@
 // layer is Qt-free, so it is verified here without the UI.
 
 #include "editor_commands.hpp"
+#include "sky/editor/viewport/tool_command_bus.hpp"
 #include "sky_test.hpp"
 
 namespace {
@@ -137,6 +138,34 @@ void testHistoryDiscipline() {
     CHECK(!context.objects->exists(copy));
 }
 
+void testToolCommandBus() {
+    const auto bus = sky::editor::createToolCommandBus();
+
+    // Unknown commands and missing delegates fail without side effects.
+    CHECK(!bus->execute({"unknown.command", ""}));
+    CHECK(!bus->undo());
+    CHECK(!bus->redo());
+
+    std::string lastPayload;
+    CHECK(bus->registerHandler("scene.spawn", [&](const sky::editor::ToolCommand& cmd) {
+        lastPayload = cmd.payload;
+        return true;
+    }));
+    CHECK(!bus->registerHandler("scene.spawn", [](const auto&) { return true; }));
+    CHECK(bus->registeredCommands() == std::vector<std::string>{"scene.spawn"});
+
+    CHECK(bus->execute({"scene.spawn", "crate:5"}));
+    CHECK(lastPayload == "crate:5");
+
+    int undos = 0, redos = 0;
+    bus->setUndoDelegate([&] { ++undos; return true; });
+    bus->setRedoDelegate([&] { ++redos; return true; });
+    CHECK(bus->undo());
+    CHECK(bus->redo());
+    CHECK(undos == 1);
+    CHECK(redos == 1);
+}
+
 } // namespace
 
 int main() {
@@ -144,5 +173,6 @@ int main() {
     testDeleteRestoresSubtree();
     testCreateRenameReparent();
     testHistoryDiscipline();
+    testToolCommandBus();
     return sky::test::summary("undo_tests");
 }

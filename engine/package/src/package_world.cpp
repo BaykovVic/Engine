@@ -84,6 +84,15 @@ public:
         return found;
     }
 
+    std::vector<PackageManifest> discoveredPackages() const override {
+        std::vector<PackageManifest> result;
+        result.reserve(discovered_.size());
+        for (const auto& [id, manifest] : discovered_) {
+            result.push_back(manifest);
+        }
+        return result;
+    }
+
     // IPackageResolver
 
     std::vector<PackageManifest> resolve(

@@ -3,6 +3,7 @@
 
 #include "sky/asset/asset_database.hpp"
 #include "sky/rendering/null_renderer.hpp"
+#include "sky/rendering/renderer_registry.hpp"
 #include "sky/scripting/script_runtime.hpp"
 #include "sky_test.hpp"
 
@@ -132,10 +133,41 @@ void testNullRenderer() {
     CHECK(renderer->liveResourceCount() == 0);
 }
 
+void testRendererRegistry() {
+    const auto registry = sky::rendering::createRendererRegistry();
+
+    // The null backend ships pre-registered; unknown names fail cleanly.
+    CHECK(registry->hasBackend("null"));
+    CHECK(!registry->hasBackend("vulkan"));
+    CHECK(registry->create("missing", {}) == nullptr);
+
+    const auto nullRenderer = registry->create("null", {});
+    CHECK(nullRenderer != nullptr);
+    CHECK(nullRenderer->backendName() == "null");
+
+    // Hosts can plug additional backends behind the same contract; the
+    // selection is just a config string.
+    bool factoryCalled = false;
+    CHECK(registry->registerBackend(
+        "fake", [&](const sky::rendering::BackendInit&) {
+            factoryCalled = true;
+            return sky::rendering::createNullRenderer();
+        }));
+    // Duplicate registration is refused.
+    CHECK(!registry->registerBackend(
+        "fake", [](const sky::rendering::BackendInit&) { return nullptr; }));
+
+    CHECK(registry->availableBackends() ==
+          (std::vector<std::string>{"fake", "null"}));
+    CHECK(registry->create("fake", {}) != nullptr);
+    CHECK(factoryCalled);
+}
+
 } // namespace
 
 int main() {
     testScriptingBoundary();
     testNullRenderer();
+    testRendererRegistry();
     return sky::test::summary("scripting_rendering_tests");
 }

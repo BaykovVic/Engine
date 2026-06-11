@@ -63,7 +63,8 @@ sky_add_module(sky_package package
     package/src/package_world.cpp)
 
 sky_add_module(sky_rendering rendering
-    rendering/src/null_renderer.cpp)
+    rendering/src/null_renderer.cpp
+    rendering/src/renderer_registry.cpp)
 
 sky_add_module(sky_scripting scripting
     scripting/src/script_runtime.cpp)

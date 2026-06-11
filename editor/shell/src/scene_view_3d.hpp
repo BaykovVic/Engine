@@ -8,14 +8,20 @@
 
 namespace sky::editor {
 
-/// The real 3D Scene view: renders the world through the engine's OpenGL
-/// backend (the same IRenderer contract a shipped game uses) with a
-/// Unity-like orbit camera and ray-picked selection.
+/// The real 3D view: renders the world through whichever backend the
+/// renderer registry selects ("engine.renderer" config), behind the same
+/// IRenderer contract a shipped game uses.
+///
+/// Two camera modes: the editor orbit camera with ray-picked selection
+/// (Scene tab), or the scene's own "Main Camera" object (Game tab).
 class SceneView3D final : public QOpenGLWidget {
     Q_OBJECT
 
 public:
-    explicit SceneView3D(EditorContext& context, QWidget* parent = nullptr);
+    explicit SceneView3D(EditorContext& context, bool useSceneCamera = false,
+                         QWidget* parent = nullptr);
+
+    [[nodiscard]] QString activeBackend() const { return backendName_; }
 
     void setSelected(object::ObjectHandle object) {
         selected_ = object;
@@ -25,6 +31,7 @@ public:
 
 signals:
     void objectPicked(quint64 objectId);
+    void backendInitialized(QString backendName);
 
 protected:
     void initializeGL() override;
@@ -41,7 +48,10 @@ private:
     void buildCommands(std::vector<rendering::RenderCommand>& commands);
 
     EditorContext& context_;
-    std::unique_ptr<rendering_opengl::OpenGlRenderer> renderer_;
+    std::unique_ptr<rendering::IRenderer> renderer_;
+    rendering::IRenderResourceFactory* resourceFactory_ = nullptr;
+    bool useSceneCamera_ = false;
+    QString backendName_;
     object::ObjectHandle selected_;
 
     // Orbit camera around a target point.

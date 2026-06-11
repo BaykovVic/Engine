@@ -5,13 +5,16 @@
 #include <vector>
 
 #include "sky/component/component_world.hpp"
+#include "sky/core/runtime_services.hpp"
 #include "sky/ecs/ecs_world.hpp"
 #include "sky/ecs/object_sync.hpp"
 #include "sky/editor/viewport/play_mode_controller.hpp"
 #include "sky/object/object_world.hpp"
+#include "sky/package/package_world.hpp"
 #include "sky/physics/physics_world.hpp"
 #include "sky/platform/platform_services.hpp"
 #include "sky/platform/virtual_file_system.hpp"
+#include "sky/rendering/renderer_registry.hpp"
 #include "sky/scene/scene_world.hpp"
 #include "sky/serialization/backends.hpp"
 
@@ -60,6 +63,10 @@ public:
 
     std::unique_ptr<platform::IFileSystem> fileSystem;
     std::unique_ptr<platform::IVirtualFileSystem> vfs;
+    std::unique_ptr<core::IConfigService> config;
+    std::unique_ptr<rendering::IRendererRegistry> renderers;
+    std::unique_ptr<package::PackageWorld> packages;
+    std::filesystem::path packagesRoot;
     std::unique_ptr<serialization::ISerializationBackend> storage;
     std::unique_ptr<object::ObjectWorld> objects;
     std::unique_ptr<component::ComponentWorld> components;

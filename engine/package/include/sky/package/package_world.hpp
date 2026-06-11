@@ -24,6 +24,9 @@ public:
     /// Scans every subdirectory of `packagesRoot` for a package manifest and
     /// makes the discovered packages available to resolve().
     virtual std::size_t discoverPackages(const std::filesystem::path& packagesRoot) = 0;
+
+    /// Everything discovery has found so far (package management UI).
+    [[nodiscard]] virtual std::vector<PackageManifest> discoveredPackages() const = 0;
 };
 
 std::unique_ptr<PackageWorld> createPackageWorld(platform::IFileSystem& fileSystem,

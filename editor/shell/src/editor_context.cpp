@@ -3,11 +3,17 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "sky/rendering_opengl/opengl_backend.hpp"
+
 namespace sky::editor {
 
 EditorContext::EditorContext() {
     fileSystem = platform::createStdFileSystem();
     vfs = platform::createVirtualFileSystem();
+    config = core::createInMemoryConfigService();
+    config->set("engine.renderer", "opengl");
+    renderers = rendering::createRendererRegistry();
+    rendering_opengl::registerOpenGlBackend(*renderers);
     storage = serialization::createFileSerializationBackend(*fileSystem);
     objects = object::createObjectWorld();
     components = component::createComponentWorld();
@@ -34,6 +40,31 @@ EditorContext::EditorContext() {
     vfs->mount("assets",
                platform::createDirectoryMount(*fileSystem, projectRoot / "docs", true),
                0);
+
+    // Local packages: demo manifests under a writable packages directory,
+    // discovered exactly like user packages and mounted into the VFS.
+    packages = package::createPackageWorld(*fileSystem, *storage);
+    packagesRoot = std::filesystem::temp_directory_path() / "sky_editor_packages";
+    {
+        package::PackageManifest noise;
+        noise.packageId = "sky.noise-lib";
+        noise.version = "1.0.0";
+        noise.displayName = "Noise Library";
+        noise.rootPath = packagesRoot / "sky.noise-lib";
+        package::savePackageManifest(*storage, noise);
+
+        package::PackageManifest terrainTools;
+        terrainTools.packageId = "sky.terrain-tools";
+        terrainTools.version = "1.2.0";
+        terrainTools.displayName = "Terrain Tools";
+        terrainTools.rootPath = packagesRoot / "sky.terrain-tools";
+        terrainTools.dependencies = {{"sky.noise-lib", ">=1.0"}};
+        terrainTools.extensionPoints = {"tool:terrain-brush", "importer:heightmap"};
+        package::savePackageManifest(*storage, terrainTools);
+    }
+    packages->discoverPackages(packagesRoot);
+    vfs->mount("packages",
+               platform::createDirectoryMount(*fileSystem, packagesRoot, true), 0);
 
     components->registerComponentType({"sky.mesh", "Mesh Renderer", false, "", {}});
     components->registerComponentType(
@@ -214,7 +245,11 @@ void EditorContext::buildDemoScene() {
     objects->setLocalTransform(light, {{0.0f, 8.0f, -5.0f}, {}, {1, 1, 1}});
 
     const auto camera = createEmpty("Main Camera");
-    objects->setLocalTransform(camera, {{0.0f, 2.0f, -10.0f}, {}, {1, 1, 1}});
+    // Positioned behind the scene, yawed 180 degrees to face it (cameras
+    // look along their local -Z).
+    objects->setLocalTransform(camera,
+                               {{0.0f, 2.5f, -12.0f}, {0.0f, 1.0f, 0.0f, 0.0f},
+                                {1, 1, 1}});
 }
 
 } // namespace sky::editor

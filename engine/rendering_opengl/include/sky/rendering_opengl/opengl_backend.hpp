@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 
+#include "sky/rendering/renderer_registry.hpp"
 #include "sky/rendering/rendering.hpp"
 
 namespace sky::rendering_opengl {
@@ -33,5 +34,9 @@ public:
 };
 
 std::unique_ptr<OpenGlRenderer> createOpenGlRenderer(const GlLoader& loader);
+
+/// Registers this backend as "opengl" in the renderer registry. The factory
+/// uses BackendInit::resolveGlProc as the GL loader.
+void registerOpenGlBackend(rendering::IRendererRegistry& registry);
 
 } // namespace sky::rendering_opengl

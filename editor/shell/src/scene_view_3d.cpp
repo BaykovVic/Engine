@@ -35,19 +35,42 @@ core::Vec3 objectColor(const std::string& name) {
 
 } // namespace
 
-SceneView3D::SceneView3D(EditorContext& context, QWidget* parent)
-    : QOpenGLWidget(parent), context_(context) {
-    setFocusPolicy(Qt::StrongFocus);
+SceneView3D::SceneView3D(EditorContext& context, bool useSceneCamera, QWidget* parent)
+    : QOpenGLWidget(parent), context_(context), useSceneCamera_(useSceneCamera) {
+    setFocusPolicy(useSceneCamera ? Qt::NoFocus : Qt::StrongFocus);
     setMinimumSize(400, 300);
 }
 
 void SceneView3D::initializeGL() {
-    renderer_ = rendering_opengl::createOpenGlRenderer([this](const char* name) {
+    // The backend comes from configuration through the renderer registry —
+    // switching it never touches anything above the IRenderer contract.
+    const auto requested =
+        context_.config->getString("engine.renderer").value_or("opengl");
+    rendering::BackendInit init;
+    init.resolveGlProc = [this](const char* name) {
         return reinterpret_cast<void*>(context()->getProcAddress(name));
-    });
+    };
+    renderer_ = context_.renderers->create(requested, init);
+    if (renderer_ == nullptr && requested != "opengl") {
+        renderer_ = context_.renderers->create("opengl", init);
+    }
+    backendName_ =
+        renderer_ != nullptr ? QString::fromStdString(renderer_->backendName())
+                             : QStringLiteral("none");
+    resourceFactory_ = dynamic_cast<rendering::IRenderResourceFactory*>(renderer_.get());
+    emit backendInitialized(backendName_);
 }
 
 core::Transform SceneView3D::cameraPose() const {
+    if (useSceneCamera_) {
+        // Game view: through the scene's own camera object.
+        const auto cameras = context_.objects->findByName("Main Camera");
+        if (!cameras.empty()) {
+            auto pose = context_.objects->worldTransform(cameras.front());
+            pose.scale = {1.0f, 1.0f, 1.0f};
+            return pose;
+        }
+    }
     core::Transform pose;
     pose.rotation = quatFromYawPitch(yawDegrees_, pitchDegrees_);
     // Back the camera away from the target along its forward (-Z) axis.
@@ -109,7 +132,7 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
 }
 
 void SceneView3D::paintGL() {
-    if (renderer_ == nullptr || !renderer_->ready()) {
+    if (renderer_ == nullptr) {
         return;
     }
     std::vector<rendering::RenderCommand> commands;
@@ -188,6 +211,9 @@ void SceneView3D::frameSelected() {
 }
 
 void SceneView3D::mousePressEvent(QMouseEvent* event) {
+    if (useSceneCamera_) {
+        return; // the Game view is not an editing surface
+    }
     setFocus();
     lastMouse_ = event->pos();
     if (event->button() == Qt::RightButton ||
@@ -235,6 +261,9 @@ void SceneView3D::mouseReleaseEvent(QMouseEvent*) {
 }
 
 void SceneView3D::wheelEvent(QWheelEvent* event) {
+    if (useSceneCamera_) {
+        return;
+    }
     const float factor = event->angleDelta().y() > 0 ? 1.0f / 1.12f : 1.12f;
     distance_ = std::clamp(distance_ * factor, 2.0f, 150.0f);
     update();
