@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "sky/scripting/scripting_boundary.hpp"
+
 namespace sky::scripting {
 
 /// Identifies a loaded managed assembly inside the host.
@@ -36,6 +38,11 @@ public:
     /// managed instance id used by the lifecycle bridge.
     virtual std::uint64_t createInstance(const std::string& managedTypeName) = 0;
     virtual void destroyInstance(std::uint64_t managedInstanceId) = 0;
+
+    /// Invokes a lifecycle callback on a managed instance. Returns false if
+    /// the managed side failed; failures never corrupt native state.
+    virtual bool invokeLifecycle(std::uint64_t managedInstanceId,
+                                 ScriptLifecycleEvent event, double deltaSeconds) = 0;
 };
 
 /// Native-side contract: when and how the managed domain may be reloaded.

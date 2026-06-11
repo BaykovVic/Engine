@@ -55,27 +55,36 @@ sky_add_module(sky_asset asset
 sky_add_module(sky_physics physics
     physics/src/physics_world.cpp)
 
-sky_add_module(sky_package        package)
-sky_add_module(sky_rendering      rendering)
-sky_add_module(sky_scripting      scripting)
-sky_add_module(sky_terrain        terrain)
-sky_add_module(sky_mapgen         mapgen)
+sky_add_module(sky_package package
+    package/src/package_world.cpp)
+
+sky_add_module(sky_rendering rendering
+    rendering/src/null_renderer.cpp)
+
+sky_add_module(sky_scripting scripting
+    scripting/src/script_runtime.cpp)
+
+sky_add_module(sky_terrain terrain
+    terrain/src/terrain_world.cpp)
+
+sky_add_module(sky_mapgen mapgen
+    mapgen/src/generation_pipeline.cpp)
 
 # Dependency edges mirror docs/modules/modules.md ("Межмодульные связи").
 target_link_libraries(sky_core          PUBLIC sky_platform)
 target_link_libraries(sky_serialization PUBLIC sky_platform sky_core)
 target_link_libraries(sky_project       PUBLIC sky_serialization sky_core)
-target_link_libraries(sky_package       INTERFACE sky_project sky_serialization sky_asset)
+target_link_libraries(sky_package       PUBLIC sky_project sky_serialization sky_asset)
 target_link_libraries(sky_asset         PUBLIC sky_serialization sky_core)
 target_link_libraries(sky_scene         PUBLIC sky_serialization sky_asset sky_object sky_component sky_ecs)
 target_link_libraries(sky_object        PUBLIC sky_core)
 target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_serialization)
 target_link_libraries(sky_ecs           PUBLIC sky_core sky_physics sky_rendering)
 target_link_libraries(sky_physics       PUBLIC sky_core sky_object)
-target_link_libraries(sky_rendering     INTERFACE sky_asset sky_platform)
-target_link_libraries(sky_scripting     INTERFACE sky_core sky_object)
-target_link_libraries(sky_terrain       INTERFACE sky_asset sky_serialization sky_rendering sky_physics)
-target_link_libraries(sky_mapgen        INTERFACE sky_terrain sky_scene sky_asset)
+target_link_libraries(sky_rendering     PUBLIC sky_asset sky_platform)
+target_link_libraries(sky_scripting     PUBLIC sky_core sky_object)
+target_link_libraries(sky_terrain       PUBLIC sky_asset sky_serialization sky_rendering sky_physics)
+target_link_libraries(sky_mapgen        PUBLIC sky_terrain sky_scene sky_asset)
 
 if(SKY_BUILD_OPENGL_BACKEND)
     sky_add_module(sky_rendering_opengl rendering_opengl)
