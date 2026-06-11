@@ -46,6 +46,11 @@ private:
     [[nodiscard]] core::Transform cameraPose() const;
     [[nodiscard]] object::ObjectHandle pickObject(QPointF position) const;
     void buildCommands(std::vector<rendering::RenderCommand>& commands);
+    void refreshTerrainMesh();
+    [[nodiscard]] core::Vec3 rayDirectionThrough(QPointF position) const;
+    /// Ray-marches the camera ray to the terrain surface; false if it
+    /// misses within the search range.
+    bool terrainHit(QPointF position, core::Vec3& outWorldPoint) const;
 
     EditorContext& context_;
     std::unique_ptr<rendering::IRenderer> renderer_;
@@ -62,7 +67,12 @@ private:
 
     bool orbiting_ = false;
     bool panning_ = false;
+    bool paintingTerrain_ = false;
     QPointF lastMouse_;
+
+    // Terrain render state: rebuilt when the context's terrain version moves.
+    rendering::RenderResourceHandle terrainMesh_;
+    std::uint64_t terrainMeshVersion_ = 0;
 };
 
 } // namespace sky::editor

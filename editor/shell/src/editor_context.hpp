@@ -6,6 +6,9 @@
 
 #include "sky/component/component_world.hpp"
 #include "sky/core/runtime_services.hpp"
+#include "sky/mapgen/generation_pipeline.hpp"
+#include "sky/mapgen/materialize.hpp"
+#include "sky/terrain/terrain_world.hpp"
 #include "sky/ecs/ecs_world.hpp"
 #include "sky/ecs/object_sync.hpp"
 #include "sky/editor/viewport/play_mode_controller.hpp"
@@ -30,11 +33,30 @@ struct ObjectSnapshot {
     std::vector<ObjectSnapshot> children;
 };
 
+/// Active terrain brush, set by the Terrain panel and applied by the scene
+/// view on click/drag.
+struct TerrainBrush {
+    bool enabled = false;
+    std::string operation = "raise";
+    float radius = 4.0f;
+    float strength = 1.0f;
+};
+
 /// Everything the editor session works with: the assembled engine core plus
 /// the demo scene. Qt-free; the UI layer consumes it through references.
 class EditorContext {
 public:
     EditorContext();
+
+    /// Applies the active brush at a world-space point on the terrain.
+    void applyTerrainBrush(core::Vec3 worldPoint);
+    /// Terrain height (world Y) under world-space (x, z).
+    [[nodiscard]] float terrainHeightAt(float worldX, float worldZ) const;
+    /// Regenerates the terrain procedurally and scatters objects; previous
+    /// generated objects are removed first.
+    std::size_t generateTerrain(std::uint64_t seed);
+    /// Incremented on every terrain change; views rebuild meshes when it moves.
+    [[nodiscard]] std::uint64_t terrainVersion() const { return terrainVersion_; }
 
     object::ObjectHandle createEmpty(const std::string& name);
     /// A cube with a dynamic rigid body and box collider, Unity-style.
@@ -77,7 +99,12 @@ public:
     std::unique_ptr<serialization::SchemaMigrationService> migrations;
     std::unique_ptr<scene::SceneWorld> scenes;
     std::unique_ptr<PlayModeController> playMode;
+    std::unique_ptr<terrain::TerrainWorld> terrain;
+    std::unique_ptr<mapgen::IGenerationPipeline> mapgenPipeline;
     scene::SceneHandle activeScene;
+    terrain::TerrainHandle terrainHandle;
+    object::ObjectHandle terrainObject;
+    TerrainBrush brush;
 
 private:
     void buildDemoScene();
@@ -87,6 +114,10 @@ private:
 
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
+    physics::RigidBodyHandle terrainBody_;
+    physics::ColliderHandle terrainCollider_;
+    std::uint64_t terrainVersion_ = 0;
+    std::vector<object::ObjectHandle> generatedObjects_;
 };
 
 } // namespace sky::editor

@@ -90,9 +90,9 @@ void testCreateRenameReparent() {
     CHECK(stack.redo());
     CHECK(context.objects->nameOf(renamed) == "Hero");
 
-    // Reparent under Ground, then undo back to root with the exact local
-    // transform restored.
-    const auto ground = context.objects->findByName("Ground").front();
+    // Reparent under the terrain object, then undo back to root with the
+    // exact local transform restored.
+    const auto ground = context.objects->findByName("Terrain").front();
     const auto oldLocal = context.objects->localTransform(renamed);
     context.reparent(renamed, ground);
     stack.push(sky::editor::makeReparentCommand(

@@ -46,6 +46,8 @@ int main(int argc, char** argv) {
 
     if (!screenshotPath.isEmpty()) {
         QTimer::singleShot(0, &window, [&] {
+            // A generated landscape makes the verification shot meaningful.
+            context.generateTerrain(1337);
             window.selectObjectByName("Crate B");
             if (screenshotInPlayMode) {
                 window.playFrames(150);

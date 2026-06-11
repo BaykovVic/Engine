@@ -4,6 +4,14 @@
 #include <filesystem>
 
 #include "sky/rendering_opengl/opengl_backend.hpp"
+#include "sky/terrain/terrain_integration.hpp"
+
+namespace {
+// The demo terrain: a 48x48 heightfield centred on the world origin.
+constexpr std::uint32_t kTerrainResolution = 48;
+constexpr float kTerrainOriginX = -24.0f;
+constexpr float kTerrainOriginZ = -24.0f;
+} // namespace
 
 namespace sky::editor {
 
@@ -189,6 +197,60 @@ void EditorContext::reparent(object::ObjectHandle child, object::ObjectHandle ne
     }
 }
 
+void EditorContext::applyTerrainBrush(core::Vec3 worldPoint) {
+    if (!brush.enabled || !terrainHandle.isValid()) {
+        return;
+    }
+    terrain::TerrainEdit edit;
+    edit.center = {worldPoint.x - kTerrainOriginX, 0.0f,
+                   worldPoint.z - kTerrainOriginZ};
+    edit.radius = brush.radius;
+    edit.strength = brush.strength;
+    edit.operation = brush.operation;
+    terrain->applyEdit(terrainHandle, edit);
+}
+
+float EditorContext::terrainHeightAt(float worldX, float worldZ) const {
+    if (!terrainHandle.isValid()) {
+        return 0.0f;
+    }
+    return terrain->heightAt(terrainHandle, worldX - kTerrainOriginX,
+                             worldZ - kTerrainOriginZ);
+}
+
+std::size_t EditorContext::generateTerrain(std::uint64_t seed) {
+    if (!terrainHandle.isValid()) {
+        return 0;
+    }
+    for (const auto object : generatedObjects_) {
+        destroyObject(object);
+    }
+    generatedObjects_.clear();
+
+    mapgen::GenerationProfile profile;
+    profile.profileId = "editor";
+    profile.seed = seed;
+    profile.mapSize = kTerrainResolution;
+    profile.enabledStages = {mapgen::kStageHeightfield, mapgen::kStagePlacement};
+
+    const auto result = mapgenPipeline->generate({profile, terrainHandle});
+    generatedObjects_ = mapgen::materializeGenerationResult(
+        *result, *terrain, terrainHandle, *scenes, activeScene, *objects, *objects);
+    // Placements are in terrain-local space; shift them to world space and
+    // give them a visible mesh.
+    for (const auto object : generatedObjects_) {
+        auto transform = objects->localTransform(object);
+        transform.position.x += kTerrainOriginX;
+        transform.position.z += kTerrainOriginZ;
+        transform.position.y += 0.5f; // rest on the surface
+        transform.scale = {0.8f, 0.8f, 0.8f};
+        objects->setLocalTransform(object, transform);
+        components->attach(object, "sky.mesh");
+        roots_.push_back(object);
+    }
+    return generatedObjects_.size();
+}
+
 ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const {
     ObjectSnapshot snapshot;
     snapshot.name = objects->nameOf(object);
@@ -228,14 +290,43 @@ object::ObjectHandle EditorContext::restoreObject(const ObjectSnapshot& snapshot
 void EditorContext::buildDemoScene() {
     activeScene = scenes->createScene({"SampleScene", {}});
 
-    const auto ground = createEmpty("Ground");
-    objects->setLocalTransform(ground, {{0.0f, -0.5f, 0.0f}, {}, {20.0f, 1.0f, 20.0f}});
-    components->attach(ground, "sky.mesh");
-    components->attach(ground, "sky.collider.box");
-    const auto groundBody = physics->createBody(
-        {physics::BodyType::Static, 0.0f, {{0.0f, -0.5f, 0.0f}, {}, {1, 1, 1}}});
-    physics->attachCollider(groundBody,
-                            {physics::ColliderShape::Box, {10.0f, 0.5f, 10.0f}, 0.0f});
+    // The ground is a real terrain: heightfield data, physics collider and
+    // a scene object carrying its world placement.
+    terrain = terrain::createTerrainWorld(*storage);
+    mapgenPipeline = mapgen::createGenerationPipeline();
+
+    terrain::TerrainDataset flat;
+    flat.resolution = kTerrainResolution;
+    flat.chunkSize = 16;
+    flat.worldScale = {1.0f, 1.0f, 1.0f};
+    flat.heights.assign(static_cast<std::size_t>(kTerrainResolution) *
+                            kTerrainResolution,
+                        0.0f);
+    terrainHandle = terrain->createTerrain(flat);
+
+    terrainObject = createEmpty("Terrain");
+    objects->setLocalTransform(
+        terrainObject, {{kTerrainOriginX, 0.0f, kTerrainOriginZ}, {}, {1, 1, 1}});
+
+    terrainBody_ = physics->createBody(
+        {physics::BodyType::Static, 0.0f,
+         {{kTerrainOriginX, 0.0f, kTerrainOriginZ}, {}, {1, 1, 1}}});
+    terrainCollider_ = physics->attachCollider(
+        terrainBody_, terrain::makeTerrainCollider(terrain->dataset(terrainHandle)));
+
+    // Terrain edits invalidate the render mesh and rebuild the collider.
+    terrain->onTerrainChanged([this](terrain::TerrainHandle changed) {
+        if (changed != terrainHandle) {
+            return;
+        }
+        ++terrainVersion_;
+        if (terrainCollider_.isValid()) {
+            physics->detachCollider(terrainCollider_);
+        }
+        terrainCollider_ = physics->attachCollider(
+            terrainBody_, terrain::makeTerrainCollider(terrain->dataset(terrainHandle)));
+    });
+    ++terrainVersion_;
 
     createCrate("Crate A", {-1.5f, 2.0f, 0.0f});
     createCrate("Crate B", {0.0f, 4.0f, 0.0f});

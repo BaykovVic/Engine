@@ -18,6 +18,7 @@ class HierarchyPanel;
 class InspectorPanel;
 class PackagePanel;
 class ProjectPanel;
+class TerrainPanel;
 class SceneView3D;
 class ViewportWidget;
 
@@ -53,6 +54,7 @@ private:
     InspectorPanel* inspector_ = nullptr;
     ProjectPanel* project_ = nullptr;
     PackagePanel* packagePanel_ = nullptr;
+    TerrainPanel* terrainPanel_ = nullptr;
     ConsolePanel* console_ = nullptr;
     ViewportWidget* viewport_ = nullptr;
     SceneView3D* sceneView3d_ = nullptr;

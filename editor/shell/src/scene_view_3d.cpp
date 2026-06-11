@@ -7,6 +7,8 @@
 #include <cmath>
 #include <functional>
 
+#include "sky/terrain/terrain_integration.hpp"
+
 namespace sky::editor {
 namespace {
 
@@ -79,6 +81,20 @@ core::Transform SceneView3D::cameraPose() const {
     return pose;
 }
 
+void SceneView3D::refreshTerrainMesh() {
+    if (resourceFactory_ == nullptr || !context_.terrainHandle.isValid() ||
+        terrainMeshVersion_ == context_.terrainVersion()) {
+        return;
+    }
+    if (terrainMesh_.isValid()) {
+        resourceFactory_->destroy(terrainMesh_);
+    }
+    const auto mesh =
+        terrain::buildTerrainMesh(context_.terrain->dataset(context_.terrainHandle));
+    terrainMesh_ = resourceFactory_->createMeshFromData(mesh);
+    terrainMeshVersion_ = context_.terrainVersion();
+}
+
 void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands) {
     rendering::RenderCommand begin;
     begin.type = rendering::RenderCommandType::BeginFrame;
@@ -98,9 +114,21 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
     camera.fovDegrees = 50.0f;
     commands.push_back(camera);
 
+    // Terrain first: its own mesh at the Terrain object's placement.
+    if (terrainMesh_.isValid() && context_.objects->exists(context_.terrainObject)) {
+        rendering::RenderCommand terrainDraw;
+        terrainDraw.type = rendering::RenderCommandType::DrawMesh;
+        terrainDraw.resource = terrainMesh_;
+        terrainDraw.transform =
+            context_.objects->worldTransform(context_.terrainObject);
+        terrainDraw.color = {0.35f, 0.47f, 0.31f};
+        commands.push_back(terrainDraw);
+    }
+
     const std::function<void(object::ObjectHandle)> emitObject =
         [&](object::ObjectHandle object) {
-            if (!context_.objects->exists(object)) {
+            if (!context_.objects->exists(object) ||
+                object == context_.terrainObject) {
                 return;
             }
             rendering::RenderCommand draw;
@@ -135,6 +163,7 @@ void SceneView3D::paintGL() {
     if (renderer_ == nullptr) {
         return;
     }
+    refreshTerrainMesh();
     std::vector<rendering::RenderCommand> commands;
     commands.reserve(64);
     buildCommands(commands);
@@ -142,16 +171,50 @@ void SceneView3D::paintGL() {
     renderer_->renderFrame();
 }
 
-object::ObjectHandle SceneView3D::pickObject(QPointF position) const {
-    // Build a world-space ray through the clicked pixel and intersect it
-    // with every object's scaled unit-cube AABB; nearest hit wins.
+core::Vec3 SceneView3D::rayDirectionThrough(QPointF position) const {
     const auto pose = cameraPose();
     const float aspect = width() > 0 ? static_cast<float>(width()) / height() : 1.0f;
     const float tanHalfFov = std::tan(50.0f * kPi / 360.0f);
     const float ndcX = (2.0f * static_cast<float>(position.x()) / width()) - 1.0f;
     const float ndcY = 1.0f - (2.0f * static_cast<float>(position.y()) / height());
     const core::Vec3 rayLocal{ndcX * tanHalfFov * aspect, ndcY * tanHalfFov, -1.0f};
-    const auto direction = core::rotate(pose.rotation, rayLocal);
+    return core::rotate(pose.rotation, rayLocal);
+}
+
+bool SceneView3D::terrainHit(QPointF position, core::Vec3& outWorldPoint) const {
+    if (!context_.terrainHandle.isValid()) {
+        return false;
+    }
+    const auto origin = cameraPose().position;
+    const auto direction = rayDirectionThrough(position);
+    // March the ray until it dips below the terrain surface, then bisect.
+    core::Vec3 previous = origin;
+    for (float t = 0.5f; t < 200.0f; t += 0.5f) {
+        const auto point = origin + direction * t;
+        if (point.y <= context_.terrainHeightAt(point.x, point.z)) {
+            core::Vec3 low = previous, high = point;
+            for (int i = 0; i < 12; ++i) {
+                const core::Vec3 mid{(low.x + high.x) / 2, (low.y + high.y) / 2,
+                                     (low.z + high.z) / 2};
+                if (mid.y <= context_.terrainHeightAt(mid.x, mid.z)) {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+            }
+            outWorldPoint = high;
+            return true;
+        }
+        previous = point;
+    }
+    return false;
+}
+
+object::ObjectHandle SceneView3D::pickObject(QPointF position) const {
+    // Build a world-space ray through the clicked pixel and intersect it
+    // with every object's scaled unit-cube AABB; nearest hit wins.
+    const auto pose = cameraPose();
+    const auto direction = rayDirectionThrough(position);
 
     object::ObjectHandle best;
     float bestDistance = 1e9f;
@@ -229,6 +292,16 @@ void SceneView3D::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (event->button() == Qt::LeftButton) {
+        // Active terrain brush paints instead of picking.
+        if (context_.brush.enabled) {
+            core::Vec3 hit;
+            if (terrainHit(event->pos(), hit)) {
+                context_.applyTerrainBrush(hit);
+                paintingTerrain_ = true;
+                update();
+            }
+            return;
+        }
         const auto picked = pickObject(event->pos());
         setSelected(picked);
         emit objectPicked(picked.value);
@@ -238,6 +311,14 @@ void SceneView3D::mousePressEvent(QMouseEvent* event) {
 void SceneView3D::mouseMoveEvent(QMouseEvent* event) {
     const QPointF delta = event->pos() - lastMouse_;
     lastMouse_ = event->pos();
+    if (paintingTerrain_) {
+        core::Vec3 hit;
+        if (terrainHit(event->pos(), hit)) {
+            context_.applyTerrainBrush(hit);
+            update();
+        }
+        return;
+    }
     if (orbiting_) {
         yawDegrees_ -= static_cast<float>(delta.x()) * 0.4f;
         pitchDegrees_ =
@@ -256,7 +337,7 @@ void SceneView3D::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void SceneView3D::mouseReleaseEvent(QMouseEvent*) {
-    orbiting_ = panning_ = false;
+    orbiting_ = panning_ = paintingTerrain_ = false;
     setCursor(Qt::ArrowCursor);
 }
 

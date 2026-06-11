@@ -15,6 +15,7 @@
 #include "sky/editor/tools/inspector_panel.hpp"
 #include "sky/editor/tools/package_panel.hpp"
 #include "sky/editor/tools/project_panel.hpp"
+#include "sky/editor/tools/terrain_panel.hpp"
 #include "scene_view_3d.hpp"
 #include "viewport_widget.hpp"
 
@@ -289,6 +290,39 @@ void MainWindow::buildDocks() {
     inspectorDock->setWidget(inspector_);
     inspectorDock->setMinimumWidth(320);
     addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
+
+    terrainPanel_ = new TerrainPanel(this);
+    auto* terrainDock = new QDockWidget(tr("Terrain"), this);
+    terrainDock->setWidget(terrainPanel_);
+    addDockWidget(Qt::RightDockWidgetArea, terrainDock);
+    tabifyDockWidget(inspectorDock, terrainDock);
+    inspectorDock->raise();
+    connect(terrainPanel_, &TerrainPanel::brushChanged, this,
+            [this](const QString& operation, float radius, float strength) {
+                context_.brush.enabled = !operation.isEmpty();
+                context_.brush.operation = operation.toStdString();
+                context_.brush.radius = radius;
+                context_.brush.strength = strength;
+                statusBar()->showMessage(
+                    context_.brush.enabled
+                        ? tr("Кисть terrain: %1 — ЛКМ по ландшафту в Scene")
+                              .arg(operation)
+                        : tr("Кисть terrain выключена"),
+                    3000);
+            });
+    connect(terrainPanel_, &TerrainPanel::generateRequested, this,
+            [this](quint64 seed) {
+                const auto placed = context_.generateTerrain(seed);
+                console_->logger().info(
+                    "Terrain", QString("Map generated (seed %1): %2 objects placed")
+                                   .arg(seed)
+                                   .arg(placed)
+                                   .toStdString());
+                hierarchy_->refresh();
+                sceneView3d_->update();
+                gameView_->update();
+                viewport_->update();
+            });
 
     project_ = new ProjectPanel(*context_.vfs, this);
     auto* projectDock = new QDockWidget(tr("Project"), this);
