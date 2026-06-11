@@ -62,6 +62,12 @@ public:
         host_.invokeLifecycle(it->second, event, deltaSeconds);
     }
 
+    void dispatchAll(ScriptLifecycleEvent event, double deltaSeconds) override {
+        for (const auto& [handle, managedInstanceId] : managedPeers_) {
+            host_.invokeLifecycle(managedInstanceId, event, deltaSeconds);
+        }
+    }
+
     // INativeHandleRegistry
 
     NativeHandle allocate(std::uint64_t nativeObjectId) override {

@@ -94,7 +94,8 @@ sky_add_module(sky_rendering rendering
     rendering/src/material_library.cpp)
 
 sky_add_module(sky_scripting scripting
-    scripting/src/script_runtime.cpp)
+    scripting/src/script_runtime.cpp
+    scripting/src/dotnet_host.cpp)
 
 sky_add_module(sky_terrain terrain
     terrain/src/terrain_world.cpp
@@ -116,7 +117,7 @@ target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_seri
 target_link_libraries(sky_ecs           PUBLIC sky_core sky_object sky_physics sky_rendering)
 target_link_libraries(sky_physics       PUBLIC sky_core sky_object)
 target_link_libraries(sky_rendering     PUBLIC sky_asset sky_platform)
-target_link_libraries(sky_scripting     PUBLIC sky_core sky_object)
+target_link_libraries(sky_scripting     PUBLIC sky_core sky_object PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(sky_terrain       PUBLIC sky_asset sky_serialization sky_rendering sky_physics)
 target_link_libraries(sky_mapgen        PUBLIC sky_terrain sky_scene sky_asset)
 

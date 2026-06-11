@@ -1,0 +1,147 @@
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.Loader;
+
+namespace SkyEngine;
+
+/// <summary>
+/// Optional capability for tests and diagnostics: a script exposes one
+/// observable value the native side can read back.
+/// </summary>
+public interface IProbe
+{
+    long Probe { get; }
+}
+
+/// <summary>
+/// The managed entry points the native Scripting Boundary calls through
+/// hostfxr. This is the only surface crossing the boundary: instances are
+/// identified by opaque ids, all state stays on whichever side owns it.
+/// </summary>
+public static class Bootstrap
+{
+    private static readonly Dictionary<ulong, ScriptComponent> Instances = new();
+    private static readonly List<Assembly> LoadedAssemblies = new();
+    private static ulong _nextId = 1;
+
+    [UnmanagedCallersOnly]
+    public static int LoadAssembly(IntPtr pathUtf8)
+    {
+        try
+        {
+            var path = Marshal.PtrToStringUTF8(pathUtf8);
+            if (string.IsNullOrEmpty(path))
+            {
+                return 0;
+            }
+            // Load into the same AssemblyLoadContext hostfxr put this
+            // assembly into, so ScriptComponent is one identity everywhere.
+            var context = AssemblyLoadContext.GetLoadContext(typeof(Bootstrap).Assembly)
+                          ?? AssemblyLoadContext.Default;
+            LoadedAssemblies.Add(context.LoadFromAssemblyPath(Path.GetFullPath(path)));
+            return 1;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static ulong CreateInstance(IntPtr typeNameUtf8)
+    {
+        try
+        {
+            var typeName = Marshal.PtrToStringUTF8(typeNameUtf8);
+            if (string.IsNullOrEmpty(typeName))
+            {
+                return 0;
+            }
+            var type = ResolveType(typeName);
+            if (type == null || !typeof(ScriptComponent).IsAssignableFrom(type))
+            {
+                return 0;
+            }
+            if (Activator.CreateInstance(type) is not ScriptComponent instance)
+            {
+                return 0;
+            }
+            var id = _nextId++;
+            instance.Handle = new NativeHandle(id);
+            Instances[id] = instance;
+            return id;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static void DestroyInstance(ulong id)
+    {
+        Instances.Remove(id);
+    }
+
+    /// <summary>Event order mirrors the native ScriptLifecycleEvent enum.</summary>
+    [UnmanagedCallersOnly]
+    public static int InvokeLifecycle(ulong id, int lifecycleEvent, double deltaSeconds)
+    {
+        if (!Instances.TryGetValue(id, out var script))
+        {
+            return 0;
+        }
+        try
+        {
+            switch (lifecycleEvent)
+            {
+                case 0: script.OnCreate(); break;
+                case 1: script.OnStart(); break;
+                case 2: script.OnUpdate(deltaSeconds); break;
+                case 3: script.OnFixedUpdate(deltaSeconds); break;
+                case 4: script.OnDestroy(); break;
+                default: return 0;
+            }
+            return 1;
+        }
+        catch
+        {
+            // Managed failures are isolated; they never corrupt native state.
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static long GetProbe(ulong id)
+    {
+        return Instances.TryGetValue(id, out var script) && script is IProbe probe
+                   ? probe.Probe
+                   : -1;
+    }
+
+    private static Type? ResolveType(string typeName)
+    {
+        var type = Type.GetType(typeName);
+        if (type != null)
+        {
+            return type;
+        }
+        foreach (var assembly in LoadedAssemblies)
+        {
+            type = assembly.GetType(typeName);
+            if (type != null)
+            {
+                return type;
+            }
+        }
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            type = assembly.GetType(typeName);
+            if (type != null)
+            {
+                return type;
+            }
+        }
+        return null;
+    }
+}

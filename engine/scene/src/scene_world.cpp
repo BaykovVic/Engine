@@ -375,6 +375,12 @@ public:
                 deps_.ecsSync->pullEcsResults();
             }
         }
+        // Managed scripts run last in the frame, per the architecture's
+        // runtime-frame data flow.
+        if (deps_.scriptBridge != nullptr) {
+            deps_.scriptBridge->dispatchAll(scripting::ScriptLifecycleEvent::OnUpdate,
+                                            deltaSeconds);
+        }
     }
 
     // ISceneQueryService

@@ -55,6 +55,9 @@ public:
 
     virtual void dispatch(NativeHandle instance, ScriptLifecycleEvent event,
                           double deltaSeconds) = 0;
+    /// Dispatches the event to every bound script instance (the per-frame
+    /// Update/FixedUpdate fan-out of the runtime loop).
+    virtual void dispatchAll(ScriptLifecycleEvent event, double deltaSeconds) = 0;
 };
 
 /// Scripting Boundary contract: the native handle table mapping handles to

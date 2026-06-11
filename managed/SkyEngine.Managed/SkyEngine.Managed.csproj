@@ -7,6 +7,7 @@
     <RootNamespace>SkyEngine</RootNamespace>
     <AssemblyName>SkyEngine.Managed</AssemblyName>
     <Description>Sky Engine managed runtime layer: script base types and the native interop surface.</Description>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
 </Project>

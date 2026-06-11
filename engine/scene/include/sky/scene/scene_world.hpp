@@ -8,6 +8,7 @@
 #include "sky/object/object_model.hpp"
 #include "sky/physics/physics.hpp"
 #include "sky/scene/scene_system.hpp"
+#include "sky/scripting/scripting_boundary.hpp"
 #include "sky/serialization/backends.hpp"
 #include "sky/serialization/serialization.hpp"
 
@@ -31,6 +32,8 @@ struct SceneWorldDeps {
     ecs::IEcsObjectSync* ecsSync = nullptr;
     /// Component field persistence (scene schema >= 1.1).
     component::ComponentWorld* componentData = nullptr;
+    /// Managed script callbacks, dispatched each frame after the systems.
+    scripting::IScriptLifecycleBridge* scriptBridge = nullptr;
     /// When provided, the scene world registers its format migrations here
     /// and runs legacy files through them on load.
     serialization::SchemaMigrationService* migrations = nullptr;

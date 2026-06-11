@@ -1,0 +1,216 @@
+// Hosts the .NET runtime via hostfxr. The handful of hostfxr declarations
+// used here are written out directly (POSIX char_t variant), so the module
+// needs no .NET SDK headers — only a dotnet runtime on the machine.
+
+#include <cstdint>
+#include <vector>
+
+#include "sky/scripting/dotnet_host.hpp"
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <dlfcn.h>
+#define SKY_HAS_DLOPEN 1
+#endif
+
+namespace sky::scripting {
+
+#ifdef SKY_HAS_DLOPEN
+
+namespace {
+
+// --- Minimal hostfxr surface (POSIX: char_t == char) -------------------------
+
+using hostfxr_handle = void*;
+using hostfxr_initialize_fn = std::int32_t (*)(const char* runtimeConfigPath,
+                                               const void* parameters,
+                                               hostfxr_handle* hostContext);
+using hostfxr_get_delegate_fn = std::int32_t (*)(hostfxr_handle, std::int32_t type,
+                                                 void** delegateOut);
+using hostfxr_close_fn = std::int32_t (*)(hostfxr_handle);
+
+constexpr std::int32_t kHdtLoadAssemblyAndGetFunctionPointer = 5;
+const char* const kUnmanagedCallersOnly = reinterpret_cast<const char*>(-1);
+
+using load_assembly_and_get_function_pointer_fn =
+    std::int32_t (*)(const char* assemblyPath, const char* typeName,
+                     const char* methodName, const char* delegateTypeName,
+                     void* reserved, void** delegateOut);
+
+// Managed entry points in SkyEngine.Bootstrap ([UnmanagedCallersOnly]).
+using managed_load_assembly_fn = std::int32_t (*)(const char* pathUtf8);
+using managed_create_instance_fn = std::uint64_t (*)(const char* typeNameUtf8);
+using managed_destroy_instance_fn = void (*)(std::uint64_t id);
+using managed_invoke_lifecycle_fn = std::int32_t (*)(std::uint64_t id,
+                                                     std::int32_t lifecycleEvent,
+                                                     double deltaSeconds);
+using managed_get_probe_fn = std::int64_t (*)(std::uint64_t id);
+
+std::filesystem::path discoverHostfxr() {
+    std::vector<std::filesystem::path> roots;
+    if (const char* dotnetRoot = std::getenv("DOTNET_ROOT")) {
+        roots.emplace_back(dotnetRoot);
+    }
+    roots.emplace_back("/usr/lib/dotnet");
+    roots.emplace_back("/usr/share/dotnet");
+
+    for (const auto& root : roots) {
+        const auto fxr = root / "host" / "fxr";
+        std::error_code ec;
+        std::filesystem::path best;
+        for (const auto& entry : std::filesystem::directory_iterator(fxr, ec)) {
+            const auto candidate = entry.path() / "libhostfxr.so";
+            if (std::filesystem::exists(candidate, ec) &&
+                (best.empty() || entry.path().filename() > best.parent_path().filename())) {
+                best = candidate;
+            }
+        }
+        if (!best.empty()) {
+            return best;
+        }
+    }
+    return {};
+}
+
+class DotNetScriptHostImpl final : public DotNetScriptHost {
+public:
+    explicit DotNetScriptHostImpl(const DotNetHostConfig& config) : config_(config) {
+        if (config_.hostfxrPath.empty()) {
+            config_.hostfxrPath = discoverHostfxr();
+        }
+    }
+
+    ~DotNetScriptHostImpl() override { shutdown(); }
+
+    [[nodiscard]] bool available() const { return !config_.hostfxrPath.empty(); }
+
+    // IScriptHost
+
+    bool start() override {
+        if (started_) {
+            return true;
+        }
+        if (config_.hostfxrPath.empty() || config_.bootstrapAssembly.empty()) {
+            return false;
+        }
+        library_ = dlopen(config_.hostfxrPath.c_str(), RTLD_LAZY | RTLD_LOCAL);
+        if (library_ == nullptr) {
+            return false;
+        }
+        const auto initialize = reinterpret_cast<hostfxr_initialize_fn>(
+            dlsym(library_, "hostfxr_initialize_for_runtime_config"));
+        const auto getDelegate = reinterpret_cast<hostfxr_get_delegate_fn>(
+            dlsym(library_, "hostfxr_get_runtime_delegate"));
+        close_ = reinterpret_cast<hostfxr_close_fn>(dlsym(library_, "hostfxr_close"));
+        if (initialize == nullptr || getDelegate == nullptr || close_ == nullptr) {
+            return false;
+        }
+
+        auto runtimeConfig = config_.bootstrapAssembly;
+        runtimeConfig.replace_extension("");
+        runtimeConfig += ".runtimeconfig.json";
+        // 0 = success; 1/2 = success against an already-initialized runtime
+        // (the CLR is process-wide and initializes only once).
+        const auto rc = initialize(runtimeConfig.c_str(), nullptr, &context_);
+        if (rc < 0 || rc > 2 || context_ == nullptr) {
+            return false;
+        }
+        void* loader = nullptr;
+        if (getDelegate(context_, kHdtLoadAssemblyAndGetFunctionPointer, &loader) != 0 ||
+            loader == nullptr) {
+            return false;
+        }
+        loader_ = reinterpret_cast<load_assembly_and_get_function_pointer_fn>(loader);
+
+        return resolve(managedLoadAssembly_, "LoadAssembly") &&
+               resolve(managedCreateInstance_, "CreateInstance") &&
+               resolve(managedDestroyInstance_, "DestroyInstance") &&
+               resolve(managedInvokeLifecycle_, "InvokeLifecycle") &&
+               resolve(managedGetProbe_, "GetProbe") && (started_ = true);
+    }
+
+    void shutdown() override {
+        if (context_ != nullptr && close_ != nullptr) {
+            close_(context_);
+            context_ = nullptr;
+        }
+        started_ = false;
+        // The CLR cannot be unloaded from the process; the library handle
+        // stays valid for the process lifetime by design.
+    }
+
+    bool loadAssembly(const AssemblyRef& assembly) override {
+        if (!started_ ||
+            managedLoadAssembly_(assembly.path.string().c_str()) == 0) {
+            return false;
+        }
+        assemblies_.push_back(assembly);
+        return true;
+    }
+
+    std::vector<AssemblyRef> loadedAssemblies() const override { return assemblies_; }
+
+    std::uint64_t createInstance(const std::string& managedTypeName) override {
+        return started_ ? managedCreateInstance_(managedTypeName.c_str()) : 0;
+    }
+
+    void destroyInstance(std::uint64_t managedInstanceId) override {
+        if (started_) {
+            managedDestroyInstance_(managedInstanceId);
+        }
+    }
+
+    bool invokeLifecycle(std::uint64_t managedInstanceId, ScriptLifecycleEvent event,
+                         double deltaSeconds) override {
+        return started_ &&
+               managedInvokeLifecycle_(managedInstanceId,
+                                       static_cast<std::int32_t>(event),
+                                       deltaSeconds) != 0;
+    }
+
+    // DotNetScriptHost
+
+    std::int64_t probeValue(std::uint64_t managedInstanceId) override {
+        return started_ ? managedGetProbe_(managedInstanceId) : -1;
+    }
+
+private:
+    template <typename Fn>
+    bool resolve(Fn& slot, const char* methodName) {
+        void* fn = nullptr;
+        const auto rc = loader_(config_.bootstrapAssembly.c_str(),
+                                "SkyEngine.Bootstrap, SkyEngine.Managed", methodName,
+                                kUnmanagedCallersOnly, nullptr, &fn);
+        slot = reinterpret_cast<Fn>(fn);
+        return rc == 0 && slot != nullptr;
+    }
+
+    DotNetHostConfig config_;
+    void* library_ = nullptr;
+    hostfxr_handle context_ = nullptr;
+    hostfxr_close_fn close_ = nullptr;
+    load_assembly_and_get_function_pointer_fn loader_ = nullptr;
+    managed_load_assembly_fn managedLoadAssembly_ = nullptr;
+    managed_create_instance_fn managedCreateInstance_ = nullptr;
+    managed_destroy_instance_fn managedDestroyInstance_ = nullptr;
+    managed_invoke_lifecycle_fn managedInvokeLifecycle_ = nullptr;
+    managed_get_probe_fn managedGetProbe_ = nullptr;
+    bool started_ = false;
+    std::vector<AssemblyRef> assemblies_;
+};
+
+} // namespace
+
+std::unique_ptr<DotNetScriptHost> createDotNetScriptHost(const DotNetHostConfig& config) {
+    auto host = std::make_unique<DotNetScriptHostImpl>(config);
+    return host->available() ? std::move(host) : nullptr;
+}
+
+#else
+
+std::unique_ptr<DotNetScriptHost> createDotNetScriptHost(const DotNetHostConfig&) {
+    return nullptr; // dlopen-based hosting is POSIX-only for now
+}
+
+#endif
+
+} // namespace sky::scripting
