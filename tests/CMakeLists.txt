@@ -42,6 +42,8 @@ sky_add_test(scripting_rendering_tests)
 sky_add_test(vfs_tests)
 sky_add_test(integrity_tests)
 sky_add_test(visual_pipeline_tests)
+target_compile_definitions(visual_pipeline_tests PRIVATE
+    SKY_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 # Editor command layer (Qt-free): compiled together with the editor context.
 sky_add_test(undo_tests)

@@ -11,8 +11,13 @@ struct Vec3f {
     float x = 0, y = 0, z = 0;
 };
 
+struct Vec2f {
+    float u = 0, v = 0;
+};
+
 struct FaceVertex {
     int position = 0; // 1-based OBJ index, negative = relative
+    int texcoord = 0; // 0 = none
     int normal = 0;   // 0 = none
 };
 
@@ -24,9 +29,16 @@ std::optional<FaceVertex> parseFaceVertex(const std::string& token) {
         vertex.position = std::stoi(token.substr(0, firstSlash));
         if (firstSlash != std::string::npos) {
             const auto secondSlash = token.find('/', firstSlash + 1);
-            if (secondSlash != std::string::npos &&
-                secondSlash + 1 < token.size()) {
-                vertex.normal = std::stoi(token.substr(secondSlash + 1));
+            if (secondSlash == std::string::npos) {
+                vertex.texcoord = std::stoi(token.substr(firstSlash + 1));
+            } else {
+                if (secondSlash > firstSlash + 1) {
+                    vertex.texcoord = std::stoi(token.substr(
+                        firstSlash + 1, secondSlash - firstSlash - 1));
+                }
+                if (secondSlash + 1 < token.size()) {
+                    vertex.normal = std::stoi(token.substr(secondSlash + 1));
+                }
             }
         }
     } catch (...) {
@@ -75,6 +87,7 @@ std::optional<std::vector<float>> loadObjMesh(platform::IFileSystem& fileSystem,
 
     std::vector<Vec3f> positions;
     std::vector<Vec3f> normals;
+    std::vector<Vec2f> texcoords;
     std::vector<float> mesh;
 
     std::string line;
@@ -88,6 +101,12 @@ std::optional<std::vector<float>> loadObjMesh(platform::IFileSystem& fileSystem,
                 return std::nullopt;
             }
             positions.push_back(position);
+        } else if (keyword == "vt") {
+            Vec2f uv;
+            if (!(record >> uv.u >> uv.v)) {
+                return std::nullopt;
+            }
+            texcoords.push_back(uv);
         } else if (keyword == "vn") {
             Vec3f normal;
             if (!(record >> normal.x >> normal.y >> normal.z)) {
@@ -129,9 +148,19 @@ std::optional<std::vector<float>> loadObjMesh(platform::IFileSystem& fileSystem,
                         }
                         normal = normals[index];
                     }
+                    Vec2f uv;
+                    if (corners[c].texcoord != 0) {
+                        std::size_t index = 0;
+                        if (!resolveIndex(corners[c].texcoord, texcoords.size(),
+                                          index)) {
+                            return std::nullopt;
+                        }
+                        uv = texcoords[index];
+                    }
                     mesh.insert(mesh.end(),
                                 {cornerPositions[c].x, cornerPositions[c].y,
-                                 cornerPositions[c].z, normal.x, normal.y, normal.z});
+                                 cornerPositions[c].z, normal.x, normal.y, normal.z,
+                                 uv.u, uv.v});
                 }
             }
         }

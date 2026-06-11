@@ -6,7 +6,9 @@
 #include <string>
 
 #include "sky/asset/asset_database.hpp"
+#include "sky/asset/fbx_importer.hpp"
 #include "sky/asset/obj_importer.hpp"
+#include "sky/asset/png_decoder.hpp"
 #include "sky/platform/platform_services.hpp"
 #include "sky/rendering/material.hpp"
 #include "sky/rendering/null_renderer.hpp"
@@ -37,7 +39,7 @@ void testObjParsing() {
               "f 1//1 2//1 3//1\nf 1//1 3//1 4//1\n");
     const auto quad = sky::asset::loadObjMesh(*fileSystem, testRoot() / "quad.obj");
     CHECK(quad.has_value());
-    CHECK(quad->size() == 2u * 3u * 6u);
+    CHECK(quad->size() == 2u * 3u * 8u);
     // The provided normal is used verbatim.
     CHECK((*quad)[3] == 0.0f);
     CHECK((*quad)[5] == 1.0f);
@@ -51,7 +53,7 @@ void testObjParsing() {
         sky::asset::loadObjMesh(*fileSystem, testRoot() / "pyramid.obj");
     CHECK(pyramid.has_value());
     // 4 side triangles + 2 from the quad base.
-    CHECK(pyramid->size() == 6u * 3u * 6u);
+    CHECK(pyramid->size() == 6u * 3u * 8u);
     // Computed normals are unit length.
     const float nx = (*pyramid)[3], ny = (*pyramid)[4], nz = (*pyramid)[5];
     CHECK(std::fabs(std::sqrt(nx * nx + ny * ny + nz * nz) - 1.0f) < 1e-3f);
@@ -82,6 +84,92 @@ void testObjParsing() {
     const auto renderer = sky::rendering::createNullRenderer();
     CHECK(renderer->createMeshFromData(*pyramid).isValid());
 
+    fileSystem->remove(testRoot());
+}
+
+void testUvParsing() {
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    // v/vt/vn references: UVs land in floats 6..7 of each vertex.
+    writeText(*fileSystem, testRoot() / "uv.obj",
+              "v 0 0 0\nv 1 0 0\nv 1 1 0\n"
+              "vt 0 0\nvt 1 0\nvt 1 1\n"
+              "vn 0 0 1\n"
+              "f 1/1/1 2/2/1 3/3/1\n");
+    const auto mesh = sky::asset::loadObjMesh(*fileSystem, testRoot() / "uv.obj");
+    CHECK(mesh.has_value());
+    CHECK(mesh->size() == 3u * 8u);
+    CHECK((*mesh)[6] == 0.0f && (*mesh)[7] == 0.0f);
+    CHECK((*mesh)[8 + 6] == 1.0f && (*mesh)[8 + 7] == 0.0f);
+    CHECK((*mesh)[16 + 6] == 1.0f && (*mesh)[16 + 7] == 1.0f);
+    fileSystem->remove(testRoot());
+}
+
+void testFbxImport() {
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const std::filesystem::path sample = SKY_TEST_DATA_DIR "/box.fbx";
+
+    const auto mesh = sky::asset::loadFbxMesh(*fileSystem, sample);
+    CHECK(mesh.has_value());
+    // The engine vertex format: whole triangles of 8-float vertices.
+    CHECK(!mesh->empty());
+    CHECK(mesh->size() % 24 == 0);
+    // A box triangulates to 12 triangles.
+    CHECK(mesh->size() == 12u * 3u * 8u);
+
+    // The importer registers FBX as a mesh asset; garbage is rejected.
+    const auto database = sky::asset::createAssetDatabase();
+    const auto importer = sky::asset::createFbxImporter(*fileSystem);
+    database->registerImporter(*importer);
+    const auto id = database->importAsset(sample);
+    CHECK(id.has_value());
+    CHECK(database->resolve(*id)->assetType == "mesh");
+    writeText(*fileSystem, testRoot() / "fake.fbx", "not an fbx");
+    CHECK(!database->importAsset(testRoot() / "fake.fbx").has_value());
+
+    // Uploads through the rendering contract.
+    const auto renderer = sky::rendering::createNullRenderer();
+    CHECK(renderer->createMeshFromData(*mesh).isValid());
+    fileSystem->remove(testRoot());
+}
+
+void testPngRoundTrip() {
+    const auto fileSystem = sky::platform::createStdFileSystem();
+
+    // Encode a small gradient image and decode it back, pixel-exact.
+    sky::asset::ImageData image;
+    image.width = 5;
+    image.height = 3;
+    image.pixels.resize(5 * 3 * 4);
+    for (std::size_t i = 0; i < image.pixels.size(); ++i) {
+        image.pixels[i] = static_cast<std::uint8_t>(i * 7 % 256);
+    }
+    const auto encoded = sky::asset::encodePngRgba(image);
+    const auto decoded = sky::asset::decodePng(encoded);
+    CHECK(decoded.has_value());
+    CHECK(decoded->width == 5 && decoded->height == 3);
+    CHECK(decoded->pixels == image.pixels);
+
+    // The importer accepts the file and registers it as a texture.
+    fileSystem->writeAll(testRoot() / "img.png", encoded);
+    const auto database = sky::asset::createAssetDatabase();
+    const auto importer = sky::asset::createPngImporter(*fileSystem);
+    database->registerImporter(*importer);
+    const auto id = database->importAsset(testRoot() / "img.png");
+    CHECK(id.has_value());
+    CHECK(database->resolve(*id)->assetType == "texture");
+
+    // Corrupt signatures and truncated streams are rejected.
+    CHECK(!sky::asset::decodePng({std::byte{1}, std::byte{2}}).has_value());
+    auto truncated = encoded;
+    truncated.resize(encoded.size() / 2);
+    CHECK(!sky::asset::decodePng(truncated).has_value());
+
+    // Textures upload through the rendering contract with validation.
+    const auto renderer = sky::rendering::createNullRenderer();
+    CHECK(renderer->createTextureFromData(decoded->width, decoded->height,
+                                          decoded->pixels)
+              .isValid());
+    CHECK(!renderer->createTextureFromData(4, 4, decoded->pixels).isValid());
     fileSystem->remove(testRoot());
 }
 
@@ -119,6 +207,9 @@ void testMaterialLibrary() {
 
 int main() {
     testObjParsing();
+    testUvParsing();
+    testFbxImport();
+    testPngRoundTrip();
     testMaterialLibrary();
     return sky::test::summary("visual_pipeline_tests");
 }

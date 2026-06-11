@@ -221,8 +221,8 @@ void testTerrainRenderIntegration() {
     const auto dataset = hillDataset();
     const auto mesh = sky::terrain::buildTerrainMesh(dataset);
 
-    // (16-1)^2 cells * 2 triangles * 3 vertices * 6 floats.
-    CHECK(mesh.size() == 15u * 15u * 2u * 3u * 6u);
+    // (16-1)^2 cells * 2 triangles * 3 vertices * 8 floats (pos+normal+uv).
+    CHECK(mesh.size() == 15u * 15u * 2u * 3u * 8u);
 
     // Normals are unit-length; flat areas point straight up.
     const float nx = mesh[3], ny = mesh[4], nz = mesh[5];

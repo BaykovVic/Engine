@@ -54,9 +54,21 @@ public:
     }
 
     RenderResourceHandle createMeshFromData(
-        std::span<const float> interleavedPosNormal) override {
-        // 6 floats per vertex, 3 vertices per triangle.
-        if (interleavedPosNormal.empty() || interleavedPosNormal.size() % 18 != 0) {
+        std::span<const float> interleavedPosNormalUv) override {
+        // 8 floats per vertex, 3 vertices per triangle.
+        if (interleavedPosNormalUv.empty() || interleavedPosNormalUv.size() % 24 != 0) {
+            return RenderResourceHandle::invalid();
+        }
+        const RenderResourceHandle handle{nextId_++};
+        resources_.insert(handle.value);
+        return handle;
+    }
+
+    RenderResourceHandle createTextureFromData(
+        std::uint32_t width, std::uint32_t height,
+        std::span<const std::uint8_t> rgbaPixels) override {
+        if (width == 0 || height == 0 ||
+            rgbaPixels.size() != std::size_t(width) * height * 4) {
             return RenderResourceHandle::invalid();
         }
         const RenderResourceHandle handle{nextId_++};

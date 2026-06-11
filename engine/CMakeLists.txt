@@ -53,9 +53,34 @@ sky_add_module(sky_scene scene
 sky_add_module(sky_project project
     project/src/project_repository.cpp)
 
+# Vendored MIT dependencies for FBX import and zlib/deflate decompression
+# (used by the FBX and PNG importers). See asset/third_party/*/LICENSE.
+add_library(sky_third_party STATIC
+    asset/third_party/openfbx/ofbx.cpp
+    asset/third_party/libdeflate/lib/deflate_decompress.c
+    asset/third_party/libdeflate/lib/zlib_decompress.c
+    asset/third_party/libdeflate/lib/adler32.c
+    asset/third_party/libdeflate/lib/utils.c)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    target_sources(sky_third_party PRIVATE
+        asset/third_party/libdeflate/lib/x86/cpu_features.c)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    target_sources(sky_third_party PRIVATE
+        asset/third_party/libdeflate/lib/arm/cpu_features.c)
+endif()
+target_include_directories(sky_third_party PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/asset/third_party/openfbx
+    ${CMAKE_CURRENT_SOURCE_DIR}/asset/third_party/libdeflate)
+target_include_directories(sky_third_party PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/asset/third_party/libdeflate/lib)
+target_compile_features(sky_third_party PUBLIC cxx_std_20)
+
 sky_add_module(sky_asset asset
     asset/src/asset_database.cpp
-    asset/src/obj_importer.cpp)
+    asset/src/obj_importer.cpp
+    asset/src/fbx_importer.cpp
+    asset/src/png_decoder.cpp)
+target_link_libraries(sky_asset PRIVATE sky_third_party)
 
 sky_add_module(sky_physics physics
     physics/src/physics_world.cpp)

@@ -41,6 +41,20 @@ constexpr GLenum GL_LINK_STATUS = 0x8B82;
 constexpr GLenum GL_LINE = 0x1B01;
 constexpr GLenum GL_FILL = 0x1B02;
 constexpr GLenum GL_FRONT_AND_BACK = 0x0408;
+constexpr GLenum GL_TEXTURE_2D = 0x0DE1;
+constexpr GLenum GL_RGBA = 0x1908;
+constexpr GLenum GL_RGBA8 = 0x8058;
+constexpr GLenum GL_UNSIGNED_BYTE = 0x1401;
+constexpr GLenum GL_TEXTURE_MIN_FILTER = 0x2801;
+constexpr GLenum GL_TEXTURE_MAG_FILTER = 0x2800;
+constexpr GLenum GL_LINEAR = 0x2601;
+constexpr GLenum GL_LINEAR_MIPMAP_LINEAR = 0x2703;
+constexpr GLenum GL_TEXTURE_WRAP_S = 0x2802;
+constexpr GLenum GL_TEXTURE_WRAP_T = 0x2803;
+constexpr GLenum GL_REPEAT = 0x2901;
+constexpr GLenum GL_TEXTURE0 = 0x84C0;
+constexpr GLenum GL_LEQUAL = 0x0203;
+constexpr GLenum GL_LESS = 0x0201;
 
 struct GlApi {
     void (*Enable)(GLenum) = nullptr;
@@ -76,6 +90,16 @@ struct GlApi {
                                 const void*) = nullptr;
     void (*DrawArrays)(GLenum, GLint, GLsizei) = nullptr;
     void (*PolygonMode)(GLenum, GLenum) = nullptr;
+    void (*GenTextures)(GLsizei, GLuint*) = nullptr;
+    void (*BindTexture)(GLenum, GLuint) = nullptr;
+    void (*TexImage2D)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
+                       const void*) = nullptr;
+    void (*TexParameteri)(GLenum, GLenum, GLint) = nullptr;
+    void (*GenerateMipmap)(GLenum) = nullptr;
+    void (*ActiveTexture)(GLenum) = nullptr;
+    void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
+    void (*DepthMask)(GLboolean) = nullptr;
+    void (*DepthFunc)(GLenum) = nullptr;
 
     bool load(const GlLoader& loader) {
         const auto resolve = [&](auto& slot, const char* name) {
@@ -112,7 +136,16 @@ struct GlApi {
                resolve(EnableVertexAttribArray, "glEnableVertexAttribArray") &&
                resolve(VertexAttribPointer, "glVertexAttribPointer") &&
                resolve(DrawArrays, "glDrawArrays") &&
-               resolve(PolygonMode, "glPolygonMode");
+               resolve(PolygonMode, "glPolygonMode") &&
+               resolve(GenTextures, "glGenTextures") &&
+               resolve(BindTexture, "glBindTexture") &&
+               resolve(TexImage2D, "glTexImage2D") &&
+               resolve(TexParameteri, "glTexParameteri") &&
+               resolve(GenerateMipmap, "glGenerateMipmap") &&
+               resolve(ActiveTexture, "glActiveTexture") &&
+               resolve(DeleteTextures, "glDeleteTextures") &&
+               resolve(DepthMask, "glDepthMask") &&
+               resolve(DepthFunc, "glDepthFunc");
     }
 };
 
@@ -189,40 +222,44 @@ Mat4 viewFromCameraPose(const core::Transform& camera) {
 
 // --- Geometry ---------------------------------------------------------------
 
-// Unit cube centred at the origin: position (3) + normal (3), 36 vertices.
+// Unit cube centred at the origin: position(3) + normal(3) + uv(2),
+// 36 vertices, each face mapped 0..1.
 constexpr float kCubeVertices[] = {
     // -Z
-    -0.5f,-0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f,-0.5f,-0.5f, 0,0,-1,
-    -0.5f,-0.5f,-0.5f, 0,0,-1, -0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,
+    -0.5f,-0.5f,-0.5f, 0,0,-1, 0,0,  0.5f, 0.5f,-0.5f, 0,0,-1, 1,1,  0.5f,-0.5f,-0.5f, 0,0,-1, 1,0,
+    -0.5f,-0.5f,-0.5f, 0,0,-1, 0,0, -0.5f, 0.5f,-0.5f, 0,0,-1, 0,1,  0.5f, 0.5f,-0.5f, 0,0,-1, 1,1,
     // +Z
-    -0.5f,-0.5f, 0.5f, 0,0,1,   0.5f,-0.5f, 0.5f, 0,0,1,   0.5f, 0.5f, 0.5f, 0,0,1,
-    -0.5f,-0.5f, 0.5f, 0,0,1,   0.5f, 0.5f, 0.5f, 0,0,1,  -0.5f, 0.5f, 0.5f, 0,0,1,
+    -0.5f,-0.5f, 0.5f, 0,0,1, 0,0,   0.5f,-0.5f, 0.5f, 0,0,1, 1,0,   0.5f, 0.5f, 0.5f, 0,0,1, 1,1,
+    -0.5f,-0.5f, 0.5f, 0,0,1, 0,0,   0.5f, 0.5f, 0.5f, 0,0,1, 1,1,  -0.5f, 0.5f, 0.5f, 0,0,1, 0,1,
     // -X
-    -0.5f,-0.5f,-0.5f, -1,0,0, -0.5f,-0.5f, 0.5f, -1,0,0, -0.5f, 0.5f, 0.5f, -1,0,0,
-    -0.5f,-0.5f,-0.5f, -1,0,0, -0.5f, 0.5f, 0.5f, -1,0,0, -0.5f, 0.5f,-0.5f, -1,0,0,
+    -0.5f,-0.5f,-0.5f, -1,0,0, 0,0, -0.5f,-0.5f, 0.5f, -1,0,0, 1,0, -0.5f, 0.5f, 0.5f, -1,0,0, 1,1,
+    -0.5f,-0.5f,-0.5f, -1,0,0, 0,0, -0.5f, 0.5f, 0.5f, -1,0,0, 1,1, -0.5f, 0.5f,-0.5f, -1,0,0, 0,1,
     // +X
-     0.5f,-0.5f,-0.5f, 1,0,0,   0.5f, 0.5f, 0.5f, 1,0,0,   0.5f,-0.5f, 0.5f, 1,0,0,
-     0.5f,-0.5f,-0.5f, 1,0,0,   0.5f, 0.5f,-0.5f, 1,0,0,   0.5f, 0.5f, 0.5f, 1,0,0,
+     0.5f,-0.5f,-0.5f, 1,0,0, 0,0,   0.5f, 0.5f, 0.5f, 1,0,0, 1,1,   0.5f,-0.5f, 0.5f, 1,0,0, 1,0,
+     0.5f,-0.5f,-0.5f, 1,0,0, 0,0,   0.5f, 0.5f,-0.5f, 1,0,0, 0,1,   0.5f, 0.5f, 0.5f, 1,0,0, 1,1,
     // -Y
-    -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0,
-    -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0, -0.5f,-0.5f, 0.5f, 0,-1,0,
+    -0.5f,-0.5f,-0.5f, 0,-1,0, 0,0,  0.5f,-0.5f,-0.5f, 0,-1,0, 1,0,  0.5f,-0.5f, 0.5f, 0,-1,0, 1,1,
+    -0.5f,-0.5f,-0.5f, 0,-1,0, 0,0,  0.5f,-0.5f, 0.5f, 0,-1,0, 1,1, -0.5f,-0.5f, 0.5f, 0,-1,0, 0,1,
     // +Y
-    -0.5f, 0.5f,-0.5f, 0,1,0,   0.5f, 0.5f, 0.5f, 0,1,0,   0.5f, 0.5f,-0.5f, 0,1,0,
-    -0.5f, 0.5f,-0.5f, 0,1,0,  -0.5f, 0.5f, 0.5f, 0,1,0,   0.5f, 0.5f, 0.5f, 0,1,0,
+    -0.5f, 0.5f,-0.5f, 0,1,0, 0,0,   0.5f, 0.5f, 0.5f, 0,1,0, 1,1,   0.5f, 0.5f,-0.5f, 0,1,0, 1,0,
+    -0.5f, 0.5f,-0.5f, 0,1,0, 0,0,  -0.5f, 0.5f, 0.5f, 0,1,0, 0,1,   0.5f, 0.5f, 0.5f, 0,1,0, 1,1,
 };
 
 const char* kVertexShader = R"glsl(
 #version 330 core
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUv;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 out vec3 vNormal;
 out vec3 vWorldPos;
+out vec2 vUv;
 void main() {
     vec4 world = uModel * vec4(aPosition, 1.0);
     vWorldPos = world.xyz;
     vNormal = mat3(uModel) * aNormal;
+    vUv = aUv;
     gl_Position = uViewProjection * world;
 }
 )glsl";
@@ -232,11 +269,15 @@ const char* kFragmentShader = R"glsl(
 #version 330 core
 in vec3 vNormal;
 in vec3 vWorldPos;
+in vec2 vUv;
 uniform vec3 uBaseColor;
+uniform sampler2D uTexture;
+uniform int uHasTexture;
 uniform vec3 uEmissive;
 uniform float uRoughness;
 uniform float uMetallic;
 uniform vec3 uCameraPos;
+uniform int uSkyMode; // 1 = sky backdrop pass
 uniform int uLightCount;
 uniform vec3 uLightVec[4];   // direction (directional) or position (point)
 uniform vec3 uLightColor[4]; // colour premultiplied by intensity
@@ -244,9 +285,30 @@ uniform int uLightType[4];   // 0 directional, 1 point
 uniform float uLightRange[4];
 out vec4 fragColor;
 void main() {
+    if (uSkyMode == 1) {
+        // Sky backdrop: uBaseColor = horizon, uEmissive = zenith; the sun
+        // disc comes from the first directional light.
+        vec3 dir = normalize(vWorldPos - uCameraPos);
+        float t = clamp(dir.y * 1.6 + 0.18, 0.0, 1.0);
+        vec3 skyColor = mix(uBaseColor, uEmissive, t);
+        for (int i = 0; i < uLightCount; ++i) {
+            if (uLightType[i] == 0) {
+                float towardSun = max(dot(dir, -normalize(uLightVec[i])), 0.0);
+                skyColor += uLightColor[i] * (pow(towardSun, 600.0) * 1.4 +
+                                              pow(towardSun, 10.0) * 0.10);
+                break;
+            }
+        }
+        fragColor = vec4(skyColor, 1.0);
+        return;
+    }
     vec3 n = normalize(vNormal);
     vec3 v = normalize(uCameraPos - vWorldPos);
-    vec3 result = uBaseColor * 0.22; // ambient floor
+    vec3 albedo = uBaseColor;
+    if (uHasTexture == 1) {
+        albedo *= texture(uTexture, vUv).rgb;
+    }
+    vec3 result = albedo * 0.22; // ambient floor
     for (int i = 0; i < uLightCount; ++i) {
         vec3 l;
         float attenuation = 1.0;
@@ -263,8 +325,8 @@ void main() {
         vec3 h = normalize(l + v);
         float shininess = mix(96.0, 4.0, uRoughness);
         float spec = pow(max(dot(n, h), 0.0), shininess) * (1.0 - uRoughness * 0.7);
-        vec3 diffuse = uBaseColor * (1.0 - uMetallic);
-        vec3 specColor = mix(vec3(0.04), uBaseColor, uMetallic);
+        vec3 diffuse = albedo * (1.0 - uMetallic);
+        vec3 specColor = mix(vec3(0.04), albedo, uMetallic);
         result += (diffuse * ndl + specColor * spec * ndl) *
                   uLightColor[i] * attenuation;
     }
@@ -281,10 +343,11 @@ public:
         if (!gl_.load(loader)) {
             return;
         }
-        program_ = buildProgram();
+        program_ = buildProgram(kVertexShader, kFragmentShader);
         if (program_ == 0) {
             return;
         }
+        uSkyMode_ = gl_.GetUniformLocation(program_, "uSkyMode");
         uModel_ = gl_.GetUniformLocation(program_, "uModel");
         uViewProjection_ = gl_.GetUniformLocation(program_, "uViewProjection");
         uBaseColor_ = gl_.GetUniformLocation(program_, "uBaseColor");
@@ -297,6 +360,8 @@ public:
         uLightColor_ = gl_.GetUniformLocation(program_, "uLightColor");
         uLightType_ = gl_.GetUniformLocation(program_, "uLightType");
         uLightRange_ = gl_.GetUniformLocation(program_, "uLightRange");
+        uTexture_ = gl_.GetUniformLocation(program_, "uTexture");
+        uHasTexture_ = gl_.GetUniformLocation(program_, "uHasTexture");
 
         gl_.GenVertexArrays(1, &cubeVao_);
         gl_.BindVertexArray(cubeVao_);
@@ -305,13 +370,22 @@ public:
         gl_.BindBuffer(GL_ARRAY_BUFFER, vbo);
         gl_.BufferData(GL_ARRAY_BUFFER, sizeof(kCubeVertices), kCubeVertices,
                        GL_STATIC_DRAW);
-        gl_.EnableVertexAttribArray(0);
-        gl_.VertexAttribPointer(0, 3, GL_FLOAT, 0, 6 * sizeof(float), nullptr);
-        gl_.EnableVertexAttribArray(1);
-        gl_.VertexAttribPointer(1, 3, GL_FLOAT, 0, 6 * sizeof(float),
-                                reinterpret_cast<const void*>(3 * sizeof(float)));
+        setupVertexAttributes();
         gl_.BindVertexArray(0);
         ready_ = true;
+    }
+
+    /// Engine vertex format: position(3) + normal(3) + uv(2).
+    void setupVertexAttributes() {
+        constexpr GLsizei kStride = 8 * sizeof(float);
+        gl_.EnableVertexAttribArray(0);
+        gl_.VertexAttribPointer(0, 3, GL_FLOAT, 0, kStride, nullptr);
+        gl_.EnableVertexAttribArray(1);
+        gl_.VertexAttribPointer(1, 3, GL_FLOAT, 0, kStride,
+                                reinterpret_cast<const void*>(3 * sizeof(float)));
+        gl_.EnableVertexAttribArray(2);
+        gl_.VertexAttribPointer(2, 2, GL_FLOAT, 0, kStride,
+                                reinterpret_cast<const void*>(6 * sizeof(float)));
     }
 
     bool ready() const override { return ready_; }
@@ -368,6 +442,8 @@ public:
                     lightsDirty = true;
                     break;
                 case rendering::RenderCommandType::SetViewport:
+                    viewportW_ = static_cast<GLsizei>(command.viewportWidth);
+                    viewportH_ = static_cast<GLsizei>(command.viewportHeight);
                     gl_.Viewport(0, 0,
                                  static_cast<GLsizei>(command.viewportWidth),
                                  static_cast<GLsizei>(command.viewportHeight));
@@ -385,6 +461,9 @@ public:
                     gl_.Uniform3f(uCameraPos_, command.transform.position.x,
                                   command.transform.position.y,
                                   command.transform.position.z);
+                    cameraPos_[0] = command.transform.position.x;
+                    cameraPos_[1] = command.transform.position.y;
+                    cameraPos_[2] = command.transform.position.z;
                     break;
                 case rendering::RenderCommandType::AddLight: {
                     if (lightCount >= kMaxLights) {
@@ -409,8 +488,41 @@ public:
                     lightsDirty = true;
                     break;
                 }
+                case rendering::RenderCommandType::SetSky: {
+                    // Sky backdrop through the main program: a giant cube
+                    // glued to the camera, shaded by view direction.
+                    flushLights();
+                    core::Transform dome;
+                    dome.position = {cameraPos_[0], cameraPos_[1], cameraPos_[2]};
+                    dome.scale = {300.0f, 300.0f, 300.0f};
+                    const auto model = fromTransform(dome);
+                    gl_.UniformMatrix4fv(uModel_, 1, 0, model.m.data());
+                    gl_.Uniform3f(uBaseColor_, command.color.x, command.color.y,
+                                  command.color.z);
+                    gl_.Uniform3f(uEmissive_, command.emissive.x, command.emissive.y,
+                                  command.emissive.z);
+                    gl_.Uniform1i(uSkyMode_, 1);
+                    gl_.Disable(GL_DEPTH_TEST);
+                    gl_.DepthMask(0);
+                    gl_.BindVertexArray(cubeVao_);
+                    gl_.DrawArrays(GL_TRIANGLES, 0, 36);
+                    gl_.DepthMask(1);
+                    gl_.Enable(GL_DEPTH_TEST);
+                    gl_.Uniform1i(uSkyMode_, 0);
+                    break;
+                }
                 case rendering::RenderCommandType::DrawMesh: {
                     flushLights();
+                    // Albedo texture, when the command names one.
+                    if (const auto it = textures_.find(command.texture.value);
+                        it != textures_.end()) {
+                        gl_.ActiveTexture(GL_TEXTURE0);
+                        gl_.BindTexture(GL_TEXTURE_2D, it->second);
+                        gl_.Uniform1i(uTexture_, 0);
+                        gl_.Uniform1i(uHasTexture_, 1);
+                    } else {
+                        gl_.Uniform1i(uHasTexture_, 0);
+                    }
                     const auto model = fromTransform(command.transform);
                     gl_.UniformMatrix4fv(uModel_, 1, 0, model.m.data());
                     gl_.Uniform3f(uBaseColor_, command.color.x, command.color.y,
@@ -463,28 +575,24 @@ public:
     }
 
     rendering::RenderResourceHandle createMeshFromData(
-        std::span<const float> interleavedPosNormal) override {
-        if (!ready_ || interleavedPosNormal.empty() ||
-            interleavedPosNormal.size() % 18 != 0) {
+        std::span<const float> interleavedPosNormalUv) override {
+        if (!ready_ || interleavedPosNormalUv.empty() ||
+            interleavedPosNormalUv.size() % 24 != 0) {
             return rendering::RenderResourceHandle::invalid();
         }
         MeshResource mesh;
         mesh.vertexCount =
-            static_cast<GLsizei>(interleavedPosNormal.size() / 6);
+            static_cast<GLsizei>(interleavedPosNormalUv.size() / 8);
         gl_.GenVertexArrays(1, &mesh.vao);
         gl_.BindVertexArray(mesh.vao);
         GLuint vbo = 0;
         gl_.GenBuffers(1, &vbo);
         gl_.BindBuffer(GL_ARRAY_BUFFER, vbo);
         gl_.BufferData(GL_ARRAY_BUFFER,
-                       static_cast<GLsizeiptr>(interleavedPosNormal.size() *
+                       static_cast<GLsizeiptr>(interleavedPosNormalUv.size() *
                                                sizeof(float)),
-                       interleavedPosNormal.data(), GL_STATIC_DRAW);
-        gl_.EnableVertexAttribArray(0);
-        gl_.VertexAttribPointer(0, 3, GL_FLOAT, 0, 6 * sizeof(float), nullptr);
-        gl_.EnableVertexAttribArray(1);
-        gl_.VertexAttribPointer(1, 3, GL_FLOAT, 0, 6 * sizeof(float),
-                                reinterpret_cast<const void*>(3 * sizeof(float)));
+                       interleavedPosNormalUv.data(), GL_STATIC_DRAW);
+        setupVertexAttributes();
         gl_.BindVertexArray(0);
 
         const rendering::RenderResourceHandle handle{nextResource_++};
@@ -492,13 +600,45 @@ public:
         return handle;
     }
 
+    rendering::RenderResourceHandle createTextureFromData(
+        std::uint32_t width, std::uint32_t height,
+        std::span<const std::uint8_t> rgbaPixels) override {
+        if (!ready_ || width == 0 || height == 0 ||
+            rgbaPixels.size() != std::size_t(width) * height * 4) {
+            return rendering::RenderResourceHandle::invalid();
+        }
+        GLuint texture = 0;
+        gl_.GenTextures(1, &texture);
+        gl_.BindTexture(GL_TEXTURE_2D, texture);
+        gl_.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8),
+                       static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0,
+                       GL_RGBA, GL_UNSIGNED_BYTE, rgbaPixels.data());
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                          static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                          static_cast<GLint>(GL_LINEAR));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                          static_cast<GLint>(GL_REPEAT));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                          static_cast<GLint>(GL_REPEAT));
+        gl_.GenerateMipmap(GL_TEXTURE_2D);
+
+        const rendering::RenderResourceHandle handle{nextResource_++};
+        textures_.emplace(handle.value, texture);
+        return handle;
+    }
+
     void destroy(rendering::RenderResourceHandle resource) override {
         resources_.erase(resource.value);
         meshes_.erase(resource.value);
+        if (const auto it = textures_.find(resource.value); it != textures_.end()) {
+            gl_.DeleteTextures(1, &it->second);
+            textures_.erase(it);
+        }
     }
 
 private:
-    GLuint buildProgram() {
+    GLuint buildProgram(const char* vertexSource, const char* fragmentSource) {
         const auto compile = [&](GLenum type, const char* source) -> GLuint {
             const GLuint shader = gl_.CreateShader(type);
             gl_.ShaderSource(shader, 1, &source, nullptr);
@@ -507,8 +647,8 @@ private:
             gl_.GetShaderiv(shader, GL_COMPILE_STATUS, &ok);
             return ok != 0 ? shader : 0;
         };
-        const GLuint vertex = compile(GL_VERTEX_SHADER, kVertexShader);
-        const GLuint fragment = compile(GL_FRAGMENT_SHADER, kFragmentShader);
+        const GLuint vertex = compile(GL_VERTEX_SHADER, vertexSource);
+        const GLuint fragment = compile(GL_FRAGMENT_SHADER, fragmentSource);
         if (vertex == 0 || fragment == 0) {
             return 0;
         }
@@ -539,6 +679,12 @@ private:
     GLint uLightColor_ = -1;
     GLint uLightType_ = -1;
     GLint uLightRange_ = -1;
+    GLint uTexture_ = -1;
+    GLint uHasTexture_ = -1;
+    GLint uSkyMode_ = -1;
+    float cameraPos_[3] = {0.0f, 0.0f, 0.0f};
+    GLsizei viewportW_ = 0;
+    GLsizei viewportH_ = 0;
     rendering::IRenderSurface* surface_ = nullptr;
     std::vector<rendering::RenderCommand> pending_;
     struct MeshResource {
@@ -549,6 +695,7 @@ private:
     std::uint64_t nextResource_ = 1;
     std::unordered_map<std::uint64_t, asset::AssetId> resources_;
     std::unordered_map<std::uint64_t, MeshResource> meshes_;
+    std::unordered_map<std::uint64_t, GLuint> textures_;
 };
 
 } // namespace

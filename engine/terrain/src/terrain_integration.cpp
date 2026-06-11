@@ -40,10 +40,13 @@ core::Vec3 normalAt(const TerrainDataset& dataset, std::uint32_t x, std::uint32_
     return {-dx / length, 1.0f / length, -dz / length};
 }
 
-void appendVertex(std::vector<float>& mesh, const core::Vec3& position,
-                  const core::Vec3& normal) {
+void appendVertex(std::vector<float>& mesh, const TerrainDataset& dataset,
+                  const core::Vec3& position, const core::Vec3& normal,
+                  std::uint32_t x, std::uint32_t z) {
+    const float span = static_cast<float>(dataset.resolution - 1);
     mesh.insert(mesh.end(),
-                {position.x, position.y, position.z, normal.x, normal.y, normal.z});
+                {position.x, position.y, position.z, normal.x, normal.y, normal.z,
+                 static_cast<float>(x) / span, static_cast<float>(z) / span});
 }
 
 } // namespace
@@ -55,8 +58,8 @@ std::vector<float> buildTerrainMesh(const TerrainDataset& dataset) {
         dataset.heights.size() < static_cast<std::size_t>(resolution) * resolution) {
         return mesh;
     }
-    // Two triangles per grid cell, 6 floats per vertex.
-    mesh.reserve(static_cast<std::size_t>(resolution - 1) * (resolution - 1) * 6 * 6);
+    // Two triangles per grid cell, 8 floats per vertex.
+    mesh.reserve(static_cast<std::size_t>(resolution - 1) * (resolution - 1) * 6 * 8);
     for (std::uint32_t z = 0; z + 1 < resolution; ++z) {
         for (std::uint32_t x = 0; x + 1 < resolution; ++x) {
             const auto v00 = vertexAt(dataset, x, z);
@@ -68,13 +71,13 @@ std::vector<float> buildTerrainMesh(const TerrainDataset& dataset) {
             const auto n01 = normalAt(dataset, x, z + 1);
             const auto n11 = normalAt(dataset, x + 1, z + 1);
 
-            appendVertex(mesh, v00, n00);
-            appendVertex(mesh, v01, n01);
-            appendVertex(mesh, v11, n11);
+            appendVertex(mesh, dataset, v00, n00, x, z);
+            appendVertex(mesh, dataset, v01, n01, x, z + 1);
+            appendVertex(mesh, dataset, v11, n11, x + 1, z + 1);
 
-            appendVertex(mesh, v00, n00);
-            appendVertex(mesh, v11, n11);
-            appendVertex(mesh, v10, n10);
+            appendVertex(mesh, dataset, v00, n00, x, z);
+            appendVertex(mesh, dataset, v11, n11, x + 1, z + 1);
+            appendVertex(mesh, dataset, v10, n10, x + 1, z);
         }
     }
     return mesh;

@@ -90,19 +90,46 @@ EditorContext::EditorContext() {
           {"intensity", "float"},
           {"range", "float"}}});
 
-    // Asset pipeline with the engine's own OBJ importer.
+    // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
     assets = asset::createAssetDatabase();
     objImporter = asset::createObjImporter(*fileSystem);
+    fbxImporter = asset::createFbxImporter(*fileSystem);
+    pngImporter = asset::createPngImporter(*fileSystem);
     assets->registerImporter(*objImporter);
+    assets->registerImporter(*fbxImporter);
+    assets->registerImporter(*pngImporter);
 
     // Starter material set; the Inspector edits assignments by name.
     materials = rendering::createMaterialLibrary();
     materials->createMaterial({"Default", {0.72f, 0.72f, 0.74f}, 0.85f, 0.0f, {}});
-    materials->createMaterial({"Crate", {0.80f, 0.55f, 0.27f}, 0.75f, 0.0f, {}});
     materials->createMaterial({"Gold", {1.00f, 0.78f, 0.30f}, 0.25f, 1.0f, {}});
     materials->createMaterial({"Terrain", {0.35f, 0.47f, 0.31f}, 1.0f, 0.0f, {}});
     materials->createMaterial(
         {"Glow", {0.20f, 0.55f, 0.85f}, 0.9f, 0.0f, {0.05f, 0.35f, 0.65f}});
+
+    // The crate material uses an engine-generated checkerboard texture,
+    // written as a real PNG and run through the import pipeline.
+    {
+        asset::ImageData checker;
+        checker.width = checker.height = 64;
+        checker.pixels.resize(64 * 64 * 4);
+        for (std::uint32_t y = 0; y < 64; ++y) {
+            for (std::uint32_t x = 0; x < 64; ++x) {
+                const bool dark = ((x / 8) + (y / 8)) % 2 == 0;
+                auto* px = checker.pixels.data() + (y * 64 + x) * 4;
+                px[0] = dark ? 150 : 235;
+                px[1] = dark ? 100 : 190;
+                px[2] = dark ? 55 : 120;
+                px[3] = 255;
+            }
+        }
+        const auto texturePath = std::filesystem::temp_directory_path() /
+                                 "sky_editor_assets" / "crate_checker.png";
+        fileSystem->writeAll(texturePath, asset::encodePngRgba(checker));
+        assets->importAsset(texturePath);
+        materials->createMaterial({"Crate", {1.0f, 1.0f, 1.0f}, 0.75f, 0.0f, {},
+                                   texturePath.generic_string()});
+    }
 
     buildDemoScene();
 }

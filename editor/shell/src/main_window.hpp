@@ -16,6 +16,7 @@ namespace sky::editor {
 class ConsolePanel;
 class HierarchyPanel;
 class InspectorPanel;
+class MaterialPanel;
 class PackagePanel;
 class ProjectPanel;
 class TerrainPanel;
@@ -55,6 +56,7 @@ private:
     ProjectPanel* project_ = nullptr;
     PackagePanel* packagePanel_ = nullptr;
     TerrainPanel* terrainPanel_ = nullptr;
+    MaterialPanel* materialPanel_ = nullptr;
     ConsolePanel* console_ = nullptr;
     ViewportWidget* viewport_ = nullptr;
     SceneView3D* sceneView3d_ = nullptr;

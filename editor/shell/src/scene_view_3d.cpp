@@ -7,6 +7,8 @@
 #include <cmath>
 #include <functional>
 
+#include "sky/asset/fbx_importer.hpp"
+#include "sky/asset/png_decoder.hpp"
 #include "sky/terrain/terrain_integration.hpp"
 
 namespace sky::editor {
@@ -164,6 +166,14 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
         emitLight(root);
     }
 
+    // Sky backdrop: horizon/zenith gradient plus a sun disc from the
+    // directional light above.
+    rendering::RenderCommand sky;
+    sky.type = rendering::RenderCommandType::SetSky;
+    sky.color = {0.62f, 0.70f, 0.80f};    // horizon
+    sky.emissive = {0.21f, 0.36f, 0.57f}; // zenith
+    commands.push_back(sky);
+
     // Terrain first: its own mesh at the Terrain object's placement.
     if (terrainMesh_.isValid() && context_.objects->exists(context_.terrainObject)) {
         rendering::RenderCommand terrainDraw;
@@ -203,13 +213,27 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
                     draw.roughness = desc.roughness;
                     draw.metallic = desc.metallic;
                     draw.emissive = desc.emissive;
+                    if (!desc.texturePath.empty() && resourceFactory_ != nullptr) {
+                        auto& texture = textures_[desc.texturePath];
+                        if (!texture.isValid()) {
+                            if (const auto image = asset::loadPngImage(
+                                    *context_.fileSystem, desc.texturePath)) {
+                                texture = resourceFactory_->createTextureFromData(
+                                    image->width, image->height, image->pixels);
+                            }
+                        }
+                        draw.texture = texture;
+                    }
                 }
                 const auto meshPath = fieldOr<std::string>(context_, mesh, "mesh", "");
                 if (!meshPath.empty() && resourceFactory_ != nullptr) {
                     auto& uploaded = objMeshes_[meshPath];
                     if (!uploaded.isValid()) {
-                        if (const auto data = asset::loadObjMesh(*context_.fileSystem,
-                                                                 meshPath)) {
+                        const auto data =
+                            std::filesystem::path(meshPath).extension() == ".fbx"
+                                ? asset::loadFbxMesh(*context_.fileSystem, meshPath)
+                                : asset::loadObjMesh(*context_.fileSystem, meshPath);
+                        if (data) {
                             uploaded = resourceFactory_->createMeshFromData(*data);
                         }
                     }

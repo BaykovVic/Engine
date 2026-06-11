@@ -5,7 +5,9 @@
 #include <vector>
 
 #include "sky/asset/asset_database.hpp"
+#include "sky/asset/fbx_importer.hpp"
 #include "sky/asset/obj_importer.hpp"
+#include "sky/asset/png_decoder.hpp"
 #include "sky/component/component_world.hpp"
 #include "sky/core/runtime_services.hpp"
 #include "sky/rendering/material.hpp"
@@ -107,6 +109,8 @@ public:
     std::unique_ptr<rendering::IMaterialLibrary> materials;
     std::unique_ptr<asset::AssetDatabase> assets;
     std::unique_ptr<asset::IAssetImporter> objImporter;
+    std::unique_ptr<asset::IAssetImporter> fbxImporter;
+    std::unique_ptr<asset::IAssetImporter> pngImporter;
     scene::SceneHandle activeScene;
     terrain::TerrainHandle terrainHandle;
     object::ObjectHandle terrainObject;

@@ -22,6 +22,8 @@ struct MaterialDesc {
     float roughness = 0.8f; // 0 = mirror-sharp highlight, 1 = fully diffuse
     float metallic = 0.0f;  // 0 = dielectric, 1 = metal
     core::Vec3 emissive{0.0f, 0.0f, 0.0f};
+    /// Albedo texture source path (empty = untextured).
+    std::string texturePath;
 };
 
 /// Rendering Abstraction contract: authoring and lookup of materials.

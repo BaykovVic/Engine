@@ -32,6 +32,10 @@ enum class RenderCommandType : std::uint8_t {
     /// Adds a light for this frame: `transform` carries its pose (position
     /// for point lights, rotation's -Z for directional), `color` its colour.
     AddLight,
+    /// Draws the sky backdrop: `color` is the horizon colour, `emissive`
+    /// the zenith colour. Directional lights added before this command
+    /// paint a sun disc.
+    SetSky,
     BindPipeline,
     DrawMesh,
     EndFrame,
@@ -50,13 +54,17 @@ struct RenderCommand {
     core::Transform transform;
     std::uint32_t viewportWidth = 0;
     std::uint32_t viewportHeight = 0;
-    /// DrawMesh: material base colour. AddLight: light colour.
+    /// DrawMesh: material base colour. AddLight: light colour. SetSky:
+    /// horizon colour.
     core::Vec3 color{1.0f, 1.0f, 1.0f};
     float fovDegrees = 60.0f;
-    // DrawMesh material parameters (see MaterialDesc).
+    // DrawMesh material parameters (see MaterialDesc); SetSky reuses
+    // `emissive` as the zenith colour.
     core::Vec3 emissive{0.0f, 0.0f, 0.0f};
     float roughness = 0.8f;
     float metallic = 0.0f;
+    /// DrawMesh: albedo texture (invalid = untextured).
+    RenderResourceHandle texture;
     // AddLight parameters.
     LightType lightType = LightType::Directional;
     float lightIntensity = 1.0f;
@@ -82,10 +90,14 @@ public:
 
     virtual RenderResourceHandle createFromAsset(asset::AssetId asset,
                                                  RenderResourceType type) = 0;
-    /// Uploads a raw triangle mesh: interleaved position(3) + normal(3)
-    /// floats. Used for engine-generated geometry such as terrain.
+    /// Uploads a raw triangle mesh in the engine vertex format: interleaved
+    /// position(3) + normal(3) + uv(2) floats.
     virtual RenderResourceHandle createMeshFromData(
-        std::span<const float> interleavedPosNormal) = 0;
+        std::span<const float> interleavedPosNormalUv) = 0;
+    /// Uploads a tightly packed RGBA8 texture.
+    virtual RenderResourceHandle createTextureFromData(
+        std::uint32_t width, std::uint32_t height,
+        std::span<const std::uint8_t> rgbaPixels) = 0;
     virtual void destroy(RenderResourceHandle resource) = 0;
 };
 

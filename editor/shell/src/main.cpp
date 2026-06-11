@@ -29,7 +29,9 @@ int main(int argc, char** argv) {
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setDepthBufferSize(24);
-    format.setSamples(4);
+    // MSAA breaks QOpenGLWidget FBO interop under llvmpipe; rely on the
+    // widget's own smoothing instead.
+    // format.setSamples(4);
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication app(argc, argv);

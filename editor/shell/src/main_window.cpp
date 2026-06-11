@@ -13,6 +13,7 @@
 #include "sky/editor/tools/console_panel.hpp"
 #include "sky/editor/tools/hierarchy_panel.hpp"
 #include "sky/editor/tools/inspector_panel.hpp"
+#include "sky/editor/tools/material_panel.hpp"
 #include "sky/editor/tools/package_panel.hpp"
 #include "sky/editor/tools/project_panel.hpp"
 #include "sky/editor/tools/terrain_panel.hpp"
@@ -296,7 +297,18 @@ void MainWindow::buildDocks() {
     terrainDock->setWidget(terrainPanel_);
     addDockWidget(Qt::RightDockWidgetArea, terrainDock);
     tabifyDockWidget(inspectorDock, terrainDock);
+
+    materialPanel_ = new MaterialPanel(*context_.materials, this);
+    auto* materialsDock = new QDockWidget(tr("Materials"), this);
+    materialsDock->setWidget(materialPanel_);
+    addDockWidget(Qt::RightDockWidgetArea, materialsDock);
+    tabifyDockWidget(terrainDock, materialsDock);
     inspectorDock->raise();
+    connect(materialPanel_, &MaterialPanel::materialsChanged, this, [this] {
+        sceneView3d_->update();
+        gameView_->update();
+        viewport_->update();
+    });
     connect(terrainPanel_, &TerrainPanel::brushChanged, this,
             [this](const QString& operation, float radius, float strength) {
                 context_.brush.enabled = !operation.isEmpty();

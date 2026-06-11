@@ -7,12 +7,14 @@ add_library(sky_editor_tools STATIC
     src/console_panel.cpp
     src/package_panel.cpp
     src/terrain_panel.cpp
+    src/material_panel.cpp
     include/sky/editor/tools/hierarchy_panel.hpp
     include/sky/editor/tools/inspector_panel.hpp
     include/sky/editor/tools/project_panel.hpp
     include/sky/editor/tools/console_panel.hpp
     include/sky/editor/tools/package_panel.hpp
     include/sky/editor/tools/terrain_panel.hpp
+    include/sky/editor/tools/material_panel.hpp
     include/sky/editor/tools/editor_tools.hpp)
 add_library(sky::editor_tools ALIAS sky_editor_tools)
 target_include_directories(sky_editor_tools PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

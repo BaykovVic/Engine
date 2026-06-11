@@ -62,10 +62,10 @@ private:
     object::ObjectHandle selected_;
 
     // Orbit camera around a target point.
-    core::Vec3 target_{0.0f, 1.5f, 0.0f};
+    core::Vec3 target_{0.0f, 4.0f, 0.0f};
     float yawDegrees_ = 35.0f;
-    float pitchDegrees_ = 22.0f;
-    float distance_ = 16.0f;
+    float pitchDegrees_ = 18.0f;
+    float distance_ = 18.0f;
 
     bool orbiting_ = false;
     bool panning_ = false;
@@ -75,8 +75,9 @@ private:
     // Terrain render state: rebuilt when the context's terrain version moves.
     rendering::RenderResourceHandle terrainMesh_;
     std::uint64_t terrainMeshVersion_ = 0;
-    // Uploaded OBJ meshes, keyed by source path.
+    // Uploaded OBJ/FBX meshes and textures, keyed by source path.
     std::unordered_map<std::string, rendering::RenderResourceHandle> objMeshes_;
+    std::unordered_map<std::string, rendering::RenderResourceHandle> textures_;
 };
 
 } // namespace sky::editor
