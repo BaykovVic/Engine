@@ -8,6 +8,7 @@ namespace {
 struct ComponentInstance {
     std::string typeId;
     object::ObjectHandle owner;
+    std::map<std::string, FieldValue> fields;
 };
 
 class ComponentWorldImpl final : public ComponentWorld {
@@ -58,6 +59,32 @@ public:
             instances_.erase(component.value);
         }
         byObject_.erase(it);
+    }
+
+    void setField(ComponentHandle component, const std::string& name,
+                  FieldValue value) override {
+        if (const auto it = instances_.find(component.value); it != instances_.end()) {
+            it->second.fields[name] = std::move(value);
+        }
+    }
+
+    std::optional<FieldValue> field(ComponentHandle component,
+                                    const std::string& name) const override {
+        const auto it = instances_.find(component.value);
+        if (it == instances_.end()) {
+            return std::nullopt;
+        }
+        const auto fieldIt = it->second.fields.find(name);
+        if (fieldIt == it->second.fields.end()) {
+            return std::nullopt;
+        }
+        return fieldIt->second;
+    }
+
+    std::map<std::string, FieldValue> fields(ComponentHandle component) const override {
+        const auto it = instances_.find(component.value);
+        return it != instances_.end() ? it->second.fields
+                                      : std::map<std::string, FieldValue>{};
     }
 
     // IComponentQueryService

@@ -166,6 +166,29 @@ private:
     core::Transform oldLocal_;
 };
 
+class FieldCommand final : public IEditorCommand {
+public:
+    FieldCommand(component::ComponentHandle component, std::string fieldName,
+                 component::FieldValue before, component::FieldValue after)
+        : component_(component), fieldName_(std::move(fieldName)),
+          before_(std::move(before)), after_(std::move(after)) {}
+
+    std::string label() const override { return "Edit " + fieldName_; }
+
+    void undo(EditorContext& context) override {
+        context.components->setField(component_, fieldName_, before_);
+    }
+    void redo(EditorContext& context) override {
+        context.components->setField(component_, fieldName_, after_);
+    }
+
+private:
+    component::ComponentHandle component_;
+    std::string fieldName_;
+    component::FieldValue before_;
+    component::FieldValue after_;
+};
+
 } // namespace
 
 std::unique_ptr<IEditorCommand> makeTransformCommand(object::ObjectHandle object,
@@ -201,6 +224,14 @@ std::unique_ptr<IEditorCommand> makeReparentCommand(object::ObjectHandle object,
                                                     object::ObjectHandle newParent,
                                                     const core::Transform& oldLocal) {
     return std::make_unique<ReparentCommand>(object, oldParent, newParent, oldLocal);
+}
+
+std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle component,
+                                                 std::string fieldName,
+                                                 component::FieldValue before,
+                                                 component::FieldValue after) {
+    return std::make_unique<FieldCommand>(component, std::move(fieldName),
+                                          std::move(before), std::move(after));
 }
 
 } // namespace sky::editor

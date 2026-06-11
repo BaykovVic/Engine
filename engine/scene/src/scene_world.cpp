@@ -8,8 +8,128 @@ namespace sky::scene {
 namespace {
 
 constexpr const char* kSceneSchemaId = "sky.scene";
-constexpr serialization::SchemaVersion kSceneSchemaVersion{1, 0};
+// 1.0: hierarchy + transforms + component type ids.
+// 1.1: adds per-component field values.
+constexpr serialization::SchemaVersion kSceneSchemaLegacy{1, 0};
+constexpr serialization::SchemaVersion kSceneSchemaVersion{1, 1};
 constexpr std::uint32_t kNoParent = 0xFFFFFFFFu;
+
+enum class FieldTag : std::uint32_t {
+    Float = 0,
+    Int = 1,
+    Bool = 2,
+    String = 3,
+    Vec3 = 4,
+};
+
+void writeField(serialization::ByteWriter& writer, const std::string& name,
+                const component::FieldValue& value) {
+    writer.writeString(name);
+    if (const auto* f = std::get_if<float>(&value)) {
+        writer.writeU32(static_cast<std::uint32_t>(FieldTag::Float));
+        writer.writeF32(*f);
+    } else if (const auto* i = std::get_if<std::int64_t>(&value)) {
+        writer.writeU32(static_cast<std::uint32_t>(FieldTag::Int));
+        writer.writeU64(static_cast<std::uint64_t>(*i));
+    } else if (const auto* b = std::get_if<bool>(&value)) {
+        writer.writeU32(static_cast<std::uint32_t>(FieldTag::Bool));
+        writer.writeU32(*b ? 1 : 0);
+    } else if (const auto* s = std::get_if<std::string>(&value)) {
+        writer.writeU32(static_cast<std::uint32_t>(FieldTag::String));
+        writer.writeString(*s);
+    } else if (const auto* v = std::get_if<core::Vec3>(&value)) {
+        writer.writeU32(static_cast<std::uint32_t>(FieldTag::Vec3));
+        writer.writeF32(v->x);
+        writer.writeF32(v->y);
+        writer.writeF32(v->z);
+    }
+}
+
+std::optional<std::pair<std::string, component::FieldValue>> readField(
+    serialization::ByteReader& reader) {
+    const auto name = reader.readString();
+    const auto tag = reader.readU32();
+    if (!name || !tag) {
+        return std::nullopt;
+    }
+    switch (static_cast<FieldTag>(*tag)) {
+        case FieldTag::Float:
+            if (const auto value = reader.readF32()) {
+                return std::pair{*name, component::FieldValue{*value}};
+            }
+            break;
+        case FieldTag::Int:
+            if (const auto value = reader.readU64()) {
+                return std::pair{*name, component::FieldValue{
+                                            static_cast<std::int64_t>(*value)}};
+            }
+            break;
+        case FieldTag::Bool:
+            if (const auto value = reader.readU32()) {
+                return std::pair{*name, component::FieldValue{*value != 0}};
+            }
+            break;
+        case FieldTag::String:
+            if (auto value = reader.readString()) {
+                return std::pair{*name, component::FieldValue{std::move(*value)}};
+            }
+            break;
+        case FieldTag::Vec3: {
+            const auto x = reader.readF32(), y = reader.readF32(), z = reader.readF32();
+            if (x && y && z) {
+                return std::pair{*name, component::FieldValue{core::Vec3{*x, *y, *z}}};
+            }
+            break;
+        }
+    }
+    return std::nullopt;
+}
+
+/// 1.0 -> 1.1: a zero field count is inserted after every component type id.
+std::optional<std::vector<std::byte>> migrateSceneV10ToV11(
+    const std::vector<std::byte>& payload) {
+    serialization::ByteReader reader(payload);
+    serialization::ByteWriter writer;
+
+    const auto sceneName = reader.readString();
+    const auto objectCount = reader.readU32();
+    if (!sceneName || !objectCount) {
+        return std::nullopt;
+    }
+    writer.writeString(*sceneName);
+    writer.writeU32(*objectCount);
+
+    for (std::uint32_t i = 0; i < *objectCount; ++i) {
+        const auto parentIndex = reader.readU32();
+        const auto name = reader.readString();
+        if (!parentIndex || !name) {
+            return std::nullopt;
+        }
+        writer.writeU32(*parentIndex);
+        writer.writeString(*name);
+        for (int f = 0; f < 10; ++f) {
+            const auto value = reader.readF32();
+            if (!value) {
+                return std::nullopt;
+            }
+            writer.writeF32(*value);
+        }
+        const auto componentCount = reader.readU32();
+        if (!componentCount) {
+            return std::nullopt;
+        }
+        writer.writeU32(*componentCount);
+        for (std::uint32_t c = 0; c < *componentCount; ++c) {
+            const auto typeId = reader.readString();
+            if (!typeId) {
+                return std::nullopt;
+            }
+            writer.writeString(*typeId);
+            writer.writeU32(0); // no stored fields in 1.0
+        }
+    }
+    return writer.takeBuffer();
+}
 
 struct SceneRecord {
     SceneDescriptor descriptor;
@@ -44,7 +164,13 @@ bool readTransform(serialization::ByteReader& reader, core::Transform& transform
 
 class SceneWorldImpl final : public SceneWorld {
 public:
-    explicit SceneWorldImpl(const SceneWorldDeps& deps) : deps_(deps) {}
+    explicit SceneWorldImpl(const SceneWorldDeps& deps) : deps_(deps) {
+        if (deps_.migrations != nullptr) {
+            deps_.migrations->registerMigration(kSceneSchemaId, kSceneSchemaLegacy,
+                                                kSceneSchemaVersion,
+                                                migrateSceneV10ToV11);
+        }
+    }
 
     // ISceneRepository
 
@@ -55,10 +181,20 @@ public:
     }
 
     SceneHandle loadScene(const std::filesystem::path& path) override {
-        const auto blob = deps_.storage.read(path);
-        if (!blob || blob->schemaId != kSceneSchemaId ||
-            blob->version != kSceneSchemaVersion) {
+        auto blob = deps_.storage.read(path);
+        if (!blob || blob->schemaId != kSceneSchemaId) {
             return SceneHandle::invalid();
+        }
+        // Legacy files go through the registered migration chain first.
+        if (blob->version != kSceneSchemaVersion) {
+            if (deps_.migrations == nullptr) {
+                return SceneHandle::invalid();
+            }
+            auto migrated = deps_.migrations->migrate(*blob, kSceneSchemaVersion);
+            if (!migrated) {
+                return SceneHandle::invalid();
+            }
+            blob = std::move(migrated);
         }
         serialization::ByteReader reader(blob->payload);
         const auto sceneName = reader.readString();
@@ -102,7 +238,23 @@ public:
                     unloadScene(handle);
                     return SceneHandle::invalid();
                 }
-                deps_.componentAttachment.attach(object, *typeId);
+                const auto component = deps_.componentAttachment.attach(object, *typeId);
+                const auto fieldCount = reader.readU32();
+                if (!fieldCount) {
+                    unloadScene(handle);
+                    return SceneHandle::invalid();
+                }
+                for (std::uint32_t f = 0; f < *fieldCount; ++f) {
+                    auto field = readField(reader);
+                    if (!field) {
+                        unloadScene(handle);
+                        return SceneHandle::invalid();
+                    }
+                    if (deps_.componentData != nullptr && component.isValid()) {
+                        deps_.componentData->setField(component, field->first,
+                                                      std::move(field->second));
+                    }
+                }
             }
         }
         return handle;
@@ -136,6 +288,13 @@ public:
             writer.writeU32(static_cast<std::uint32_t>(components.size()));
             for (const auto component : components) {
                 writer.writeString(deps_.componentQuery.descriptorOf(component).typeId);
+                const auto fields = deps_.componentData != nullptr
+                                        ? deps_.componentData->fields(component)
+                                        : std::map<std::string, component::FieldValue>{};
+                writer.writeU32(static_cast<std::uint32_t>(fields.size()));
+                for (const auto& [name, value] : fields) {
+                    writeField(writer, name, value);
+                }
             }
         }
 
@@ -206,7 +365,15 @@ public:
             }
         }
         if (deps_.ecsScheduler != nullptr) {
+            // Explicit object <-> ECS sync brackets the system tick, exactly
+            // like the physics sync brackets the simulation step.
+            if (deps_.ecsSync != nullptr) {
+                deps_.ecsSync->pushAuthoringState();
+            }
             deps_.ecsScheduler->tick(deltaSeconds);
+            if (deps_.ecsSync != nullptr) {
+                deps_.ecsSync->pullEcsResults();
+            }
         }
     }
 

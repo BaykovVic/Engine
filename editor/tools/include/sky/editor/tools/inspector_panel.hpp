@@ -33,6 +33,10 @@ signals:
     /// A finished inspector edit: one undoable step from `before` to `after`.
     void transformCommitted(quint64 objectId, sky::core::Transform before,
                             sky::core::Transform after);
+    /// A finished component field edit.
+    void fieldCommitted(quint64 componentId, QString fieldName,
+                        sky::component::FieldValue before,
+                        sky::component::FieldValue after);
 
 private:
     void applyTransformFromUi();

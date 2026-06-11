@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -33,10 +34,20 @@ enum class ColliderShape {
     TerrainHeightfield,
 };
 
+/// Heightfield data for terrain collision: a square grid of heights with
+/// world spacing/amplitude in `scale`. Copied into the collider so physics
+/// stays decoupled from the Terrain module.
+struct HeightfieldDesc {
+    std::uint32_t resolution = 0;
+    core::Vec3 scale{1.0f, 1.0f, 1.0f};
+    std::vector<float> heights;
+};
+
 struct ColliderDesc {
     ColliderShape shape = ColliderShape::Box;
     core::Vec3 halfExtents{0.5f, 0.5f, 0.5f};
     float radius = 0.5f;
+    HeightfieldDesc heightfield;
 };
 
 struct RaycastHit {

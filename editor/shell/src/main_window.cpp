@@ -299,6 +299,14 @@ void MainWindow::buildDocks() {
                 undoStack_.push(makeTransformCommand(object::ObjectHandle{objectId},
                                                      before, after));
             });
+    connect(inspector_, &InspectorPanel::fieldCommitted, this,
+            [this](quint64 componentId, const QString& fieldName,
+                   const component::FieldValue& before,
+                   const component::FieldValue& after) {
+                undoStack_.push(makeFieldCommand(
+                    component::ComponentHandle{componentId},
+                    fieldName.toStdString(), before, after));
+            });
 }
 
 void MainWindow::performUndo() {

@@ -12,11 +12,19 @@ EditorContext::EditorContext() {
     objects = object::createObjectWorld();
     components = component::createComponentWorld();
     ecs = ecs::createEcsWorld();
+    ecsSync = ecs::createEcsObjectSync(*ecs, *objects);
     physics = physics::createPhysicsWorld();
     physicsSync = physics::createObjectPhysicsSync(*physics, *objects);
-    scenes = scene::createSceneWorld({*objects, *objects, *objects, *components,
-                                      *components, *storage, ecs.get(), physics.get(),
-                                      physicsSync.get()});
+    migrations = serialization::createSchemaMigrationService();
+    scene::SceneWorldDeps sceneDeps{*objects,    *objects, *objects,
+                                    *components, *components, *storage};
+    sceneDeps.ecsScheduler = ecs.get();
+    sceneDeps.physicsWorld = physics.get();
+    sceneDeps.physicsSync = physicsSync.get();
+    sceneDeps.ecsSync = ecsSync.get();
+    sceneDeps.componentData = components.get();
+    sceneDeps.migrations = migrations.get();
+    scenes = scene::createSceneWorld(sceneDeps);
     playMode = createPlayModeController(*scenes);
 
     // Standard mounts of an opened project: writable project root plus the
@@ -50,8 +58,10 @@ object::ObjectHandle EditorContext::createCrate(const std::string& name,
     const auto crate = createEmpty(name);
     objects->setLocalTransform(crate, {position, {}, {1.0f, 1.0f, 1.0f}});
     components->attach(crate, "sky.mesh");
-    components->attach(crate, "sky.collider.box");
-    components->attach(crate, "sky.rigidbody");
+    const auto collider = components->attach(crate, "sky.collider.box");
+    components->setField(collider, "halfExtents", core::Vec3{0.5f, 0.5f, 0.5f});
+    const auto rigidbody = components->attach(crate, "sky.rigidbody");
+    components->setField(rigidbody, "mass", 1.0f);
     attachCrateBody(crate);
     return crate;
 }

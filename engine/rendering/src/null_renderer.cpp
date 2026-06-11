@@ -53,6 +53,17 @@ public:
         return handle;
     }
 
+    RenderResourceHandle createMeshFromData(
+        std::span<const float> interleavedPosNormal) override {
+        // 6 floats per vertex, 3 vertices per triangle.
+        if (interleavedPosNormal.empty() || interleavedPosNormal.size() % 18 != 0) {
+            return RenderResourceHandle::invalid();
+        }
+        const RenderResourceHandle handle{nextId_++};
+        resources_.insert(handle.value);
+        return handle;
+    }
+
     void destroy(RenderResourceHandle resource) override {
         resources_.erase(resource.value);
     }

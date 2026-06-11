@@ -86,6 +86,7 @@ public:
             body.transform.position = body.transform.position + body.velocity * dt;
         }
 
+        resolveHeightfields();
         detectAndResolve();
     }
 
@@ -155,10 +156,86 @@ private:
                 {center.x + extents.x, center.y + extents.y, center.z + extents.z}};
     }
 
+    /// Bilinear height sample of a heightfield collider at world (x, z),
+    /// in the collider body's local frame.
+    static float sampleHeightfield(const HeightfieldDesc& field, float x, float z) {
+        const auto resolution = field.resolution;
+        if (resolution < 2 || field.heights.size() <
+                                  static_cast<std::size_t>(resolution) * resolution) {
+            return 0.0f;
+        }
+        const float gx = std::clamp(x / field.scale.x, 0.0f,
+                                    static_cast<float>(resolution - 1));
+        const float gz = std::clamp(z / field.scale.z, 0.0f,
+                                    static_cast<float>(resolution - 1));
+        const auto x0 = static_cast<std::uint32_t>(gx);
+        const auto z0 = static_cast<std::uint32_t>(gz);
+        const auto x1 = std::min(x0 + 1, resolution - 1);
+        const auto z1 = std::min(z0 + 1, resolution - 1);
+        const float fx = gx - static_cast<float>(x0);
+        const float fz = gz - static_cast<float>(z0);
+        const auto sample = [&](std::uint32_t sx, std::uint32_t sz) {
+            return field.heights[sz * resolution + sx];
+        };
+        const float top = sample(x0, z0) * (1.0f - fx) + sample(x1, z0) * fx;
+        const float bottom = sample(x0, z1) * (1.0f - fx) + sample(x1, z1) * fx;
+        return (top * (1.0f - fz) + bottom * fz) * field.scale.y;
+    }
+
+    /// Keeps dynamic bodies above every heightfield collider in the world.
+    void resolveHeightfields() {
+        for (const auto& [fieldId, fieldCollider] : colliders_) {
+            if (fieldCollider.desc.shape != ColliderShape::TerrainHeightfield) {
+                continue;
+            }
+            const auto fieldBodyIt = bodies_.find(fieldCollider.body.value);
+            if (fieldBodyIt == bodies_.end()) {
+                continue;
+            }
+            const auto fieldOrigin = fieldBodyIt->second.transform.position;
+
+            for (auto& [bodyId, body] : bodies_) {
+                if (body.desc.type != BodyType::Dynamic) {
+                    continue;
+                }
+                // The dynamic body's lowest point: its first box/sphere
+                // collider, or a half-unit fallback.
+                float halfHeight = 0.5f;
+                for (const auto collider : body.colliders) {
+                    const auto& desc = colliders_.at(collider.value).desc;
+                    halfHeight = desc.shape == ColliderShape::Sphere ? desc.radius
+                                                                     : desc.halfExtents.y;
+                    break;
+                }
+                const float localX = body.transform.position.x - fieldOrigin.x;
+                const float localZ = body.transform.position.z - fieldOrigin.z;
+                const float ground =
+                    fieldOrigin.y +
+                    sampleHeightfield(fieldCollider.desc.heightfield, localX, localZ);
+                const float bottom = body.transform.position.y - halfHeight;
+                if (bottom < ground) {
+                    body.transform.position.y = ground + halfHeight;
+                    if (body.velocity.y < 0.0f) {
+                        body.velocity.y = 0.0f;
+                    }
+                    events_.push_back({ColliderHandle{fieldId},
+                                       body.colliders.empty()
+                                           ? ColliderHandle::invalid()
+                                           : body.colliders.front()});
+                }
+            }
+        }
+    }
+
     void detectAndResolve() {
         std::vector<std::pair<std::uint64_t, Aabb>> boxes;
         boxes.reserve(colliders_.size());
         for (const auto& [id, collider] : colliders_) {
+            // Heightfields are handled by resolveHeightfields(), not by the
+            // AABB pass.
+            if (collider.desc.shape == ColliderShape::TerrainHeightfield) {
+                continue;
+            }
             boxes.emplace_back(id, worldAabb(ColliderHandle{id}, collider));
         }
 

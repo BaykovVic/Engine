@@ -34,7 +34,8 @@ sky_add_module(sky_core core
     core/src/diagnostics.cpp)
 
 sky_add_module(sky_serialization serialization
-    serialization/src/file_serialization_backend.cpp)
+    serialization/src/file_serialization_backend.cpp
+    serialization/src/schema_migration.cpp)
 
 sky_add_module(sky_object object
     object/src/object_world.cpp)
@@ -43,7 +44,8 @@ sky_add_module(sky_component component
     component/src/component_world.cpp)
 
 sky_add_module(sky_ecs ecs
-    ecs/src/ecs_world.cpp)
+    ecs/src/ecs_world.cpp
+    ecs/src/object_sync.cpp)
 
 sky_add_module(sky_scene scene
     scene/src/scene_world.cpp)
@@ -67,10 +69,12 @@ sky_add_module(sky_scripting scripting
     scripting/src/script_runtime.cpp)
 
 sky_add_module(sky_terrain terrain
-    terrain/src/terrain_world.cpp)
+    terrain/src/terrain_world.cpp
+    terrain/src/terrain_integration.cpp)
 
 sky_add_module(sky_mapgen mapgen
-    mapgen/src/generation_pipeline.cpp)
+    mapgen/src/generation_pipeline.cpp
+    mapgen/src/materialize.cpp)
 
 # Dependency edges mirror docs/modules/modules.md ("Межмодульные связи").
 target_link_libraries(sky_core          PUBLIC sky_platform)
@@ -81,7 +85,7 @@ target_link_libraries(sky_asset         PUBLIC sky_serialization sky_core)
 target_link_libraries(sky_scene         PUBLIC sky_serialization sky_asset sky_object sky_component sky_ecs)
 target_link_libraries(sky_object        PUBLIC sky_core)
 target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_serialization)
-target_link_libraries(sky_ecs           PUBLIC sky_core sky_physics sky_rendering)
+target_link_libraries(sky_ecs           PUBLIC sky_core sky_object sky_physics sky_rendering)
 target_link_libraries(sky_physics       PUBLIC sky_core sky_object)
 target_link_libraries(sky_rendering     PUBLIC sky_asset sky_platform)
 target_link_libraries(sky_scripting     PUBLIC sky_core sky_object)

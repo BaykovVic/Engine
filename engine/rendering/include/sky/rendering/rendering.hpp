@@ -66,6 +66,10 @@ public:
 
     virtual RenderResourceHandle createFromAsset(asset::AssetId asset,
                                                  RenderResourceType type) = 0;
+    /// Uploads a raw triangle mesh: interleaved position(3) + normal(3)
+    /// floats. Used for engine-generated geometry such as terrain.
+    virtual RenderResourceHandle createMeshFromData(
+        std::span<const float> interleavedPosNormal) = 0;
     virtual void destroy(RenderResourceHandle resource) = 0;
 };
 

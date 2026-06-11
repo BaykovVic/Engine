@@ -2,11 +2,13 @@
 
 #include <memory>
 
-#include "sky/component/component_model.hpp"
+#include "sky/component/component_world.hpp"
 #include "sky/ecs/ecs.hpp"
+#include "sky/ecs/object_sync.hpp"
 #include "sky/object/object_model.hpp"
 #include "sky/physics/physics.hpp"
 #include "sky/scene/scene_system.hpp"
+#include "sky/serialization/backends.hpp"
 #include "sky/serialization/serialization.hpp"
 
 namespace sky::scene {
@@ -25,6 +27,13 @@ struct SceneWorldDeps {
     ecs::IEcsSystemScheduler* ecsScheduler = nullptr;
     physics::IPhysicsWorld* physicsWorld = nullptr;
     physics::IPhysicsSyncContract* physicsSync = nullptr;
+    /// Explicit object <-> ECS sync, run around the system tick.
+    ecs::IEcsObjectSync* ecsSync = nullptr;
+    /// Component field persistence (scene schema >= 1.1).
+    component::ComponentWorld* componentData = nullptr;
+    /// When provided, the scene world registers its format migrations here
+    /// and runs legacy files through them on load.
+    serialization::SchemaMigrationService* migrations = nullptr;
 };
 
 /// In-memory implementation of the Scene System: owns scene lifecycle, the

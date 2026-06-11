@@ -311,13 +311,22 @@ public:
                     gl_.UniformMatrix4fv(uModel_, 1, 0, model.m.data());
                     gl_.Uniform3f(uColor_, command.color.x, command.color.y,
                                   command.color.z);
-                    gl_.BindVertexArray(cubeVao_);
+                    // Uploaded mesh if the handle names one, the built-in
+                    // cube otherwise.
+                    GLuint vao = cubeVao_;
+                    GLsizei vertexCount = 36;
+                    if (const auto it = meshes_.find(command.resource.value);
+                        it != meshes_.end()) {
+                        vao = it->second.vao;
+                        vertexCount = it->second.vertexCount;
+                    }
+                    gl_.BindVertexArray(vao);
                     if (command.resource.value == kWireframeResourceId) {
                         gl_.PolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                        gl_.DrawArrays(GL_TRIANGLES, 0, 36);
+                        gl_.DrawArrays(GL_TRIANGLES, 0, vertexCount);
                         gl_.PolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                     } else {
-                        gl_.DrawArrays(GL_TRIANGLES, 0, 36);
+                        gl_.DrawArrays(GL_TRIANGLES, 0, vertexCount);
                     }
                     break;
                 }
@@ -345,8 +354,39 @@ public:
         return handle;
     }
 
+    rendering::RenderResourceHandle createMeshFromData(
+        std::span<const float> interleavedPosNormal) override {
+        if (!ready_ || interleavedPosNormal.empty() ||
+            interleavedPosNormal.size() % 18 != 0) {
+            return rendering::RenderResourceHandle::invalid();
+        }
+        MeshResource mesh;
+        mesh.vertexCount =
+            static_cast<GLsizei>(interleavedPosNormal.size() / 6);
+        gl_.GenVertexArrays(1, &mesh.vao);
+        gl_.BindVertexArray(mesh.vao);
+        GLuint vbo = 0;
+        gl_.GenBuffers(1, &vbo);
+        gl_.BindBuffer(GL_ARRAY_BUFFER, vbo);
+        gl_.BufferData(GL_ARRAY_BUFFER,
+                       static_cast<GLsizeiptr>(interleavedPosNormal.size() *
+                                               sizeof(float)),
+                       interleavedPosNormal.data(), GL_STATIC_DRAW);
+        gl_.EnableVertexAttribArray(0);
+        gl_.VertexAttribPointer(0, 3, GL_FLOAT, 0, 6 * sizeof(float), nullptr);
+        gl_.EnableVertexAttribArray(1);
+        gl_.VertexAttribPointer(1, 3, GL_FLOAT, 0, 6 * sizeof(float),
+                                reinterpret_cast<const void*>(3 * sizeof(float)));
+        gl_.BindVertexArray(0);
+
+        const rendering::RenderResourceHandle handle{nextResource_++};
+        meshes_.emplace(handle.value, mesh);
+        return handle;
+    }
+
     void destroy(rendering::RenderResourceHandle resource) override {
         resources_.erase(resource.value);
+        meshes_.erase(resource.value);
     }
 
 private:
@@ -384,8 +424,14 @@ private:
     GLint uColor_ = -1;
     rendering::IRenderSurface* surface_ = nullptr;
     std::vector<rendering::RenderCommand> pending_;
+    struct MeshResource {
+        GLuint vao = 0;
+        GLsizei vertexCount = 0;
+    };
+
     std::uint64_t nextResource_ = 1;
     std::unordered_map<std::uint64_t, asset::AssetId> resources_;
+    std::unordered_map<std::uint64_t, MeshResource> meshes_;
 };
 
 } // namespace

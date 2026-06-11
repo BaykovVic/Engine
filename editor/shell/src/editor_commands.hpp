@@ -81,5 +81,9 @@ std::unique_ptr<IEditorCommand> makeReparentCommand(object::ObjectHandle object,
                                                     object::ObjectHandle oldParent,
                                                     object::ObjectHandle newParent,
                                                     const core::Transform& oldLocal);
+std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle component,
+                                                 std::string fieldName,
+                                                 component::FieldValue before,
+                                                 component::FieldValue after);
 
 } // namespace sky::editor

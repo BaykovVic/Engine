@@ -6,6 +6,7 @@
 
 #include "sky/component/component_world.hpp"
 #include "sky/ecs/ecs_world.hpp"
+#include "sky/ecs/object_sync.hpp"
 #include "sky/editor/viewport/play_mode_controller.hpp"
 #include "sky/object/object_world.hpp"
 #include "sky/physics/physics_world.hpp"
@@ -63,8 +64,10 @@ public:
     std::unique_ptr<object::ObjectWorld> objects;
     std::unique_ptr<component::ComponentWorld> components;
     std::unique_ptr<ecs::EcsWorld> ecs;
+    std::unique_ptr<ecs::IEcsObjectSync> ecsSync;
     std::unique_ptr<physics::PhysicsWorld> physics;
     std::unique_ptr<physics::ObjectPhysicsSync> physicsSync;
+    std::unique_ptr<serialization::SchemaMigrationService> migrations;
     std::unique_ptr<scene::SceneWorld> scenes;
     std::unique_ptr<PlayModeController> playMode;
     scene::SceneHandle activeScene;

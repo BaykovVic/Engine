@@ -40,6 +40,7 @@ sky_add_test(package_tests)
 sky_add_test(terrain_mapgen_tests)
 sky_add_test(scripting_rendering_tests)
 sky_add_test(vfs_tests)
+sky_add_test(integrity_tests)
 
 # Editor command layer (Qt-free): compiled together with the editor context.
 sky_add_test(undo_tests)

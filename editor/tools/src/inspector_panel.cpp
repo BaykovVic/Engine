@@ -13,6 +13,59 @@
 namespace sky::editor {
 namespace {
 
+QString fieldToString(const component::FieldValue& value) {
+    if (const auto* f = std::get_if<float>(&value)) {
+        return QString::number(*f);
+    }
+    if (const auto* i = std::get_if<std::int64_t>(&value)) {
+        return QString::number(*i);
+    }
+    if (const auto* b = std::get_if<bool>(&value)) {
+        return *b ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (const auto* s = std::get_if<std::string>(&value)) {
+        return QString::fromStdString(*s);
+    }
+    if (const auto* v = std::get_if<core::Vec3>(&value)) {
+        return QString("%1, %2, %3").arg(v->x).arg(v->y).arg(v->z);
+    }
+    return {};
+}
+
+/// Parses text back into the same alternative the previous value held.
+std::optional<component::FieldValue> fieldFromString(
+    const component::FieldValue& previous, const QString& text) {
+    bool ok = false;
+    if (std::holds_alternative<float>(previous)) {
+        const float value = text.toFloat(&ok);
+        if (ok) {
+            return component::FieldValue{value};
+        }
+    } else if (std::holds_alternative<std::int64_t>(previous)) {
+        const auto value = static_cast<std::int64_t>(text.toLongLong(&ok));
+        if (ok) {
+            return component::FieldValue{value};
+        }
+    } else if (std::holds_alternative<bool>(previous)) {
+        return component::FieldValue{text.trimmed().toLower() == "true" ||
+                                     text.trimmed() == "1"};
+    } else if (std::holds_alternative<std::string>(previous)) {
+        return component::FieldValue{text.toStdString()};
+    } else if (std::holds_alternative<core::Vec3>(previous)) {
+        const auto parts = text.split(',');
+        if (parts.size() == 3) {
+            bool okX = false, okY = false, okZ = false;
+            const core::Vec3 value{parts[0].trimmed().toFloat(&okX),
+                                   parts[1].trimmed().toFloat(&okY),
+                                   parts[2].trimmed().toFloat(&okZ)};
+            if (okX && okY && okZ) {
+                return component::FieldValue{value};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 QHBoxLayout* vectorRow(const std::array<QDoubleSpinBox*, 3>& boxes) {
     auto* row = new QHBoxLayout;
     const char* axes[] = {"X", "Y", "Z"};
@@ -168,6 +221,35 @@ void InspectorPanel::rebuildComponentList() {
         });
         rowLayout->addWidget(removeButton);
         componentList_->addWidget(row);
+
+        // Per-instance field values, editable in place.
+        for (const auto& [fieldName, fieldValue] : components_.fields(component)) {
+            auto* fieldRow = new QWidget;
+            auto* fieldLayout = new QHBoxLayout(fieldRow);
+            fieldLayout->setContentsMargins(20, 0, 4, 0);
+            auto* label = new QLabel(QString::fromStdString(fieldName), fieldRow);
+            label->setObjectName("axisLabel");
+            fieldLayout->addWidget(label, 1);
+            auto* edit = new QLineEdit(fieldToString(fieldValue), fieldRow);
+            fieldLayout->addWidget(edit, 2);
+            connect(edit, &QLineEdit::editingFinished, this,
+                    [this, component, fieldName = fieldName, edit] {
+                        const auto before = components_.field(component, fieldName);
+                        if (!before) {
+                            return;
+                        }
+                        const auto parsed = fieldFromString(*before, edit->text());
+                        if (!parsed || *parsed == *before) {
+                            edit->setText(fieldToString(*before));
+                            return;
+                        }
+                        components_.setField(component, fieldName, *parsed);
+                        emit fieldCommitted(component.value,
+                                            QString::fromStdString(fieldName),
+                                            *before, *parsed);
+                    });
+            componentList_->addWidget(fieldRow);
+        }
     }
 }
 
