@@ -184,9 +184,30 @@ public:
 
     const SceneRuntimeContext& activeContext() const override { return context_; }
 
-    void tick(double /*deltaSeconds*/) override {
-        // Frame propagation into ECS/physics/scripting is wired in the
-        // runtime-loop slice; the scene only validates its own state here.
+    void tick(double deltaSeconds) override {
+        // Frame order per the architecture data flow: object/component edits
+        // are immediate, then physics (fixed step), then ECS systems.
+        // Scripting callbacks slot in once the Scripting Boundary lands.
+        if (context_.state != SceneState::RuntimeActive) {
+            return;
+        }
+        if (deps_.physicsWorld != nullptr) {
+            constexpr double kFixedStep = 1.0 / 60.0;
+            if (deps_.physicsSync != nullptr) {
+                deps_.physicsSync->pushKinematicState();
+            }
+            physicsAccumulator_ += deltaSeconds;
+            while (physicsAccumulator_ >= kFixedStep) {
+                deps_.physicsWorld->step(kFixedStep);
+                physicsAccumulator_ -= kFixedStep;
+            }
+            if (deps_.physicsSync != nullptr) {
+                deps_.physicsSync->pullSimulationResults();
+            }
+        }
+        if (deps_.ecsScheduler != nullptr) {
+            deps_.ecsScheduler->tick(deltaSeconds);
+        }
     }
 
     // ISceneQueryService
@@ -256,6 +277,7 @@ private:
     std::unordered_map<std::uint64_t, SceneRecord> scenes_;
     SceneHandle activeScene_;
     SceneRuntimeContext context_;
+    double physicsAccumulator_ = 0.0;
 };
 
 } // namespace

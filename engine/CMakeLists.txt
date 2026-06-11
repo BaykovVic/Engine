@@ -46,10 +46,16 @@ sky_add_module(sky_ecs ecs
 sky_add_module(sky_scene scene
     scene/src/scene_world.cpp)
 
-sky_add_module(sky_project        project)
+sky_add_module(sky_project project
+    project/src/project_repository.cpp)
+
+sky_add_module(sky_asset asset
+    asset/src/asset_database.cpp)
+
+sky_add_module(sky_physics physics
+    physics/src/physics_world.cpp)
+
 sky_add_module(sky_package        package)
-sky_add_module(sky_asset          asset)
-sky_add_module(sky_physics        physics)
 sky_add_module(sky_rendering      rendering)
 sky_add_module(sky_scripting      scripting)
 sky_add_module(sky_terrain        terrain)
@@ -58,14 +64,14 @@ sky_add_module(sky_mapgen         mapgen)
 # Dependency edges mirror docs/modules/modules.md ("Межмодульные связи").
 target_link_libraries(sky_core          PUBLIC sky_platform)
 target_link_libraries(sky_serialization PUBLIC sky_platform sky_core)
-target_link_libraries(sky_project       INTERFACE sky_serialization sky_core)
+target_link_libraries(sky_project       PUBLIC sky_serialization sky_core)
 target_link_libraries(sky_package       INTERFACE sky_project sky_serialization sky_asset)
-target_link_libraries(sky_asset         INTERFACE sky_serialization sky_core)
+target_link_libraries(sky_asset         PUBLIC sky_serialization sky_core)
 target_link_libraries(sky_scene         PUBLIC sky_serialization sky_asset sky_object sky_component sky_ecs)
 target_link_libraries(sky_object        PUBLIC sky_core)
 target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_serialization)
 target_link_libraries(sky_ecs           PUBLIC sky_core sky_physics sky_rendering)
-target_link_libraries(sky_physics       INTERFACE sky_core sky_object)
+target_link_libraries(sky_physics       PUBLIC sky_core sky_object)
 target_link_libraries(sky_rendering     INTERFACE sky_asset sky_platform)
 target_link_libraries(sky_scripting     INTERFACE sky_core sky_object)
 target_link_libraries(sky_terrain       INTERFACE sky_asset sky_serialization sky_rendering sky_physics)
