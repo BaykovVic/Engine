@@ -29,9 +29,17 @@ enum class RenderCommandType : std::uint8_t {
     SetViewport,
     /// `transform` carries the camera pose, `fovDegrees` the projection.
     SetCamera,
+    /// Adds a light for this frame: `transform` carries its pose (position
+    /// for point lights, rotation's -Z for directional), `color` its colour.
+    AddLight,
     BindPipeline,
     DrawMesh,
     EndFrame,
+};
+
+enum class LightType : std::uint32_t {
+    Directional = 0,
+    Point = 1,
 };
 
 /// One backend-independent render command. Backends translate the command
@@ -42,9 +50,17 @@ struct RenderCommand {
     core::Transform transform;
     std::uint32_t viewportWidth = 0;
     std::uint32_t viewportHeight = 0;
-    /// Flat material colour until the material system lands.
+    /// DrawMesh: material base colour. AddLight: light colour.
     core::Vec3 color{1.0f, 1.0f, 1.0f};
     float fovDegrees = 60.0f;
+    // DrawMesh material parameters (see MaterialDesc).
+    core::Vec3 emissive{0.0f, 0.0f, 0.0f};
+    float roughness = 0.8f;
+    float metallic = 0.0f;
+    // AddLight parameters.
+    LightType lightType = LightType::Directional;
+    float lightIntensity = 1.0f;
+    float lightRange = 10.0f;
 };
 
 /// Rendering Abstraction contract: the surface a frame is presented to —

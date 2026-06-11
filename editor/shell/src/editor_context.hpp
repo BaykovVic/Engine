@@ -4,8 +4,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "sky/asset/asset_database.hpp"
+#include "sky/asset/obj_importer.hpp"
 #include "sky/component/component_world.hpp"
 #include "sky/core/runtime_services.hpp"
+#include "sky/rendering/material.hpp"
 #include "sky/mapgen/generation_pipeline.hpp"
 #include "sky/mapgen/materialize.hpp"
 #include "sky/terrain/terrain_world.hpp"
@@ -101,6 +104,9 @@ public:
     std::unique_ptr<PlayModeController> playMode;
     std::unique_ptr<terrain::TerrainWorld> terrain;
     std::unique_ptr<mapgen::IGenerationPipeline> mapgenPipeline;
+    std::unique_ptr<rendering::IMaterialLibrary> materials;
+    std::unique_ptr<asset::AssetDatabase> assets;
+    std::unique_ptr<asset::IAssetImporter> objImporter;
     scene::SceneHandle activeScene;
     terrain::TerrainHandle terrainHandle;
     object::ObjectHandle terrainObject;

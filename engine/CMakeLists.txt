@@ -54,7 +54,8 @@ sky_add_module(sky_project project
     project/src/project_repository.cpp)
 
 sky_add_module(sky_asset asset
-    asset/src/asset_database.cpp)
+    asset/src/asset_database.cpp
+    asset/src/obj_importer.cpp)
 
 sky_add_module(sky_physics physics
     physics/src/physics_world.cpp)
@@ -64,7 +65,8 @@ sky_add_module(sky_package package
 
 sky_add_module(sky_rendering rendering
     rendering/src/null_renderer.cpp
-    rendering/src/renderer_registry.cpp)
+    rendering/src/renderer_registry.cpp
+    rendering/src/material_library.cpp)
 
 sky_add_module(sky_scripting scripting
     scripting/src/script_runtime.cpp)

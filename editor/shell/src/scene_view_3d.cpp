@@ -23,9 +23,6 @@ core::Quat quatFromYawPitch(float yawDegrees, float pitchDegrees) {
 }
 
 core::Vec3 objectColor(const std::string& name) {
-    if (name.find("Ground") != std::string::npos) {
-        return {0.35f, 0.47f, 0.31f};
-    }
     if (name.find("Camera") != std::string::npos) {
         return {0.49f, 0.54f, 0.60f};
     }
@@ -33,6 +30,30 @@ core::Vec3 objectColor(const std::string& name) {
         return {0.91f, 0.85f, 0.42f};
     }
     return {0.80f, 0.55f, 0.27f}; // crate orange
+}
+
+/// First component of the given type attached to the object.
+sky::component::ComponentHandle componentOfType(EditorContext& context,
+                                                sky::object::ObjectHandle object,
+                                                const std::string& typeId) {
+    for (const auto component : context.components->componentsOf(object)) {
+        if (context.components->descriptorOf(component).typeId == typeId) {
+            return component;
+        }
+    }
+    return sky::component::ComponentHandle::invalid();
+}
+
+template <typename T>
+T fieldOr(EditorContext& context, sky::component::ComponentHandle component,
+          const std::string& name, T fallback) {
+    const auto value = context.components->field(component, name);
+    if (value) {
+        if (const auto* typed = std::get_if<T>(&*value)) {
+            return *typed;
+        }
+    }
+    return fallback;
 }
 
 } // namespace
@@ -114,6 +135,35 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
     camera.fovDegrees = 50.0f;
     commands.push_back(camera);
 
+    // Scene lights: every object with a Light component contributes one.
+    const std::function<void(object::ObjectHandle)> emitLight =
+        [&](object::ObjectHandle object) {
+            if (!context_.objects->exists(object)) {
+                return;
+            }
+            if (const auto light = componentOfType(context_, object, "sky.light");
+                light.isValid()) {
+                rendering::RenderCommand add;
+                add.type = rendering::RenderCommandType::AddLight;
+                add.transform = context_.objects->worldTransform(object);
+                add.lightType = fieldOr<std::string>(context_, light, "type",
+                                                     "directional") == "point"
+                                    ? rendering::LightType::Point
+                                    : rendering::LightType::Directional;
+                add.color = fieldOr<core::Vec3>(context_, light, "color",
+                                                {1.0f, 1.0f, 1.0f});
+                add.lightIntensity = fieldOr<float>(context_, light, "intensity", 1.0f);
+                add.lightRange = fieldOr<float>(context_, light, "range", 10.0f);
+                commands.push_back(add);
+            }
+            for (const auto child : context_.objects->childrenOf(object)) {
+                emitLight(child);
+            }
+        };
+    for (const auto root : context_.rootObjects()) {
+        emitLight(root);
+    }
+
     // Terrain first: its own mesh at the Terrain object's placement.
     if (terrainMesh_.isValid() && context_.objects->exists(context_.terrainObject)) {
         rendering::RenderCommand terrainDraw;
@@ -121,7 +171,12 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
         terrainDraw.resource = terrainMesh_;
         terrainDraw.transform =
             context_.objects->worldTransform(context_.terrainObject);
-        terrainDraw.color = {0.35f, 0.47f, 0.31f};
+        if (const auto handle = context_.materials->findMaterial("Terrain")) {
+            const auto& desc = context_.materials->material(*handle);
+            terrainDraw.color = desc.baseColor;
+            terrainDraw.roughness = desc.roughness;
+            terrainDraw.metallic = desc.metallic;
+        }
         commands.push_back(terrainDraw);
     }
 
@@ -135,6 +190,34 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
             draw.type = rendering::RenderCommandType::DrawMesh;
             draw.transform = context_.objects->worldTransform(object);
             draw.color = objectColor(context_.objects->nameOf(object));
+
+            // Mesh Renderer drives the material and (optionally) an
+            // imported OBJ mesh.
+            if (const auto mesh = componentOfType(context_, object, "sky.mesh");
+                mesh.isValid()) {
+                const auto materialName =
+                    fieldOr<std::string>(context_, mesh, "material", "Default");
+                if (const auto handle = context_.materials->findMaterial(materialName)) {
+                    const auto& desc = context_.materials->material(*handle);
+                    draw.color = desc.baseColor;
+                    draw.roughness = desc.roughness;
+                    draw.metallic = desc.metallic;
+                    draw.emissive = desc.emissive;
+                }
+                const auto meshPath = fieldOr<std::string>(context_, mesh, "mesh", "");
+                if (!meshPath.empty() && resourceFactory_ != nullptr) {
+                    auto& uploaded = objMeshes_[meshPath];
+                    if (!uploaded.isValid()) {
+                        if (const auto data = asset::loadObjMesh(*context_.fileSystem,
+                                                                 meshPath)) {
+                            uploaded = resourceFactory_->createMeshFromData(*data);
+                        }
+                    }
+                    if (uploaded.isValid()) {
+                        draw.resource = uploaded;
+                    }
+                }
+            }
             commands.push_back(draw);
 
             if (object == selected_) {

@@ -2,6 +2,8 @@
 
 #include <QOpenGLWidget>
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 #include "editor_context.hpp"
 #include "sky/rendering_opengl/opengl_backend.hpp"
@@ -73,6 +75,8 @@ private:
     // Terrain render state: rebuilt when the context's terrain version moves.
     rendering::RenderResourceHandle terrainMesh_;
     std::uint64_t terrainMeshVersion_ = 0;
+    // Uploaded OBJ meshes, keyed by source path.
+    std::unordered_map<std::string, rendering::RenderResourceHandle> objMeshes_;
 };
 
 } // namespace sky::editor

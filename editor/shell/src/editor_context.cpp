@@ -74,13 +74,35 @@ EditorContext::EditorContext() {
     vfs->mount("packages",
                platform::createDirectoryMount(*fileSystem, packagesRoot, true), 0);
 
-    components->registerComponentType({"sky.mesh", "Mesh Renderer", false, "", {}});
+    components->registerComponentType(
+        {"sky.mesh", "Mesh Renderer", false, "",
+         {{"material", "string"}, {"mesh", "string"}}});
     components->registerComponentType(
         {"sky.collider.box", "Box Collider", false, "", {{"halfExtents", "Vec3"}}});
     components->registerComponentType(
         {"sky.rigidbody", "Rigidbody", false, "", {{"mass", "float"}}});
     components->registerComponentType(
         {"sky.script", "Script", true, "Game.Behaviour", {}});
+    components->registerComponentType(
+        {"sky.light", "Light", false, "",
+         {{"type", "string"},
+          {"color", "Vec3"},
+          {"intensity", "float"},
+          {"range", "float"}}});
+
+    // Asset pipeline with the engine's own OBJ importer.
+    assets = asset::createAssetDatabase();
+    objImporter = asset::createObjImporter(*fileSystem);
+    assets->registerImporter(*objImporter);
+
+    // Starter material set; the Inspector edits assignments by name.
+    materials = rendering::createMaterialLibrary();
+    materials->createMaterial({"Default", {0.72f, 0.72f, 0.74f}, 0.85f, 0.0f, {}});
+    materials->createMaterial({"Crate", {0.80f, 0.55f, 0.27f}, 0.75f, 0.0f, {}});
+    materials->createMaterial({"Gold", {1.00f, 0.78f, 0.30f}, 0.25f, 1.0f, {}});
+    materials->createMaterial({"Terrain", {0.35f, 0.47f, 0.31f}, 1.0f, 0.0f, {}});
+    materials->createMaterial(
+        {"Glow", {0.20f, 0.55f, 0.85f}, 0.9f, 0.0f, {0.05f, 0.35f, 0.65f}});
 
     buildDemoScene();
 }
@@ -96,7 +118,8 @@ object::ObjectHandle EditorContext::createCrate(const std::string& name,
                                                 core::Vec3 position) {
     const auto crate = createEmpty(name);
     objects->setLocalTransform(crate, {position, {}, {1.0f, 1.0f, 1.0f}});
-    components->attach(crate, "sky.mesh");
+    const auto mesh = components->attach(crate, "sky.mesh");
+    components->setField(mesh, "material", std::string("Crate"));
     const auto collider = components->attach(crate, "sky.collider.box");
     components->setField(collider, "halfExtents", core::Vec3{0.5f, 0.5f, 0.5f});
     const auto rigidbody = components->attach(crate, "sky.rigidbody");
@@ -330,10 +353,50 @@ void EditorContext::buildDemoScene() {
 
     createCrate("Crate A", {-1.5f, 2.0f, 0.0f});
     createCrate("Crate B", {0.0f, 4.0f, 0.0f});
-    createCrate("Crate C", {1.5f, 6.0f, 0.0f});
+    const auto crateC = createCrate("Crate C", {1.5f, 6.0f, 0.0f});
+    components->setField(components->componentsOf(crateC).front(), "material",
+                         std::string("Gold"));
 
+    // A real directional sun: pitched ~50 degrees down (rotation around X)
+    // so its -Z forward axis shines down onto the scene.
     const auto light = createEmpty("Directional Light");
-    objects->setLocalTransform(light, {{0.0f, 8.0f, -5.0f}, {}, {1, 1, 1}});
+    objects->setLocalTransform(
+        light, {{0.0f, 8.0f, -5.0f}, {-0.42f, 0.0f, 0.0f, 0.907f}, {1, 1, 1}});
+    const auto sun = components->attach(light, "sky.light");
+    components->setField(sun, "type", std::string("directional"));
+    components->setField(sun, "color", core::Vec3{1.0f, 0.96f, 0.86f});
+    components->setField(sun, "intensity", 1.1f);
+    components->setField(sun, "range", 0.0f);
+
+    // A warm point light hovering over the crates.
+    const auto pointLight = createEmpty("Point Light");
+    objects->setLocalTransform(pointLight, {{3.0f, 3.5f, 1.5f}, {}, {0.4f, 0.4f, 0.4f}});
+    const auto lamp = components->attach(pointLight, "sky.light");
+    components->setField(lamp, "type", std::string("point"));
+    components->setField(lamp, "color", core::Vec3{1.0f, 0.45f, 0.15f});
+    components->setField(lamp, "intensity", 5.0f);
+    components->setField(lamp, "range", 9.0f);
+
+    // An imported OBJ model: written to disk, run through the asset
+    // pipeline and referenced by the mesh component.
+    const auto objPath =
+        std::filesystem::temp_directory_path() / "sky_editor_assets" / "pyramid.obj";
+    const std::string objText =
+        "v -1 0 -1\nv 1 0 -1\nv 1 0 1\nv -1 0 1\nv 0 1.8 0\n"
+        "f 1 2 5\nf 2 3 5\nf 3 4 5\nf 4 1 5\nf 4 3 2 1\n";
+    std::vector<std::byte> objBytes(objText.size());
+    for (std::size_t i = 0; i < objText.size(); ++i) {
+        objBytes[i] = static_cast<std::byte>(objText[i]);
+    }
+    fileSystem->writeAll(objPath, objBytes);
+    if (assets->importAsset(objPath)) {
+        const auto pyramid = createEmpty("Pyramid (obj)");
+        objects->setLocalTransform(pyramid,
+                                   {{4.5f, 0.0f, 2.5f}, {}, {1.4f, 1.4f, 1.4f}});
+        const auto mesh = components->attach(pyramid, "sky.mesh");
+        components->setField(mesh, "material", std::string("Gold"));
+        components->setField(mesh, "mesh", objPath.generic_string());
+    }
 
     const auto camera = createEmpty("Main Camera");
     // Positioned behind the scene, yawed 180 degrees to face it (cameras

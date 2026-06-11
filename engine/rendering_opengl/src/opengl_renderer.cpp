@@ -61,6 +61,11 @@ struct GlApi {
     GLint (*GetUniformLocation)(GLuint, const GLchar*) = nullptr;
     void (*UniformMatrix4fv)(GLint, GLsizei, GLboolean, const GLfloat*) = nullptr;
     void (*Uniform3f)(GLint, GLfloat, GLfloat, GLfloat) = nullptr;
+    void (*Uniform1f)(GLint, GLfloat) = nullptr;
+    void (*Uniform1i)(GLint, GLint) = nullptr;
+    void (*Uniform3fv)(GLint, GLsizei, const GLfloat*) = nullptr;
+    void (*Uniform1iv)(GLint, GLsizei, const GLint*) = nullptr;
+    void (*Uniform1fv)(GLint, GLsizei, const GLfloat*) = nullptr;
     void (*GenVertexArrays)(GLsizei, GLuint*) = nullptr;
     void (*BindVertexArray)(GLuint) = nullptr;
     void (*GenBuffers)(GLsizei, GLuint*) = nullptr;
@@ -94,6 +99,11 @@ struct GlApi {
                resolve(GetUniformLocation, "glGetUniformLocation") &&
                resolve(UniformMatrix4fv, "glUniformMatrix4fv") &&
                resolve(Uniform3f, "glUniform3f") &&
+               resolve(Uniform1f, "glUniform1f") &&
+               resolve(Uniform1i, "glUniform1i") &&
+               resolve(Uniform3fv, "glUniform3fv") &&
+               resolve(Uniform1iv, "glUniform1iv") &&
+               resolve(Uniform1fv, "glUniform1fv") &&
                resolve(GenVertexArrays, "glGenVertexArrays") &&
                resolve(BindVertexArray, "glBindVertexArray") &&
                resolve(GenBuffers, "glGenBuffers") &&
@@ -208,22 +218,58 @@ layout(location = 1) in vec3 aNormal;
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 out vec3 vNormal;
+out vec3 vWorldPos;
 void main() {
+    vec4 world = uModel * vec4(aPosition, 1.0);
+    vWorldPos = world.xyz;
     vNormal = mat3(uModel) * aNormal;
-    gl_Position = uViewProjection * uModel * vec4(aPosition, 1.0);
+    gl_Position = uViewProjection * world;
 }
 )glsl";
 
+// Blinn-Phong with material parameters and up to 4 scene lights.
 const char* kFragmentShader = R"glsl(
 #version 330 core
 in vec3 vNormal;
-uniform vec3 uColor;
+in vec3 vWorldPos;
+uniform vec3 uBaseColor;
+uniform vec3 uEmissive;
+uniform float uRoughness;
+uniform float uMetallic;
+uniform vec3 uCameraPos;
+uniform int uLightCount;
+uniform vec3 uLightVec[4];   // direction (directional) or position (point)
+uniform vec3 uLightColor[4]; // colour premultiplied by intensity
+uniform int uLightType[4];   // 0 directional, 1 point
+uniform float uLightRange[4];
 out vec4 fragColor;
 void main() {
-    vec3 lightDir = normalize(vec3(0.4, 0.8, 0.45));
-    float diffuse = max(dot(normalize(vNormal), lightDir), 0.0);
-    vec3 lit = uColor * (0.35 + 0.65 * diffuse);
-    fragColor = vec4(lit, 1.0);
+    vec3 n = normalize(vNormal);
+    vec3 v = normalize(uCameraPos - vWorldPos);
+    vec3 result = uBaseColor * 0.22; // ambient floor
+    for (int i = 0; i < uLightCount; ++i) {
+        vec3 l;
+        float attenuation = 1.0;
+        if (uLightType[i] == 0) {
+            l = normalize(-uLightVec[i]);
+        } else {
+            vec3 toLight = uLightVec[i] - vWorldPos;
+            float dist = length(toLight);
+            l = toLight / max(dist, 1e-4);
+            attenuation = clamp(1.0 - dist / uLightRange[i], 0.0, 1.0);
+            attenuation *= attenuation;
+        }
+        float ndl = max(dot(n, l), 0.0);
+        vec3 h = normalize(l + v);
+        float shininess = mix(96.0, 4.0, uRoughness);
+        float spec = pow(max(dot(n, h), 0.0), shininess) * (1.0 - uRoughness * 0.7);
+        vec3 diffuse = uBaseColor * (1.0 - uMetallic);
+        vec3 specColor = mix(vec3(0.04), uBaseColor, uMetallic);
+        result += (diffuse * ndl + specColor * spec * ndl) *
+                  uLightColor[i] * attenuation;
+    }
+    result += uEmissive;
+    fragColor = vec4(result, 1.0);
 }
 )glsl";
 
@@ -241,7 +287,16 @@ public:
         }
         uModel_ = gl_.GetUniformLocation(program_, "uModel");
         uViewProjection_ = gl_.GetUniformLocation(program_, "uViewProjection");
-        uColor_ = gl_.GetUniformLocation(program_, "uColor");
+        uBaseColor_ = gl_.GetUniformLocation(program_, "uBaseColor");
+        uEmissive_ = gl_.GetUniformLocation(program_, "uEmissive");
+        uRoughness_ = gl_.GetUniformLocation(program_, "uRoughness");
+        uMetallic_ = gl_.GetUniformLocation(program_, "uMetallic");
+        uCameraPos_ = gl_.GetUniformLocation(program_, "uCameraPos");
+        uLightCount_ = gl_.GetUniformLocation(program_, "uLightCount");
+        uLightVec_ = gl_.GetUniformLocation(program_, "uLightVec");
+        uLightColor_ = gl_.GetUniformLocation(program_, "uLightColor");
+        uLightType_ = gl_.GetUniformLocation(program_, "uLightType");
+        uLightRange_ = gl_.GetUniformLocation(program_, "uLightRange");
 
         gl_.GenVertexArrays(1, &cubeVao_);
         gl_.BindVertexArray(cubeVao_);
@@ -283,12 +338,34 @@ public:
 
         Mat4 viewProjection = Mat4::identity();
         float aspect = 16.0f / 9.0f;
+        // Per-frame light set, flushed to uniforms before draws.
+        constexpr int kMaxLights = 4;
+        GLfloat lightVec[kMaxLights * 3] = {};
+        GLfloat lightColor[kMaxLights * 3] = {};
+        GLint lightType[kMaxLights] = {};
+        GLfloat lightRange[kMaxLights] = {};
+        GLint lightCount = 0;
+        bool lightsDirty = true;
+
+        const auto flushLights = [&] {
+            if (!lightsDirty) {
+                return;
+            }
+            gl_.Uniform1i(uLightCount_, lightCount);
+            gl_.Uniform3fv(uLightVec_, kMaxLights, lightVec);
+            gl_.Uniform3fv(uLightColor_, kMaxLights, lightColor);
+            gl_.Uniform1iv(uLightType_, kMaxLights, lightType);
+            gl_.Uniform1fv(uLightRange_, kMaxLights, lightRange);
+            lightsDirty = false;
+        };
 
         for (const auto& command : pending_) {
             switch (command.type) {
                 case rendering::RenderCommandType::BeginFrame:
                     gl_.ClearColor(0.137f, 0.176f, 0.220f, 1.0f);
                     gl_.Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    lightCount = 0;
+                    lightsDirty = true;
                     break;
                 case rendering::RenderCommandType::SetViewport:
                     gl_.Viewport(0, 0,
@@ -305,12 +382,43 @@ public:
                         viewFromCameraPose(command.transform);
                     gl_.UniformMatrix4fv(uViewProjection_, 1, 0,
                                          viewProjection.m.data());
+                    gl_.Uniform3f(uCameraPos_, command.transform.position.x,
+                                  command.transform.position.y,
+                                  command.transform.position.z);
                     break;
+                case rendering::RenderCommandType::AddLight: {
+                    if (lightCount >= kMaxLights) {
+                        break;
+                    }
+                    const int slot = lightCount++;
+                    // Directional lights shine along their pose's -Z axis;
+                    // point lights use the pose position.
+                    const auto vec =
+                        command.lightType == rendering::LightType::Directional
+                            ? core::rotate(command.transform.rotation,
+                                           {0.0f, 0.0f, -1.0f})
+                            : command.transform.position;
+                    lightVec[slot * 3 + 0] = vec.x;
+                    lightVec[slot * 3 + 1] = vec.y;
+                    lightVec[slot * 3 + 2] = vec.z;
+                    lightColor[slot * 3 + 0] = command.color.x * command.lightIntensity;
+                    lightColor[slot * 3 + 1] = command.color.y * command.lightIntensity;
+                    lightColor[slot * 3 + 2] = command.color.z * command.lightIntensity;
+                    lightType[slot] = static_cast<GLint>(command.lightType);
+                    lightRange[slot] = command.lightRange;
+                    lightsDirty = true;
+                    break;
+                }
                 case rendering::RenderCommandType::DrawMesh: {
+                    flushLights();
                     const auto model = fromTransform(command.transform);
                     gl_.UniformMatrix4fv(uModel_, 1, 0, model.m.data());
-                    gl_.Uniform3f(uColor_, command.color.x, command.color.y,
+                    gl_.Uniform3f(uBaseColor_, command.color.x, command.color.y,
                                   command.color.z);
+                    gl_.Uniform3f(uEmissive_, command.emissive.x, command.emissive.y,
+                                  command.emissive.z);
+                    gl_.Uniform1f(uRoughness_, command.roughness);
+                    gl_.Uniform1f(uMetallic_, command.metallic);
                     // Uploaded mesh if the handle names one, the built-in
                     // cube otherwise.
                     GLuint vao = cubeVao_;
@@ -421,7 +529,16 @@ private:
     GLuint cubeVao_ = 0;
     GLint uModel_ = -1;
     GLint uViewProjection_ = -1;
-    GLint uColor_ = -1;
+    GLint uBaseColor_ = -1;
+    GLint uEmissive_ = -1;
+    GLint uRoughness_ = -1;
+    GLint uMetallic_ = -1;
+    GLint uCameraPos_ = -1;
+    GLint uLightCount_ = -1;
+    GLint uLightVec_ = -1;
+    GLint uLightColor_ = -1;
+    GLint uLightType_ = -1;
+    GLint uLightRange_ = -1;
     rendering::IRenderSurface* surface_ = nullptr;
     std::vector<rendering::RenderCommand> pending_;
     struct MeshResource {
