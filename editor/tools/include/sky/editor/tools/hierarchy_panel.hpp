@@ -9,8 +9,8 @@
 namespace sky::editor {
 
 /// Unity-like Hierarchy: the object tree of the active scene with creation,
-/// deletion and selection. All mutations go through the Object Model
-/// contracts.
+/// deletion, double-click rename, drag-and-drop reparenting and selection.
+/// All mutations go through the Object Model contracts.
 class HierarchyPanel final : public QTreeWidget {
     Q_OBJECT
 
@@ -22,12 +22,20 @@ public:
 
     void refresh();
     [[nodiscard]] object::ObjectHandle selectedObject() const;
+    void selectObject(object::ObjectHandle object);
 
 signals:
     void objectSelected(quint64 objectId);
     void createEmptyRequested();
     void createCrateRequested();
     void deleteRequested(quint64 objectId);
+    void duplicateRequested(quint64 objectId);
+    /// newParentId == 0 means "make it a scene root".
+    void reparentRequested(quint64 objectId, quint64 newParentId);
+
+protected:
+    void dropEvent(QDropEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     void addObjectItem(QTreeWidgetItem* parent, object::ObjectHandle object);
@@ -35,6 +43,7 @@ private:
 
     object::ObjectWorld& objects_;
     RootsProvider rootsProvider_;
+    bool refreshing_ = false;
 };
 
 } // namespace sky::editor

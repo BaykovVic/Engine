@@ -1,5 +1,6 @@
 #include "editor_context.hpp"
 
+#include <algorithm>
 #include <filesystem>
 
 namespace sky::editor {
@@ -69,6 +70,83 @@ void EditorContext::destroyObject(object::ObjectHandle object) {
     components->detachAllFrom(object);
     objects->destroyObject(object);
     std::erase(roots_, object);
+}
+
+object::ObjectHandle EditorContext::duplicateObject(object::ObjectHandle object) {
+    if (!objects->exists(object)) {
+        return object::ObjectHandle::invalid();
+    }
+    const auto parent = objects->parentOf(object);
+    const auto copy = cloneSubtree(object, parent);
+    if (!parent.isValid()) {
+        scenes->addRootObject(activeScene, copy);
+        roots_.push_back(copy);
+    }
+    return copy;
+}
+
+object::ObjectHandle EditorContext::cloneSubtree(object::ObjectHandle source,
+                                                 object::ObjectHandle parent) {
+    const auto copy = objects->createObject(objects->nameOf(source) + " Copy");
+    if (parent.isValid()) {
+        objects->setParent(copy, parent);
+    }
+    objects->setLocalTransform(copy, objects->localTransform(source));
+
+    for (const auto component : components->componentsOf(source)) {
+        components->attach(copy, components->descriptorOf(component).typeId);
+    }
+    if (const auto it = bodies_.find(source.value); it != bodies_.end()) {
+        const auto body = physics->createBody(
+            {physics::BodyType::Dynamic, 1.0f, objects->worldTransform(copy)});
+        physics->attachCollider(body,
+                                {physics::ColliderShape::Box, {0.5f, 0.5f, 0.5f}, 0.0f});
+        physicsSync->bind(body, copy);
+        bodies_.emplace(copy.value, body);
+    }
+    for (const auto child : objects->childrenOf(source)) {
+        cloneSubtree(child, copy);
+    }
+    return copy;
+}
+
+void EditorContext::reparent(object::ObjectHandle child, object::ObjectHandle newParent) {
+    if (!objects->exists(child) || child == newParent) {
+        return;
+    }
+    // Keep the object where it is in the world: recompute the local
+    // transform against the new parent.
+    const auto world = objects->worldTransform(child);
+    objects->setParent(child, newParent);
+    if (newParent.isValid()) {
+        std::erase(roots_, child);
+        // Local = inverse(parentWorld) * world; with uniform editor usage we
+        // derive it through the hierarchy by assigning world and letting the
+        // viewport math stay consistent for unrotated parents.
+        const auto parentWorld = objects->worldTransform(newParent);
+        const auto invRotation =
+            core::Quat{-parentWorld.rotation.x, -parentWorld.rotation.y,
+                       -parentWorld.rotation.z, parentWorld.rotation.w};
+        const core::Vec3 offset{world.position.x - parentWorld.position.x,
+                                world.position.y - parentWorld.position.y,
+                                world.position.z - parentWorld.position.z};
+        auto local = world;
+        local.position = core::rotate(invRotation, offset);
+        local.position = {local.position.x / parentWorld.scale.x,
+                          local.position.y / parentWorld.scale.y,
+                          local.position.z / parentWorld.scale.z};
+        local.rotation = invRotation * world.rotation;
+        local.scale = {world.scale.x / parentWorld.scale.x,
+                       world.scale.y / parentWorld.scale.y,
+                       world.scale.z / parentWorld.scale.z};
+        objects->setLocalTransform(child, local);
+    } else {
+        if (std::ranges::find(roots_, child) == roots_.end()) {
+            scenes->addRootObject(activeScene, child);
+            roots_.push_back(child);
+        }
+        objects->setLocalTransform(child, world);
+    }
 }
 
 void EditorContext::buildDemoScene() {

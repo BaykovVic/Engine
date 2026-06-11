@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <array>
 
 #include "editor_context.hpp"
 
@@ -35,6 +36,8 @@ private:
     void onFrameTick();
     void onSelection(quint64 objectId);
     void syncPlayButtons();
+    void duplicateObject(quint64 objectId);
+    void deleteObject(quint64 objectId);
 
     EditorContext& context_;
     HierarchyPanel* hierarchy_ = nullptr;
@@ -45,6 +48,7 @@ private:
     QToolButton* playButton_ = nullptr;
     QToolButton* pauseButton_ = nullptr;
     QToolButton* stopButton_ = nullptr;
+    std::array<QToolButton*, 4> toolButtons_{};
     QTimer* frameTimer_ = nullptr;
     int crateCounter_ = 0;
 };

@@ -13,6 +13,8 @@ class ObjectWorld : public IObjectFactory,
                     public IObjectQueryService {
 public:
     ~ObjectWorld() override = default;
+
+    virtual void renameObject(ObjectHandle object, const std::string& name) = 0;
 };
 
 std::unique_ptr<ObjectWorld> createObjectWorld();

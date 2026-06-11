@@ -21,6 +21,12 @@ public:
         return handle;
     }
 
+    void renameObject(ObjectHandle object, const std::string& name) override {
+        if (auto* record = find(object)) {
+            record->name = name;
+        }
+    }
+
     void destroyObject(ObjectHandle object) override {
         const auto it = objects_.find(object.value);
         if (it == objects_.end()) {

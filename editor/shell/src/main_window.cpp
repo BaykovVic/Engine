@@ -36,7 +36,16 @@ MainWindow::MainWindow(EditorContext& context) : context_(context) {
     buildToolbar();
     statusBar()->showMessage(tr("Ready"));
 
-    connect(viewport_, &ViewportWidget::objectPicked, this, &MainWindow::onSelection);
+    connect(viewport_, &ViewportWidget::objectPicked, this, [this](quint64 objectId) {
+        onSelection(objectId);
+        hierarchy_->selectObject(object::ObjectHandle{objectId});
+    });
+    connect(viewport_, &ViewportWidget::transformEdited, this,
+            [this] { inspector_->refreshTransform(); });
+    connect(viewport_, &ViewportWidget::deleteRequested, this,
+            &MainWindow::deleteObject);
+    connect(viewport_, &ViewportWidget::duplicateRequested, this,
+            &MainWindow::duplicateObject);
 
     context_.playMode->setScene(context_.activeScene);
     context_.playMode->onStateChanged([this](PlayModeState) {
@@ -113,13 +122,37 @@ void MainWindow::buildToolbar() {
     auto* toolbar = addToolBar(tr("Main"));
     toolbar->setMovable(false);
 
-    // Transform tool group on the left, Unity-style.
-    for (const auto& glyph : {tr("✥"), tr("⤢"), tr("⟳"), tr("⛶")}) {
-        auto* tool = new QToolButton(toolbar);
-        tool->setText(glyph);
-        tool->setCheckable(true);
-        toolbar->addWidget(tool);
+    // Transform tool group on the left, Unity-style: Q hand, W move,
+    // E rotate, R scale.
+    const struct {
+        QString glyph;
+        QString tip;
+        TransformTool tool;
+    } tools[] = {
+        {QString::fromUtf8("✋"), tr("Hand tool (Q) — drag to pan"), TransformTool::Hand},
+        {QString::fromUtf8("✥"), tr("Move tool (W)"), TransformTool::Move},
+        {QString::fromUtf8("⟳"), tr("Rotate tool (E)"), TransformTool::Rotate},
+        {QString::fromUtf8("⤢"), tr("Scale tool (R)"), TransformTool::Scale},
+    };
+    for (std::size_t i = 0; i < std::size(tools); ++i) {
+        auto* button = new QToolButton(toolbar);
+        button->setText(tools[i].glyph);
+        button->setToolTip(tools[i].tip);
+        button->setCheckable(true);
+        button->setChecked(tools[i].tool == viewport_->tool());
+        connect(button, &QToolButton::clicked, this,
+                [this, tool = tools[i].tool] { viewport_->setTool(tool); });
+        toolbar->addWidget(button);
+        toolButtons_[i] = button;
     }
+    connect(viewport_, &ViewportWidget::toolChanged, this, [this](int tool) {
+        for (std::size_t i = 0; i < toolButtons_.size(); ++i) {
+            toolButtons_[i]->setChecked(static_cast<int>(i) == tool);
+        }
+        statusBar()->showMessage(
+            tr("ЛКМ — выделение и гизмо · ПКМ/СКМ — панорама · колесо — зум · "
+               "F — кадрировать · Ctrl — привязка · Ctrl+D — дубликат · Del — удалить"));
+    });
 
     auto* leftSpacer = new QWidget(toolbar);
     leftSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -203,16 +236,40 @@ void MainWindow::buildDocks() {
                              {0.0f, 5.0f, 0.0f});
         hierarchy_->refresh();
     });
-    connect(hierarchy_, &HierarchyPanel::deleteRequested, this, [this](quint64 objectId) {
-        context_.destroyObject(object::ObjectHandle{objectId});
-        inspector_->setObject(object::ObjectHandle::invalid());
-        hierarchy_->refresh();
-        viewport_->update();
-    });
+    connect(hierarchy_, &HierarchyPanel::deleteRequested, this,
+            &MainWindow::deleteObject);
+    connect(hierarchy_, &HierarchyPanel::duplicateRequested, this,
+            &MainWindow::duplicateObject);
+    connect(hierarchy_, &HierarchyPanel::reparentRequested, this,
+            [this](quint64 objectId, quint64 newParentId) {
+                context_.reparent(object::ObjectHandle{objectId},
+                                  object::ObjectHandle{newParentId});
+                hierarchy_->refresh();
+                viewport_->update();
+                console_->logger().info("Scene", "Object reparented");
+            });
     connect(inspector_, &InspectorPanel::objectEdited, this, [this] {
         hierarchy_->refresh();
         viewport_->update();
     });
+}
+
+void MainWindow::duplicateObject(quint64 objectId) {
+    const auto copy = context_.duplicateObject(object::ObjectHandle{objectId});
+    if (copy.isValid()) {
+        hierarchy_->refresh();
+        onSelection(copy.value);
+        hierarchy_->selectObject(copy);
+        console_->logger().info("Scene", "Object duplicated");
+    }
+}
+
+void MainWindow::deleteObject(quint64 objectId) {
+    context_.destroyObject(object::ObjectHandle{objectId});
+    inspector_->setObject(object::ObjectHandle::invalid());
+    viewport_->setSelected(object::ObjectHandle::invalid());
+    hierarchy_->refresh();
+    viewport_->update();
 }
 
 void MainWindow::onFrameTick() {

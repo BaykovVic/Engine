@@ -27,6 +27,14 @@ public:
     object::ObjectHandle createCrate(const std::string& name, core::Vec3 position);
     void destroyObject(object::ObjectHandle object);
 
+    /// Deep-copies an object with its components, physics binding and
+    /// children; the copy becomes a sibling of the original.
+    object::ObjectHandle duplicateObject(object::ObjectHandle object);
+
+    /// Moves an object under a new parent (invalid parent = scene root),
+    /// keeping the scene root list consistent.
+    void reparent(object::ObjectHandle child, object::ObjectHandle newParent);
+
     [[nodiscard]] std::vector<object::ObjectHandle> rootObjects() const {
         return roots_;
     }
@@ -45,6 +53,8 @@ public:
 
 private:
     void buildDemoScene();
+    object::ObjectHandle cloneSubtree(object::ObjectHandle source,
+                                      object::ObjectHandle parent);
 
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
