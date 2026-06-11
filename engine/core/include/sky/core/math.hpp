@@ -25,6 +25,8 @@ struct Transform {
     Vec3 position{};
     Quat rotation{};
     Vec3 scale{1.0f, 1.0f, 1.0f};
+
+    auto operator<=>(const Transform&) const = default;
 };
 
 constexpr Vec3 operator+(const Vec3& a, const Vec3& b) {

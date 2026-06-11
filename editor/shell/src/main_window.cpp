@@ -18,7 +18,8 @@
 
 namespace sky::editor {
 
-MainWindow::MainWindow(EditorContext& context) : context_(context) {
+MainWindow::MainWindow(EditorContext& context)
+    : context_(context), undoStack_(context) {
     setWindowTitle(tr("Sky Engine — SampleScene"));
     resize(1500, 900);
     setDockOptions(AllowNestedDocks | AllowTabbedDocks | AnimatedDocks);
@@ -42,10 +43,18 @@ MainWindow::MainWindow(EditorContext& context) : context_(context) {
     });
     connect(viewport_, &ViewportWidget::transformEdited, this,
             [this] { inspector_->refreshTransform(); });
+    connect(viewport_, &ViewportWidget::transformCommitted, this,
+            [this](quint64 objectId, const core::Transform& before,
+                   const core::Transform& after) {
+                undoStack_.push(makeTransformCommand(object::ObjectHandle{objectId},
+                                                     before, after));
+            });
     connect(viewport_, &ViewportWidget::deleteRequested, this,
             &MainWindow::deleteObject);
     connect(viewport_, &ViewportWidget::duplicateRequested, this,
             &MainWindow::duplicateObject);
+    connect(viewport_, &ViewportWidget::undoRequested, this, &MainWindow::performUndo);
+    connect(viewport_, &ViewportWidget::redoRequested, this, &MainWindow::performRedo);
 
     context_.playMode->setScene(context_.activeScene);
     context_.playMode->onStateChanged([this](PlayModeState) {
@@ -92,19 +101,24 @@ void MainWindow::buildMenus() {
     fileMenu->addAction(tr("Exit"), qApp, &QApplication::quit);
 
     auto* editMenu = menuBar()->addMenu(tr("&Edit"));
-    editMenu->addAction(tr("Undo"))->setEnabled(false);
-    editMenu->addAction(tr("Redo"))->setEnabled(false);
+    undoAction_ = editMenu->addAction(tr("Undo"), this, &MainWindow::performUndo,
+                                      QKeySequence::Undo);
+    redoAction_ = editMenu->addAction(tr("Redo"), this, &MainWindow::performRedo,
+                                      QKeySequence::Redo);
+    undoStack_.setOnChanged([this] { updateUndoActions(); });
+    updateUndoActions();
 
     auto* gameObjectMenu = menuBar()->addMenu(tr("&GameObject"));
     gameObjectMenu->addAction(tr("Create Empty"), this, [this] {
         const auto object = context_.createEmpty("GameObject");
+        undoStack_.push(makeCreateCommand(object, "GameObject", {}, false));
         hierarchy_->refresh();
         onSelection(object.value);
     });
     gameObjectMenu->addAction(tr("3D Object / Cube"), this, [this] {
-        const auto crate = context_.createCrate(
-            QString("Cube %1").arg(++crateCounter_).toStdString(),
-            {0.0f, 5.0f, 0.0f});
+        const auto name = QString("Cube %1").arg(++crateCounter_).toStdString();
+        const auto crate = context_.createCrate(name, {0.0f, 5.0f, 0.0f});
+        undoStack_.push(makeCreateCommand(crate, name, {0.0f, 5.0f, 0.0f}, true));
         hierarchy_->refresh();
         onSelection(crate.value);
         console_->logger().info("Scene", "Cube created");
@@ -228,22 +242,36 @@ void MainWindow::buildDocks() {
 
     connect(hierarchy_, &HierarchyPanel::objectSelected, this, &MainWindow::onSelection);
     connect(hierarchy_, &HierarchyPanel::createEmptyRequested, this, [this] {
-        context_.createEmpty("GameObject");
+        const auto object = context_.createEmpty("GameObject");
+        undoStack_.push(makeCreateCommand(object, "GameObject", {}, false));
         hierarchy_->refresh();
     });
     connect(hierarchy_, &HierarchyPanel::createCrateRequested, this, [this] {
-        context_.createCrate(QString("Cube %1").arg(++crateCounter_).toStdString(),
-                             {0.0f, 5.0f, 0.0f});
+        const auto name = QString("Cube %1").arg(++crateCounter_).toStdString();
+        const auto crate = context_.createCrate(name, {0.0f, 5.0f, 0.0f});
+        undoStack_.push(makeCreateCommand(crate, name, {0.0f, 5.0f, 0.0f}, true));
         hierarchy_->refresh();
     });
+    connect(hierarchy_, &HierarchyPanel::objectRenamed, this,
+            [this](quint64 objectId, const QString& oldName, const QString& newName) {
+                undoStack_.push(makeRenameCommand(object::ObjectHandle{objectId},
+                                                  oldName.toStdString(),
+                                                  newName.toStdString()));
+                inspector_->setObject(object::ObjectHandle{objectId});
+            });
     connect(hierarchy_, &HierarchyPanel::deleteRequested, this,
             &MainWindow::deleteObject);
     connect(hierarchy_, &HierarchyPanel::duplicateRequested, this,
             &MainWindow::duplicateObject);
     connect(hierarchy_, &HierarchyPanel::reparentRequested, this,
             [this](quint64 objectId, quint64 newParentId) {
-                context_.reparent(object::ObjectHandle{objectId},
-                                  object::ObjectHandle{newParentId});
+                const object::ObjectHandle object{objectId};
+                const object::ObjectHandle newParent{newParentId};
+                const auto oldParent = context_.objects->parentOf(object);
+                const auto oldLocal = context_.objects->localTransform(object);
+                context_.reparent(object, newParent);
+                undoStack_.push(
+                    makeReparentCommand(object, oldParent, newParent, oldLocal));
                 hierarchy_->refresh();
                 viewport_->update();
                 console_->logger().info("Scene", "Object reparented");
@@ -252,11 +280,61 @@ void MainWindow::buildDocks() {
         hierarchy_->refresh();
         viewport_->update();
     });
+    connect(inspector_, &InspectorPanel::transformCommitted, this,
+            [this](quint64 objectId, const core::Transform& before,
+                   const core::Transform& after) {
+                undoStack_.push(makeTransformCommand(object::ObjectHandle{objectId},
+                                                     before, after));
+            });
+}
+
+void MainWindow::performUndo() {
+    const auto label = undoStack_.undoLabel();
+    if (undoStack_.undo()) {
+        console_->logger().info("Edit", "Undo: " + label);
+        refreshAfterHistory();
+    }
+}
+
+void MainWindow::performRedo() {
+    const auto label = undoStack_.redoLabel();
+    if (undoStack_.redo()) {
+        console_->logger().info("Edit", "Redo: " + label);
+        refreshAfterHistory();
+    }
+}
+
+void MainWindow::refreshAfterHistory() {
+    hierarchy_->refresh();
+    const auto selected = hierarchy_->selectedObject();
+    if (context_.objects->exists(selected)) {
+        inspector_->setObject(selected);
+        viewport_->setSelected(selected);
+    } else {
+        inspector_->setObject(object::ObjectHandle::invalid());
+        viewport_->setSelected(object::ObjectHandle::invalid());
+    }
+    viewport_->update();
+}
+
+void MainWindow::updateUndoActions() {
+    undoAction_->setEnabled(undoStack_.canUndo());
+    redoAction_->setEnabled(undoStack_.canRedo());
+    undoAction_->setText(undoStack_.canUndo()
+                             ? tr("Undo %1").arg(
+                                   QString::fromStdString(undoStack_.undoLabel()))
+                             : tr("Undo"));
+    redoAction_->setText(undoStack_.canRedo()
+                             ? tr("Redo %1").arg(
+                                   QString::fromStdString(undoStack_.redoLabel()))
+                             : tr("Redo"));
 }
 
 void MainWindow::duplicateObject(quint64 objectId) {
-    const auto copy = context_.duplicateObject(object::ObjectHandle{objectId});
+    const object::ObjectHandle source{objectId};
+    const auto copy = context_.duplicateObject(source);
     if (copy.isValid()) {
+        undoStack_.push(makeDuplicateCommand(source, copy));
         hierarchy_->refresh();
         onSelection(copy.value);
         hierarchy_->selectObject(copy);
@@ -265,7 +343,14 @@ void MainWindow::duplicateObject(quint64 objectId) {
 }
 
 void MainWindow::deleteObject(quint64 objectId) {
-    context_.destroyObject(object::ObjectHandle{objectId});
+    const object::ObjectHandle object{objectId};
+    if (!context_.objects->exists(object)) {
+        return;
+    }
+    // Snapshot before destruction so undo can rebuild the subtree.
+    auto command = makeDeleteCommand(context_, object);
+    context_.destroyObject(object);
+    undoStack_.push(std::move(command));
     inspector_->setObject(object::ObjectHandle::invalid());
     viewport_->setSelected(object::ObjectHandle::invalid());
     hierarchy_->refresh();

@@ -32,8 +32,13 @@ signals:
     void objectPicked(quint64 objectId);
     void toolChanged(int tool);
     void transformEdited();
+    /// A finished gizmo drag: one undoable step from `before` to `after`.
+    void transformCommitted(quint64 objectId, sky::core::Transform before,
+                            sky::core::Transform after);
     void deleteRequested(quint64 objectId);
     void duplicateRequested(quint64 objectId);
+    void undoRequested();
+    void redoRequested();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

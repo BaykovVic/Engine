@@ -32,6 +32,8 @@ signals:
     void duplicateRequested(quint64 objectId);
     /// newParentId == 0 means "make it a scene root".
     void reparentRequested(quint64 objectId, quint64 newParentId);
+    /// Emitted after a successful in-place rename, with both names.
+    void objectRenamed(quint64 objectId, QString oldName, QString newName);
 
 protected:
     void dropEvent(QDropEvent* event) override;

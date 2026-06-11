@@ -3,6 +3,7 @@ set(CMAKE_AUTOMOC ON)
 add_executable(sky_editor
     src/main.cpp
     src/editor_context.cpp
+    src/editor_commands.cpp
     src/main_window.cpp
     src/viewport_widget.cpp
     src/theme.cpp

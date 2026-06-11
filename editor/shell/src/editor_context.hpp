@@ -16,6 +16,16 @@
 
 namespace sky::editor {
 
+/// A serializable description of an object subtree: enough to delete an
+/// object and bring it back identically (undo of delete).
+struct ObjectSnapshot {
+    std::string name;
+    core::Transform local;
+    bool hasPhysicsBody = false;
+    std::vector<std::string> componentTypes;
+    std::vector<ObjectSnapshot> children;
+};
+
 /// Everything the editor session works with: the assembled engine core plus
 /// the demo scene. Qt-free; the UI layer consumes it through references.
 class EditorContext {
@@ -34,6 +44,14 @@ public:
     /// Moves an object under a new parent (invalid parent = scene root),
     /// keeping the scene root list consistent.
     void reparent(object::ObjectHandle child, object::ObjectHandle newParent);
+
+    [[nodiscard]] ObjectSnapshot snapshotObject(object::ObjectHandle object) const;
+    /// Rebuilds an object subtree from a snapshot (invalid parent = root).
+    object::ObjectHandle restoreObject(const ObjectSnapshot& snapshot,
+                                       object::ObjectHandle parent);
+    [[nodiscard]] bool hasPhysicsBody(object::ObjectHandle object) const {
+        return bodies_.contains(object.value);
+    }
 
     [[nodiscard]] std::vector<object::ObjectHandle> rootObjects() const {
         return roots_;
@@ -55,6 +73,7 @@ private:
     void buildDemoScene();
     object::ObjectHandle cloneSubtree(object::ObjectHandle source,
                                       object::ObjectHandle parent);
+    void attachCrateBody(object::ObjectHandle object);
 
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;

@@ -54,6 +54,17 @@ InspectorPanel::InspectorPanel(object::ObjectWorld& objects,
             box->setButtonSymbols(QAbstractSpinBox::NoButtons);
             connect(box, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
                     [this](double) { applyTransformFromUi(); });
+            // Live edits above; one undoable step per finished edit below.
+            connect(box, &QDoubleSpinBox::editingFinished, this, [this] {
+                if (updatingUi_ || !objects_.exists(current_)) {
+                    return;
+                }
+                const auto after = objects_.localTransform(current_);
+                if (after != editBaseline_) {
+                    emit transformCommitted(current_.value, editBaseline_, after);
+                    editBaseline_ = after;
+                }
+            });
         }
     }
     rotationLabel_ = new QLabel("0.000, 0.000, 0.000, 1.000", transformBox);
@@ -87,6 +98,7 @@ void InspectorPanel::setObject(object::ObjectHandle object) {
     nameEdit_->setText(QString::fromStdString(objects_.nameOf(object)));
     refreshTransform();
     rebuildComponentList();
+    editBaseline_ = objects_.localTransform(object);
     updatingUi_ = false;
 }
 

@@ -36,7 +36,12 @@ HierarchyPanel::HierarchyPanel(object::ObjectWorld& objects, RootsProvider roots
                     item->data(0, Qt::UserRole).toULongLong()};
                 const auto name = item->text(0).trimmed();
                 if (objects_.exists(object) && !name.isEmpty()) {
-                    objects_.renameObject(object, name.toStdString());
+                    const auto oldName =
+                        QString::fromStdString(objects_.nameOf(object));
+                    if (oldName != name) {
+                        objects_.renameObject(object, name.toStdString());
+                        emit objectRenamed(object.value, oldName, name);
+                    }
                 } else {
                     refresh();
                 }

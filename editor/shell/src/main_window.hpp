@@ -3,8 +3,10 @@
 #include <QMainWindow>
 #include <array>
 
+#include "editor_commands.hpp"
 #include "editor_context.hpp"
 
+class QAction;
 class QToolButton;
 class QTimer;
 
@@ -38,6 +40,10 @@ private:
     void syncPlayButtons();
     void duplicateObject(quint64 objectId);
     void deleteObject(quint64 objectId);
+    void performUndo();
+    void performRedo();
+    void refreshAfterHistory();
+    void updateUndoActions();
 
     EditorContext& context_;
     HierarchyPanel* hierarchy_ = nullptr;
@@ -51,6 +57,9 @@ private:
     std::array<QToolButton*, 4> toolButtons_{};
     QTimer* frameTimer_ = nullptr;
     int crateCounter_ = 0;
+    UndoStack undoStack_;
+    QAction* undoAction_ = nullptr;
+    QAction* redoAction_ = nullptr;
 };
 
 } // namespace sky::editor

@@ -30,6 +30,9 @@ public:
 
 signals:
     void objectEdited();
+    /// A finished inspector edit: one undoable step from `before` to `after`.
+    void transformCommitted(quint64 objectId, sky::core::Transform before,
+                            sky::core::Transform after);
 
 private:
     void applyTransformFromUi();
@@ -40,6 +43,7 @@ private:
     component::ComponentWorld& components_;
     object::ObjectHandle current_;
     bool updatingUi_ = false;
+    core::Transform editBaseline_;
 
     QLineEdit* nameEdit_ = nullptr;
     std::array<QDoubleSpinBox*, 3> position_{};

@@ -52,13 +52,17 @@ object::ObjectHandle EditorContext::createCrate(const std::string& name,
     components->attach(crate, "sky.mesh");
     components->attach(crate, "sky.collider.box");
     components->attach(crate, "sky.rigidbody");
+    attachCrateBody(crate);
+    return crate;
+}
 
-    const auto body = physics->createBody({physics::BodyType::Dynamic, 1.0f, {}});
+void EditorContext::attachCrateBody(object::ObjectHandle object) {
+    const auto body = physics->createBody(
+        {physics::BodyType::Dynamic, 1.0f, objects->worldTransform(object)});
     physics->attachCollider(body,
                             {physics::ColliderShape::Box, {0.5f, 0.5f, 0.5f}, 0.0f});
-    physicsSync->bind(body, crate);
-    bodies_.emplace(crate.value, body);
-    return crate;
+    physicsSync->bind(body, object);
+    bodies_.emplace(object.value, body);
 }
 
 void EditorContext::destroyObject(object::ObjectHandle object) {
@@ -96,13 +100,8 @@ object::ObjectHandle EditorContext::cloneSubtree(object::ObjectHandle source,
     for (const auto component : components->componentsOf(source)) {
         components->attach(copy, components->descriptorOf(component).typeId);
     }
-    if (const auto it = bodies_.find(source.value); it != bodies_.end()) {
-        const auto body = physics->createBody(
-            {physics::BodyType::Dynamic, 1.0f, objects->worldTransform(copy)});
-        physics->attachCollider(body,
-                                {physics::ColliderShape::Box, {0.5f, 0.5f, 0.5f}, 0.0f});
-        physicsSync->bind(body, copy);
-        bodies_.emplace(copy.value, body);
+    if (bodies_.contains(source.value)) {
+        attachCrateBody(copy);
     }
     for (const auto child : objects->childrenOf(source)) {
         cloneSubtree(child, copy);
@@ -147,6 +146,42 @@ void EditorContext::reparent(object::ObjectHandle child, object::ObjectHandle ne
         }
         objects->setLocalTransform(child, world);
     }
+}
+
+ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const {
+    ObjectSnapshot snapshot;
+    snapshot.name = objects->nameOf(object);
+    snapshot.local = objects->localTransform(object);
+    snapshot.hasPhysicsBody = hasPhysicsBody(object);
+    for (const auto component : components->componentsOf(object)) {
+        snapshot.componentTypes.push_back(components->descriptorOf(component).typeId);
+    }
+    for (const auto child : objects->childrenOf(object)) {
+        snapshot.children.push_back(snapshotObject(child));
+    }
+    return snapshot;
+}
+
+object::ObjectHandle EditorContext::restoreObject(const ObjectSnapshot& snapshot,
+                                                  object::ObjectHandle parent) {
+    const auto object = objects->createObject(snapshot.name);
+    if (parent.isValid()) {
+        objects->setParent(object, parent);
+    } else {
+        scenes->addRootObject(activeScene, object);
+        roots_.push_back(object);
+    }
+    objects->setLocalTransform(object, snapshot.local);
+    for (const auto& typeId : snapshot.componentTypes) {
+        components->attach(object, typeId);
+    }
+    if (snapshot.hasPhysicsBody) {
+        attachCrateBody(object);
+    }
+    for (const auto& child : snapshot.children) {
+        restoreObject(child, object);
+    }
+    return object;
 }
 
 void EditorContext::buildDemoScene() {

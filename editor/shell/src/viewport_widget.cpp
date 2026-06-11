@@ -206,6 +206,12 @@ void ViewportWidget::mouseReleaseEvent(QMouseEvent*) {
         updateCursor(hoverHandle_);
     }
     if (activeHandle_ != Handle::None) {
+        if (context_.objects->exists(selected_)) {
+            const auto after = context_.objects->localTransform(selected_);
+            if (after != dragStartLocal_) {
+                emit transformCommitted(selected_.value, dragStartLocal_, after);
+            }
+        }
         activeHandle_ = Handle::None;
         update();
     }
@@ -238,6 +244,16 @@ void ViewportWidget::keyPressEvent(QKeyEvent* event) {
             if (event->modifiers().testFlag(Qt::ControlModifier) &&
                 selected_.isValid()) {
                 emit duplicateRequested(selected_.value);
+                return;
+            }
+            break;
+        case Qt::Key_Z:
+            if (event->modifiers().testFlag(Qt::ControlModifier)) {
+                if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+                    emit redoRequested();
+                } else {
+                    emit undoRequested();
+                }
                 return;
             }
             break;

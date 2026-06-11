@@ -40,3 +40,11 @@ sky_add_test(package_tests)
 sky_add_test(terrain_mapgen_tests)
 sky_add_test(scripting_rendering_tests)
 sky_add_test(vfs_tests)
+
+# Editor command layer (Qt-free): compiled together with the editor context.
+sky_add_test(undo_tests)
+target_sources(undo_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_context.cpp
+    ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_commands.cpp)
+target_include_directories(undo_tests PRIVATE ${CMAKE_SOURCE_DIR}/editor/shell/src)
+target_link_libraries(undo_tests PRIVATE sky::viewport_bridge)
