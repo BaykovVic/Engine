@@ -72,6 +72,14 @@ MaterialPanel::MaterialPanel(rendering::IMaterialLibrary& materials, QWidget* pa
     connect(roughness_, &QSlider::valueChanged, this,
             [this](int) { applyEdits(); });
     connect(metallic_, &QSlider::valueChanged, this, [this](int) { applyEdits(); });
+    // Sliders commit one undo step on release; text fields on focus-out.
+    connect(roughness_, &QSlider::sliderReleased, this,
+            [this] { commitBaseline(); });
+    connect(metallic_, &QSlider::sliderReleased, this, [this] { commitBaseline(); });
+    connect(nameEdit_, &QLineEdit::editingFinished, this,
+            [this] { commitBaseline(); });
+    connect(textureEdit_, &QLineEdit::editingFinished, this,
+            [this] { commitBaseline(); });
     connect(colorButton_, &QPushButton::clicked, this, [this] { pickColor(false); });
     connect(emissiveButton_, &QPushButton::clicked, this,
             [this] { pickColor(true); });
@@ -109,6 +117,8 @@ void MaterialPanel::showSelected() {
     }
     updating_ = true;
     const auto& desc = materials_.material(*handle);
+    baseline_ = desc;
+    baselineHandle_ = *handle;
     nameEdit_->setText(QString::fromStdString(desc.name));
     paintSwatch(colorButton_, desc.baseColor);
     paintSwatch(emissiveButton_, desc.emissive);
@@ -141,6 +151,21 @@ void MaterialPanel::applyEdits() {
     }
 }
 
+void MaterialPanel::commitBaseline() {
+    if (!baselineHandle_.isValid()) {
+        return;
+    }
+    const auto current = materials_.material(baselineHandle_);
+    if (current.name != baseline_.name || current.baseColor != baseline_.baseColor ||
+        current.roughness != baseline_.roughness ||
+        current.metallic != baseline_.metallic ||
+        current.emissive != baseline_.emissive ||
+        current.texturePath != baseline_.texturePath) {
+        emit materialCommitted(baselineHandle_.value, baseline_, current);
+        baseline_ = current;
+    }
+}
+
 void MaterialPanel::pickColor(bool emissive) {
     const auto handle = materials_.findMaterial(selectedName().toStdString());
     if (!handle) {
@@ -154,6 +179,7 @@ void MaterialPanel::pickColor(bool emissive) {
     }
     (emissive ? desc.emissive : desc.baseColor) = toVec3(picked);
     if (materials_.updateMaterial(*handle, desc)) {
+        commitBaseline(); // a colour pick is one complete edit
         showSelected();
         emit materialsChanged();
     }
@@ -166,6 +192,7 @@ void MaterialPanel::createMaterial() {
         desc.name = QString("Material %1").arg(++newMaterialCounter_).toStdString();
     }
     refresh();
+    emit materialCreated(desc);
     emit materialsChanged();
 }
 

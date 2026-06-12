@@ -17,6 +17,7 @@ option(SKY_BUILD_TESTS "Build verification targets" ON)
 add_subdirectory(engine)
 # Always entered; Qt-dependent targets inside are gated by SKY_BUILD_EDITOR.
 add_subdirectory(editor)
+add_subdirectory(player)
 
 if(SKY_BUILD_TESTS)
     enable_testing()

@@ -33,6 +33,7 @@ public:
 
     virtual MaterialHandle createMaterial(const MaterialDesc& desc) = 0;
     virtual bool updateMaterial(MaterialHandle material, const MaterialDesc& desc) = 0;
+    virtual bool removeMaterial(MaterialHandle material) = 0;
     [[nodiscard]] virtual std::optional<MaterialHandle> findMaterial(
         const std::string& name) const = 0;
     [[nodiscard]] virtual const MaterialDesc& material(MaterialHandle handle) const = 0;

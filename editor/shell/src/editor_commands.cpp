@@ -189,6 +189,49 @@ private:
     component::FieldValue after_;
 };
 
+class MaterialEditCommand final : public IEditorCommand {
+public:
+    MaterialEditCommand(rendering::MaterialHandle material,
+                        rendering::MaterialDesc before, rendering::MaterialDesc after)
+        : material_(material), before_(std::move(before)), after_(std::move(after)) {}
+
+    std::string label() const override { return "Edit Material " + after_.name; }
+
+    void undo(EditorContext& context) override {
+        context.materials->updateMaterial(material_, before_);
+    }
+    void redo(EditorContext& context) override {
+        context.materials->updateMaterial(material_, after_);
+    }
+
+private:
+    rendering::MaterialHandle material_;
+    rendering::MaterialDesc before_;
+    rendering::MaterialDesc after_;
+};
+
+class MaterialCreateCommand final : public IEditorCommand {
+public:
+    explicit MaterialCreateCommand(rendering::MaterialDesc desc)
+        : desc_(std::move(desc)) {}
+
+    std::string label() const override { return "Create Material"; }
+
+    void undo(EditorContext& context) override {
+        if (const auto handle = context.materials->findMaterial(desc_.name)) {
+            // Keep the latest state so redo restores what the user last saw.
+            desc_ = context.materials->material(*handle);
+            context.materials->removeMaterial(*handle);
+        }
+    }
+    void redo(EditorContext& context) override {
+        context.materials->createMaterial(desc_);
+    }
+
+private:
+    rendering::MaterialDesc desc_;
+};
+
 } // namespace
 
 std::unique_ptr<IEditorCommand> makeTransformCommand(object::ObjectHandle object,
@@ -232,6 +275,17 @@ std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle comp
                                                  component::FieldValue after) {
     return std::make_unique<FieldCommand>(component, std::move(fieldName),
                                           std::move(before), std::move(after));
+}
+
+std::unique_ptr<IEditorCommand> makeMaterialEditCommand(
+    rendering::MaterialHandle material, rendering::MaterialDesc before,
+    rendering::MaterialDesc after) {
+    return std::make_unique<MaterialEditCommand>(material, std::move(before),
+                                                 std::move(after));
+}
+
+std::unique_ptr<IEditorCommand> makeMaterialCreateCommand(rendering::MaterialDesc desc) {
+    return std::make_unique<MaterialCreateCommand>(std::move(desc));
 }
 
 } // namespace sky::editor

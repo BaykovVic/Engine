@@ -309,6 +309,16 @@ void MainWindow::buildDocks() {
         gameView_->update();
         viewport_->update();
     });
+    connect(materialPanel_, &MaterialPanel::materialCommitted, this,
+            [this](quint64 handle, const rendering::MaterialDesc& before,
+                   const rendering::MaterialDesc& after) {
+                undoStack_.push(makeMaterialEditCommand(
+                    rendering::MaterialHandle{handle}, before, after));
+            });
+    connect(materialPanel_, &MaterialPanel::materialCreated, this,
+            [this](const rendering::MaterialDesc& desc) {
+                undoStack_.push(makeMaterialCreateCommand(desc));
+            });
     connect(terrainPanel_, &TerrainPanel::brushChanged, this,
             [this](const QString& operation, float radius, float strength) {
                 context_.brush.enabled = !operation.isEmpty();
@@ -433,6 +443,7 @@ void MainWindow::performRedo() {
 
 void MainWindow::refreshAfterHistory() {
     hierarchy_->refresh();
+    materialPanel_->refresh();
     const auto selected = hierarchy_->selectedObject();
     if (context_.objects->exists(selected)) {
         inspector_->setObject(selected);

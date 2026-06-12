@@ -25,16 +25,24 @@ public:
 signals:
     /// Any material changed; viewports re-render with the new parameters.
     void materialsChanged();
+    /// One undoable edit step (captured against the selection baseline).
+    void materialCommitted(quint64 materialHandle,
+                           sky::rendering::MaterialDesc before,
+                           sky::rendering::MaterialDesc after);
+    void materialCreated(sky::rendering::MaterialDesc desc);
 
 private:
     void showSelected();
     void applyEdits();
     void pickColor(bool emissive);
+    void commitBaseline();
     void createMaterial();
     [[nodiscard]] QString selectedName() const;
 
     rendering::IMaterialLibrary& materials_;
     bool updating_ = false;
+    rendering::MaterialDesc baseline_;
+    rendering::MaterialHandle baselineHandle_;
     int newMaterialCounter_ = 0;
 
     QListWidget* list_ = nullptr;

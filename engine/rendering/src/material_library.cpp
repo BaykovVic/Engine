@@ -34,6 +34,16 @@ public:
         return true;
     }
 
+    bool removeMaterial(MaterialHandle material) override {
+        const auto it = materials_.find(material.value);
+        if (it == materials_.end()) {
+            return false;
+        }
+        byName_.erase(it->second.name);
+        materials_.erase(it);
+        return true;
+    }
+
     std::optional<MaterialHandle> findMaterial(const std::string& name) const override {
         const auto it = byName_.find(name);
         if (it == byName_.end()) {

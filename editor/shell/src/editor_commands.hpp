@@ -85,5 +85,9 @@ std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle comp
                                                  std::string fieldName,
                                                  component::FieldValue before,
                                                  component::FieldValue after);
+std::unique_ptr<IEditorCommand> makeMaterialEditCommand(
+    rendering::MaterialHandle material, rendering::MaterialDesc before,
+    rendering::MaterialDesc after);
+std::unique_ptr<IEditorCommand> makeMaterialCreateCommand(rendering::MaterialDesc desc);
 
 } // namespace sky::editor
