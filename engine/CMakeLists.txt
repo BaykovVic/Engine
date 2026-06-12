@@ -88,6 +88,7 @@ sky_add_module(sky_asset asset
     asset/src/asset_database.cpp
     asset/src/obj_importer.cpp
     asset/src/fbx_importer.cpp
+    asset/src/gltf_importer.cpp
     asset/src/png_decoder.cpp)
 target_link_libraries(sky_asset PRIVATE sky_third_party)
 

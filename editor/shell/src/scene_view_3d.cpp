@@ -8,6 +8,7 @@
 #include <functional>
 
 #include "sky/asset/fbx_importer.hpp"
+#include "sky/asset/gltf_importer.hpp"
 #include "sky/asset/png_decoder.hpp"
 #include "sky/terrain/terrain_integration.hpp"
 
@@ -229,9 +230,13 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
                 if (!meshPath.empty() && resourceFactory_ != nullptr) {
                     auto& uploaded = objMeshes_[meshPath];
                     if (!uploaded.isValid()) {
+                        const auto extension =
+                            std::filesystem::path(meshPath).extension();
                         const auto data =
-                            std::filesystem::path(meshPath).extension() == ".fbx"
+                            extension == ".fbx"
                                 ? asset::loadFbxMesh(*context_.fileSystem, meshPath)
+                            : (extension == ".gltf" || extension == ".glb")
+                                ? asset::loadGltfMesh(*context_.fileSystem, meshPath)
                                 : asset::loadObjMesh(*context_.fileSystem, meshPath);
                         if (data) {
                             uploaded = resourceFactory_->createMeshFromData(*data);

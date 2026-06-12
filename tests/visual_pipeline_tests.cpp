@@ -2,11 +2,13 @@
 // pipeline (lighting itself is verified through the GL backend rendering).
 
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <string>
 
 #include "sky/asset/asset_database.hpp"
 #include "sky/asset/fbx_importer.hpp"
+#include "sky/asset/gltf_importer.hpp"
 #include "sky/asset/obj_importer.hpp"
 #include "sky/asset/png_decoder.hpp"
 #include "sky/platform/platform_services.hpp"
@@ -132,6 +134,140 @@ void testFbxImport() {
     fileSystem->remove(testRoot());
 }
 
+namespace gltf_data {
+
+// One triangle: positions (3 x vec3 float) then u16 indices [0,1,2] + pad.
+// Layout: 36 bytes positions + 8 bytes indices = 44 bytes total.
+const unsigned char kTriangleBin[] = {
+    0, 0, 0, 0,   0, 0, 0, 0,    0, 0, 0, 0,   // (0,0,0)
+    0, 0, 128, 63, 0, 0, 0, 0,   0, 0, 0, 0,   // (1,0,0)
+    0, 0, 0, 0,   0, 0, 128, 63, 0, 0, 0, 0,   // (0,1,0)
+    0, 0, 1, 0, 2, 0, 0, 0,                    // indices u16 + pad
+};
+
+std::string base64Encode(const unsigned char* data, std::size_t size) {
+    static const char* alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    for (std::size_t i = 0; i < size; i += 3) {
+        const unsigned a = data[i];
+        const unsigned b = i + 1 < size ? data[i + 1] : 0;
+        const unsigned c = i + 2 < size ? data[i + 2] : 0;
+        out += alphabet[a >> 2];
+        out += alphabet[((a & 3) << 4) | (b >> 4)];
+        out += i + 1 < size ? alphabet[((b & 15) << 2) | (c >> 6)] : '=';
+        out += i + 2 < size ? alphabet[c & 63] : '=';
+    }
+    return out;
+}
+
+/// A .gltf with an embedded base64 buffer: one indexed triangle inside a
+/// node translated by (5, 0, 0).
+std::string triangleGltfJson() {
+    return std::string(R"({
+  "asset": {"version": "2.0"},
+  "scene": 0,
+  "scenes": [{"nodes": [0]}],
+  "nodes": [{"mesh": 0, "translation": [5, 0, 0]}],
+  "meshes": [{"primitives": [{
+      "attributes": {"POSITION": 0}, "indices": 1}]}],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+    {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+    {"buffer": 0, "byteOffset": 36, "byteLength": 6}],
+  "buffers": [{"byteLength": 44,
+    "uri": "data:application/octet-stream;base64,)" +
+           base64Encode(kTriangleBin, sizeof(kTriangleBin)) + R"("}]
+})");
+}
+
+/// The same document as a binary .glb container.
+std::vector<std::byte> triangleGlb() {
+    std::string json = R"({
+  "asset": {"version": "2.0"},
+  "scenes": [{"nodes": [0]}],
+  "nodes": [{"mesh": 0}],
+  "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+    {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+    {"buffer": 0, "byteOffset": 36, "byteLength": 6}],
+  "buffers": [{"byteLength": 44}]
+})";
+    while (json.size() % 4 != 0) {
+        json += ' ';
+    }
+    std::vector<std::byte> bin(sizeof(kTriangleBin));
+    std::memcpy(bin.data(), kTriangleBin, sizeof(kTriangleBin));
+    while (bin.size() % 4 != 0) {
+        bin.push_back(std::byte{0});
+    }
+
+    std::vector<std::byte> out;
+    const auto push32 = [&](std::uint32_t value) {
+        for (int i = 0; i < 4; ++i) {
+            out.push_back(std::byte((value >> (i * 8)) & 0xFF));
+        }
+    };
+    push32(0x46546C67); // magic "glTF"
+    push32(2);
+    push32(std::uint32_t(12 + 8 + json.size() + 8 + bin.size()));
+    push32(std::uint32_t(json.size()));
+    push32(0x4E4F534A); // "JSON"
+    for (const char c : json) {
+        out.push_back(std::byte(c));
+    }
+    push32(std::uint32_t(bin.size()));
+    push32(0x004E4942); // "BIN"
+    out.insert(out.end(), bin.begin(), bin.end());
+    return out;
+}
+
+} // namespace gltf_data
+
+void testGltfImport() {
+    const auto fileSystem = sky::platform::createStdFileSystem();
+
+    // Text .gltf with an embedded base64 buffer and a node translation.
+    writeText(*fileSystem, testRoot() / "tri.gltf", gltf_data::triangleGltfJson());
+    const auto mesh = sky::asset::loadGltfMesh(*fileSystem, testRoot() / "tri.gltf");
+    CHECK(mesh.has_value());
+    CHECK(mesh->size() == 3u * 8u);
+    // The node transform is baked: vertex 0 = (0,0,0) + (5,0,0).
+    CHECK((*mesh)[0] == 5.0f && (*mesh)[1] == 0.0f);
+    CHECK((*mesh)[8] == 6.0f);  // (1,0,0) translated
+    CHECK((*mesh)[17] == 1.0f); // (0,1,0) translated, y stays 1
+    // Computed flat normal points +Z.
+    CHECK(std::fabs((*mesh)[5] - 1.0f) < 1e-4f);
+
+    // The binary .glb container parses to the same triangle (no transform).
+    fileSystem->writeAll(testRoot() / "tri.glb", gltf_data::triangleGlb());
+    const auto glb = sky::asset::loadGltfMesh(*fileSystem, testRoot() / "tri.glb");
+    CHECK(glb.has_value());
+    CHECK(glb->size() == 3u * 8u);
+    CHECK((*glb)[8] == 1.0f); // untranslated (1,0,0)
+
+    // The importer pipeline accepts both spellings and rejects garbage.
+    const auto database = sky::asset::createAssetDatabase();
+    const auto importer = sky::asset::createGltfImporter(*fileSystem);
+    database->registerImporter(*importer);
+    CHECK(database->importAsset(testRoot() / "tri.gltf").has_value());
+    CHECK(database->importAsset(testRoot() / "tri.glb").has_value());
+    writeText(*fileSystem, testRoot() / "bad.gltf", "{not json");
+    CHECK(!database->importAsset(testRoot() / "bad.gltf").has_value());
+    writeText(*fileSystem, testRoot() / "bad.glb", "glTFgarbage");
+    CHECK(!sky::asset::loadGltfMesh(*fileSystem, testRoot() / "bad.glb").has_value());
+
+    // Uploads through the rendering contract.
+    const auto renderer = sky::rendering::createNullRenderer();
+    CHECK(renderer->createMeshFromData(*mesh).isValid());
+    fileSystem->remove(testRoot());
+}
+
 void testPngRoundTrip() {
     const auto fileSystem = sky::platform::createStdFileSystem();
 
@@ -209,6 +345,7 @@ int main() {
     testObjParsing();
     testUvParsing();
     testFbxImport();
+    testGltfImport();
     testPngRoundTrip();
     testMaterialLibrary();
     return sky::test::summary("visual_pipeline_tests");

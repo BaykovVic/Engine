@@ -94,9 +94,11 @@ EditorContext::EditorContext() {
     assets = asset::createAssetDatabase();
     objImporter = asset::createObjImporter(*fileSystem);
     fbxImporter = asset::createFbxImporter(*fileSystem);
+    gltfImporter = asset::createGltfImporter(*fileSystem);
     pngImporter = asset::createPngImporter(*fileSystem);
     assets->registerImporter(*objImporter);
     assets->registerImporter(*fbxImporter);
+    assets->registerImporter(*gltfImporter);
     assets->registerImporter(*pngImporter);
 
     // Starter material set; the Inspector edits assignments by name.
