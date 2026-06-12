@@ -128,8 +128,17 @@ if(SKY_BUILD_OPENGL_BACKEND)
 endif()
 
 if(SKY_BUILD_VULKAN_BACKEND)
-    sky_add_module(sky_rendering_vulkan rendering_vulkan)
-    target_link_libraries(sky_rendering_vulkan INTERFACE sky_rendering sky_platform)
+    find_package(Vulkan QUIET)
+    if(Vulkan_FOUND)
+        sky_add_module(sky_rendering_vulkan rendering_vulkan
+            rendering_vulkan/src/vulkan_renderer.cpp)
+        target_link_libraries(sky_rendering_vulkan PUBLIC sky_rendering sky_platform
+                              PRIVATE Vulkan::Vulkan)
+    else()
+        message(STATUS "Vulkan SDK not found - vulkan backend stays contract-only")
+        sky_add_module(sky_rendering_vulkan rendering_vulkan)
+        target_link_libraries(sky_rendering_vulkan INTERFACE sky_rendering sky_platform)
+    endif()
 endif()
 
 # Umbrella target for consumers of the whole native core.

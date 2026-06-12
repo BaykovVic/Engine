@@ -45,6 +45,15 @@ sky_add_test(visual_pipeline_tests)
 target_compile_definitions(visual_pipeline_tests PRIVATE
     SKY_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
+# The Vulkan backend renders offscreen; gated on the SDK being present.
+if(SKY_BUILD_VULKAN_BACKEND)
+    find_package(Vulkan QUIET)
+    if(Vulkan_FOUND)
+        sky_add_test(vulkan_tests)
+        target_link_libraries(vulkan_tests PRIVATE sky::sky_rendering_vulkan)
+    endif()
+endif()
+
 # Real .NET hosting: built and run only when the dotnet SDK is present.
 find_program(SKY_DOTNET dotnet)
 if(SKY_DOTNET)
