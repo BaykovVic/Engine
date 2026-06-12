@@ -20,6 +20,11 @@ public:
     /// Current size of a window as the server reports it.
     virtual bool windowSize(WindowHandle window, std::uint32_t& width,
                             std::uint32_t& height) = 0;
+    /// Native handles for graphics-backend surface creation (Display* as
+    /// an opaque pointer and the X11 Window id). The types stay opaque so
+    /// the platform boundary holds.
+    virtual bool nativeHandles(WindowHandle window, void** nativeDisplay,
+                               std::uint64_t* nativeWindow) = 0;
 };
 
 /// Returns nullptr when no X server is reachable (headless boxes fall back

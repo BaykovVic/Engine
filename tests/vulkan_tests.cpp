@@ -2,8 +2,12 @@
 // the test verifies the pixels: sky gradient, a lit cube, an uploaded mesh.
 // Same command stream contract as every other backend.
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
 #include <cmath>
 
+#include "sky/platform/x11_window_system.hpp"
 #include "sky/rendering/renderer_registry.hpp"
 #include "sky/rendering_vulkan/vulkan_backend.hpp"
 #include "sky_test.hpp"
@@ -171,9 +175,68 @@ void testVulkanResourcesAndRegistry() {
 
 } // namespace
 
+void testSwapchainPresentation() {
+    // The standalone-runtime chain: a native platform window plus a Vulkan
+    // swapchain presenting into it.
+    auto windows = sky::platform::createX11WindowSystem();
+    if (windows == nullptr) {
+        std::puts("vulkan_tests: no X display, skipping presentation case");
+        return;
+    }
+    const auto window = windows->createWindow({"Sky Vulkan", kWidth, kHeight, false});
+    CHECK(window.isValid());
+    CHECK(windows->pumpEvents());
+
+    sky::rendering_vulkan::VulkanPresentTarget target;
+    CHECK(windows->nativeHandles(window, &target.x11Display, &target.x11Window));
+
+    const auto renderer = sky::rendering_vulkan::createVulkanRendererForWindow(
+        target, kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+    // Presentation mode has no readback path by design.
+    CHECK(renderer->readbackFrame().empty());
+
+    // Render a saturated red frame and present it a few times.
+    std::vector<sky::rendering::RenderCommand> commands(4);
+    commands[0].type = sky::rendering::RenderCommandType::BeginFrame;
+    commands[1].type = sky::rendering::RenderCommandType::SetCamera;
+    commands[1].transform.position = {0.0f, 0.0f, 2.0f};
+    commands[2].type = sky::rendering::RenderCommandType::DrawMesh;
+    commands[2].transform.scale = {3.0f, 3.0f, 3.0f};
+    commands[2].emissive = {1.0f, 0.1f, 0.1f}; // unlit bright red
+    commands[3].type = sky::rendering::RenderCommandType::EndFrame;
+    for (int frame = 0; frame < 3; ++frame) {
+        renderer->submit(commands);
+        renderer->renderFrame();
+        windows->pumpEvents();
+    }
+    CHECK(renderer->presentedFrames() == 3);
+
+    // The pixels really reached the window: grab them from the X server.
+    auto* display = static_cast<Display*>(target.x11Display);
+    XSync(display, False);
+    XImage* image =
+        XGetImage(display, static_cast<Window>(target.x11Window), kWidth / 2,
+                  kHeight / 2, 1, 1, AllPlanes, ZPixmap);
+    CHECK(image != nullptr);
+    if (image != nullptr) {
+        const unsigned long pixel = XGetPixel(image, 0, 0);
+        const auto red = (pixel & image->red_mask) >> 16;
+        const auto blue = pixel & image->blue_mask;
+        CHECK(red > 150);
+        CHECK(red > blue * 3);
+        XDestroyImage(image);
+    }
+    windows->destroyWindow(window);
+}
+
 int main() {
     testVulkanFrame();
     testVulkanTexturing();
     testVulkanResourcesAndRegistry();
+    testSwapchainPresentation();
     return sky::test::summary("vulkan_tests");
 }

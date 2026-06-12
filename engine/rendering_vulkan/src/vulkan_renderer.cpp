@@ -9,6 +9,9 @@
 #include <optional>
 #include <unordered_map>
 
+#ifdef SKY_HAS_X11
+#define VK_USE_PLATFORM_XLIB_KHR
+#endif
 #include <vulkan/vulkan.h>
 
 #include "../shaders/mesh.frag.spv.h"
@@ -140,8 +143,14 @@ struct GpuTexture {
 
 class VulkanRendererImpl final : public VulkanRenderer {
 public:
-    VulkanRendererImpl(std::uint32_t width, std::uint32_t height)
+    VulkanRendererImpl(std::uint32_t width, std::uint32_t height,
+                       const VulkanPresentTarget* target)
         : width_(width), height_(height) {
+        if (target != nullptr) {
+            presentTarget_ = *target;
+            presentMode_ = presentTarget_.x11Display != nullptr &&
+                           presentTarget_.x11Window != 0;
+        }
         ready_ = initInstanceAndDevice() && initTarget() && initPipeline() &&
                  initFrameResources();
     }
@@ -166,6 +175,15 @@ public:
             if (setLayout_) vkDestroyDescriptorSetLayout(device_, setLayout_, nullptr);
             if (pipeline_) vkDestroyPipeline(device_, pipeline_, nullptr);
             if (pipelineLayout_) vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+            for (auto framebuffer : swapFramebuffers_) {
+                vkDestroyFramebuffer(device_, framebuffer, nullptr);
+            }
+            for (auto view : swapViews_) {
+                vkDestroyImageView(device_, view, nullptr);
+            }
+            if (imageAvailable_) vkDestroySemaphore(device_, imageAvailable_, nullptr);
+            if (renderFinished_) vkDestroySemaphore(device_, renderFinished_, nullptr);
+            if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
             if (framebuffer_) vkDestroyFramebuffer(device_, framebuffer_, nullptr);
             if (renderPass_) vkDestroyRenderPass(device_, renderPass_, nullptr);
             if (colorView_) vkDestroyImageView(device_, colorView_, nullptr);
@@ -177,6 +195,9 @@ public:
             if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
             vkDestroyDevice(device_, nullptr);
         }
+        if (surface_ != VK_NULL_HANDLE) {
+            vkDestroySurfaceKHR(instance_, surface_, nullptr);
+        }
         if (instance_ != VK_NULL_HANDLE) {
             vkDestroyInstance(instance_, nullptr);
         }
@@ -185,13 +206,14 @@ public:
     bool ready() const override { return ready_; }
     std::uint32_t frameWidth() const override { return width_; }
     std::uint32_t frameHeight() const override { return height_; }
+    std::uint64_t presentedFrames() const override { return presentedFrames_; }
 
     // IRenderer
 
     std::string backendName() const override { return "vulkan"; }
 
     void attachSurface(rendering::IRenderSurface& surface) override {
-        surface_ = &surface;
+        renderSurface_ = &surface;
     }
 
     void submit(std::span<const rendering::RenderCommand> commands) override {
@@ -257,6 +279,17 @@ public:
         frame.counts[0] = static_cast<float>(lightCount);
         std::memcpy(uboMapped_, &frame, sizeof(frame));
 
+        // Acquire the presentation image when a swapchain drives the frame.
+        std::uint32_t imageIndex = 0;
+        if (presentMode_) {
+            if (vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
+                                      imageAvailable_, VK_NULL_HANDLE,
+                                      &imageIndex) != VK_SUCCESS) {
+                pending_.clear();
+                return;
+            }
+        }
+
         // Record and submit the frame.
         vkResetCommandBuffer(commandBuffer_, 0);
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -267,7 +300,8 @@ public:
         clears[1].depthStencil = {1.0f, 0};
         VkRenderPassBeginInfo passBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         passBegin.renderPass = renderPass_;
-        passBegin.framebuffer = framebuffer_;
+        passBegin.framebuffer =
+            presentMode_ ? swapFramebuffers_[imageIndex] : framebuffer_;
         passBegin.renderArea = {{0, 0}, {width_, height_}};
         passBegin.clearValueCount = 2;
         passBegin.pClearValues = clears;
@@ -343,12 +377,33 @@ public:
         VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer_;
+        const VkPipelineStageFlags waitStage =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        if (presentMode_) {
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = &imageAvailable_;
+            submitInfo.pWaitDstStageMask = &waitStage;
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = &renderFinished_;
+        }
         vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+
+        if (presentMode_) {
+            VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = &renderFinished_;
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = &swapchain_;
+            presentInfo.pImageIndices = &imageIndex;
+            if (vkQueuePresentKHR(queue_, &presentInfo) == VK_SUCCESS) {
+                ++presentedFrames_;
+            }
+        }
         vkQueueWaitIdle(queue_);
 
         pending_.clear();
-        if (surface_ != nullptr) {
-            surface_->present();
+        if (renderSurface_ != nullptr) {
+            renderSurface_->present();
         }
     }
 
@@ -409,7 +464,7 @@ public:
     // VulkanRenderer
 
     std::vector<std::uint8_t> readbackFrame() override {
-        if (!ready_) {
+        if (!ready_ || presentMode_) {
             return {};
         }
         // Copy the color image into the host-visible readback buffer.
@@ -441,9 +496,30 @@ private:
         app.apiVersion = VK_API_VERSION_1_1;
         VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         instanceInfo.pApplicationInfo = &app;
+        const char* instanceExtensions[] = {"VK_KHR_surface", "VK_KHR_xlib_surface"};
+        if (presentMode_) {
+            instanceInfo.enabledExtensionCount = 2;
+            instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+        }
         if (vkCreateInstance(&instanceInfo, nullptr, &instance_) != VK_SUCCESS) {
             return false;
         }
+#ifdef SKY_HAS_X11
+        if (presentMode_) {
+            VkXlibSurfaceCreateInfoKHR surfaceInfo{
+                VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR};
+            surfaceInfo.dpy = static_cast<Display*>(presentTarget_.x11Display);
+            surfaceInfo.window = static_cast<Window>(presentTarget_.x11Window);
+            if (vkCreateXlibSurfaceKHR(instance_, &surfaceInfo, nullptr, &surface_) !=
+                VK_SUCCESS) {
+                return false;
+            }
+        }
+#else
+        if (presentMode_) {
+            return false; // built without X11 surface support
+        }
+#endif
 
         std::uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -461,10 +537,19 @@ private:
                                                  families.data());
         queueFamily_ = UINT32_MAX;
         for (std::uint32_t i = 0; i < familyCount; ++i) {
-            if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                queueFamily_ = i;
-                break;
+            if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+                continue;
             }
+            if (presentMode_) {
+                VkBool32 presentSupport = VK_FALSE;
+                vkGetPhysicalDeviceSurfaceSupportKHR(physical_, i, surface_,
+                                                     &presentSupport);
+                if (presentSupport != VK_TRUE) {
+                    continue;
+                }
+            }
+            queueFamily_ = i;
+            break;
         }
         if (queueFamily_ == UINT32_MAX) {
             return false;
@@ -478,6 +563,11 @@ private:
         VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         deviceInfo.queueCreateInfoCount = 1;
         deviceInfo.pQueueCreateInfos = &queueInfo;
+        const char* deviceExtensions[] = {"VK_KHR_swapchain"};
+        if (presentMode_) {
+            deviceInfo.enabledExtensionCount = 1;
+            deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+        }
         if (vkCreateDevice(physical_, &deviceInfo, nullptr, &device_) != VK_SUCCESS) {
             return false;
         }
@@ -548,7 +638,124 @@ private:
         return vkCreateImageView(device_, &viewInfo, nullptr, &view) == VK_SUCCESS;
     }
 
+    bool initSwapchainTarget() {
+        VkSurfaceCapabilitiesKHR capabilities;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &capabilities);
+        std::uint32_t formatCount = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &formatCount,
+                                             nullptr);
+        std::vector<VkSurfaceFormatKHR> formats(formatCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &formatCount,
+                                             formats.data());
+        swapFormat_ = formats.empty() ? VK_FORMAT_B8G8R8A8_UNORM : formats[0].format;
+        for (const auto& candidate : formats) {
+            if (candidate.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                candidate.format == VK_FORMAT_R8G8B8A8_UNORM) {
+                swapFormat_ = candidate.format;
+                break;
+            }
+        }
+        if (capabilities.currentExtent.width != UINT32_MAX) {
+            width_ = capabilities.currentExtent.width;
+            height_ = capabilities.currentExtent.height;
+        }
+
+        VkSwapchainCreateInfoKHR swapInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
+        swapInfo.surface = surface_;
+        swapInfo.minImageCount = capabilities.minImageCount;
+        swapInfo.imageFormat = swapFormat_;
+        swapInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        swapInfo.imageExtent = {width_, height_};
+        swapInfo.imageArrayLayers = 1;
+        swapInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        swapInfo.preTransform = capabilities.currentTransform;
+        swapInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // always available
+        swapInfo.clipped = VK_TRUE;
+        if (vkCreateSwapchainKHR(device_, &swapInfo, nullptr, &swapchain_) !=
+            VK_SUCCESS) {
+            return false;
+        }
+        std::uint32_t imageCount = 0;
+        vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, nullptr);
+        swapImages_.resize(imageCount);
+        vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, swapImages_.data());
+
+        if (!createImage(kDepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                         VK_IMAGE_ASPECT_DEPTH_BIT, depthImage_, depthMemory_,
+                         depthView_)) {
+            return false;
+        }
+
+        // Render pass presenting at the end of every frame.
+        VkAttachmentDescription attachments[2]{};
+        attachments[0].format = swapFormat_;
+        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        attachments[1].format = kDepthFormat;
+        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkAttachmentReference depthRef{1,
+                                       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorRef;
+        subpass.pDepthStencilAttachment = &depthRef;
+        VkRenderPassCreateInfo passInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+        passInfo.attachmentCount = 2;
+        passInfo.pAttachments = attachments;
+        passInfo.subpassCount = 1;
+        passInfo.pSubpasses = &subpass;
+        if (vkCreateRenderPass(device_, &passInfo, nullptr, &renderPass_) !=
+            VK_SUCCESS) {
+            return false;
+        }
+
+        swapViews_.resize(imageCount);
+        swapFramebuffers_.resize(imageCount);
+        for (std::uint32_t i = 0; i < imageCount; ++i) {
+            VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+            viewInfo.image = swapImages_[i];
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = swapFormat_;
+            viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            if (vkCreateImageView(device_, &viewInfo, nullptr, &swapViews_[i]) !=
+                VK_SUCCESS) {
+                return false;
+            }
+            const VkImageView views[2] = {swapViews_[i], depthView_};
+            VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+            fbInfo.renderPass = renderPass_;
+            fbInfo.attachmentCount = 2;
+            fbInfo.pAttachments = views;
+            fbInfo.width = width_;
+            fbInfo.height = height_;
+            fbInfo.layers = 1;
+            if (vkCreateFramebuffer(device_, &fbInfo, nullptr,
+                                    &swapFramebuffers_[i]) != VK_SUCCESS) {
+                return false;
+            }
+        }
+
+        VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        return vkCreateSemaphore(device_, &semaphoreInfo, nullptr,
+                                 &imageAvailable_) == VK_SUCCESS &&
+               vkCreateSemaphore(device_, &semaphoreInfo, nullptr,
+                                 &renderFinished_) == VK_SUCCESS;
+    }
+
     bool initTarget() {
+        if (presentMode_) {
+            return initSwapchainTarget();
+        }
         if (!createImage(kColorFormat,
                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -1004,6 +1211,18 @@ private:
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
     VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
 
+    bool presentMode_ = false;
+    VulkanPresentTarget presentTarget_;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkFormat swapFormat_ = VK_FORMAT_B8G8R8A8_UNORM;
+    std::vector<VkImage> swapImages_;
+    std::vector<VkImageView> swapViews_;
+    std::vector<VkFramebuffer> swapFramebuffers_;
+    VkSemaphore imageAvailable_ = VK_NULL_HANDLE;
+    VkSemaphore renderFinished_ = VK_NULL_HANDLE;
+    std::uint64_t presentedFrames_ = 0;
+
     VkImage colorImage_ = VK_NULL_HANDLE;
     VkDeviceMemory colorMemory_ = VK_NULL_HANDLE;
     VkImageView colorView_ = VK_NULL_HANDLE;
@@ -1029,7 +1248,7 @@ private:
     void* uboMapped_ = nullptr;
     void* readbackMapped_ = nullptr;
 
-    rendering::IRenderSurface* surface_ = nullptr;
+    rendering::IRenderSurface* renderSurface_ = nullptr;
     std::vector<rendering::RenderCommand> pending_;
     std::uint64_t nextResource_ = 1;
     std::unordered_map<std::uint64_t, GpuBuffer> meshes_;
@@ -1039,7 +1258,13 @@ private:
 
 std::unique_ptr<VulkanRenderer> createVulkanRenderer(std::uint32_t width,
                                                      std::uint32_t height) {
-    auto renderer = std::make_unique<VulkanRendererImpl>(width, height);
+    auto renderer = std::make_unique<VulkanRendererImpl>(width, height, nullptr);
+    return renderer->ready() ? std::move(renderer) : nullptr;
+}
+
+std::unique_ptr<VulkanRenderer> createVulkanRendererForWindow(
+    const VulkanPresentTarget& target, std::uint32_t width, std::uint32_t height) {
+    auto renderer = std::make_unique<VulkanRendererImpl>(width, height, &target);
     return renderer->ready() ? std::move(renderer) : nullptr;
 }
 

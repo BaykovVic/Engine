@@ -111,6 +111,17 @@ public:
 
     // X11WindowSystem
 
+    bool nativeHandles(WindowHandle window, void** nativeDisplay,
+                       std::uint64_t* nativeWindow) override {
+        const auto it = windows_.find(window.value);
+        if (it == windows_.end()) {
+            return false;
+        }
+        *nativeDisplay = display_;
+        *nativeWindow = static_cast<std::uint64_t>(it->second);
+        return true;
+    }
+
     bool windowSize(WindowHandle window, std::uint32_t& width,
                     std::uint32_t& height) override {
         const auto it = windows_.find(window.value);
