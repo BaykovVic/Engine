@@ -36,7 +36,7 @@ struct PushBlock {
     float model[16];
     float baseColor[4]; // w = skyMode
     float emissive[4];  // w = roughness
-    float params[4];    // x = metallic
+    float params[4];    // x = metallic, y = hasTexture
 };
 
 // --- Matrix helpers (column-major, Vulkan clip space) ------------------------
@@ -131,6 +131,13 @@ struct GpuBuffer {
     std::uint32_t vertexCount = 0;
 };
 
+struct GpuTexture {
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+};
+
 class VulkanRendererImpl final : public VulkanRenderer {
 public:
     VulkanRendererImpl(std::uint32_t width, std::uint32_t height)
@@ -145,6 +152,13 @@ public:
             for (auto& [id, mesh] : meshes_) {
                 destroyBuffer(mesh);
             }
+            for (auto& [id, texture] : textures_) {
+                destroyTexture(texture);
+            }
+            destroyTexture(whiteTexture_);
+            if (sampler_) vkDestroySampler(device_, sampler_, nullptr);
+            if (textureSetLayout_)
+                vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
             destroyBuffer(cube_);
             destroyBuffer(ubo_);
             destroyBuffer(readback_);
@@ -286,6 +300,10 @@ public:
                     push.emissive[0] = command.emissive.x;
                     push.emissive[1] = command.emissive.y;
                     push.emissive[2] = command.emissive.z;
+                    vkCmdBindDescriptorSets(commandBuffer_,
+                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            pipelineLayout_, 1, 1,
+                                            &whiteTexture_.set, 0, nullptr);
                     drawBuffer(cube_, push);
                     break;
                 }
@@ -301,6 +319,15 @@ public:
                     push.emissive[2] = command.emissive.z;
                     push.emissive[3] = command.roughness;
                     push.params[0] = command.metallic;
+                    const auto textureIt = textures_.find(command.texture.value);
+                    const auto& texture =
+                        textureIt != textures_.end() ? textureIt->second
+                                                     : whiteTexture_;
+                    push.params[1] = textureIt != textures_.end() ? 1.0f : 0.0f;
+                    vkCmdBindDescriptorSets(commandBuffer_,
+                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            pipelineLayout_, 1, 1, &texture.set, 0,
+                                            nullptr);
                     const auto it = meshes_.find(command.resource.value);
                     drawBuffer(it != meshes_.end() ? it->second : cube_, push);
                     break;
@@ -353,21 +380,29 @@ public:
     rendering::RenderResourceHandle createTextureFromData(
         std::uint32_t width, std::uint32_t height,
         std::span<const std::uint8_t> rgbaPixels) override {
-        // Texture sampling is the next Vulkan increment; validated and
-        // accounted for so material code stays backend-agnostic.
-        if (width == 0 || height == 0 ||
+        if (!ready_ || width == 0 || height == 0 ||
             rgbaPixels.size() != std::size_t(width) * height * 4) {
             return rendering::RenderResourceHandle::invalid();
         }
-        return rendering::RenderResourceHandle{nextResource_++};
+        auto texture = uploadTexture(width, height, rgbaPixels.data());
+        if (texture.set == VK_NULL_HANDLE) {
+            return rendering::RenderResourceHandle::invalid();
+        }
+        const rendering::RenderResourceHandle handle{nextResource_++};
+        textures_.emplace(handle.value, texture);
+        return handle;
     }
 
     void destroy(rendering::RenderResourceHandle resource) override {
-        const auto it = meshes_.find(resource.value);
-        if (it != meshes_.end()) {
+        if (const auto it = meshes_.find(resource.value); it != meshes_.end()) {
             vkDeviceWaitIdle(device_);
             destroyBuffer(it->second);
             meshes_.erase(it);
+        }
+        if (const auto it = textures_.find(resource.value); it != textures_.end()) {
+            vkDeviceWaitIdle(device_);
+            destroyTexture(it->second);
+            textures_.erase(it);
         }
     }
 
@@ -596,14 +631,29 @@ private:
             return false;
         }
 
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = 0;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutCreateInfo samplerSetInfo{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        samplerSetInfo.bindingCount = 1;
+        samplerSetInfo.pBindings = &samplerBinding;
+        if (vkCreateDescriptorSetLayout(device_, &samplerSetInfo, nullptr,
+                                        &textureSetLayout_) != VK_SUCCESS) {
+            return false;
+        }
+
         VkPushConstantRange pushRange{};
         pushRange.stageFlags =
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.size = sizeof(PushBlock);
+        const VkDescriptorSetLayout setLayouts[2] = {setLayout_, textureSetLayout_};
         VkPipelineLayoutCreateInfo layoutInfo{
             VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        layoutInfo.setLayoutCount = 1;
-        layoutInfo.pSetLayouts = &setLayout_;
+        layoutInfo.setLayoutCount = 2;
+        layoutInfo.pSetLayouts = setLayouts;
         layoutInfo.pushConstantRangeCount = 1;
         layoutInfo.pPushConstantRanges = &pushRange;
         if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &pipelineLayout_) !=
@@ -755,12 +805,15 @@ private:
             return false;
         }
 
-        VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1};
+        const VkDescriptorPoolSize poolSizes[2] = {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256},
+        };
         VkDescriptorPoolCreateInfo poolInfo{
             VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = 257;
+        poolInfo.poolSizeCount = 2;
+        poolInfo.pPoolSizes = poolSizes;
         if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) !=
             VK_SUCCESS) {
             return false;
@@ -781,7 +834,143 @@ private:
         write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         write.pBufferInfo = &bufferInfo;
         vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
-        return true;
+
+        VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        if (vkCreateSampler(device_, &samplerInfo, nullptr, &sampler_) != VK_SUCCESS) {
+            return false;
+        }
+
+        // Untextured draws bind a 1x1 white texture so the pipeline layout
+        // is always complete.
+        const std::uint8_t white[4] = {255, 255, 255, 255};
+        whiteTexture_ = uploadTexture(1, 1, white);
+        return whiteTexture_.set != VK_NULL_HANDLE;
+    }
+
+    GpuTexture uploadTexture(std::uint32_t width, std::uint32_t height,
+                             const std::uint8_t* rgbaPixels) {
+        GpuTexture texture;
+        const VkDeviceSize size = VkDeviceSize(width) * height * 4;
+
+        GpuBuffer staging;
+        void* mapped = nullptr;
+        if (!createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, &mapped)) {
+            return texture;
+        }
+        std::memcpy(mapped, rgbaPixels, size);
+        vkUnmapMemory(device_, staging.memory);
+
+        VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = kColorFormat;
+        imageInfo.extent = {width, height, 1};
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.usage =
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (vkCreateImage(device_, &imageInfo, nullptr, &texture.image) != VK_SUCCESS) {
+            destroyBuffer(staging);
+            return texture;
+        }
+        VkMemoryRequirements requirements;
+        vkGetImageMemoryRequirements(device_, texture.image, &requirements);
+        const auto type = findMemoryType(requirements.memoryTypeBits,
+                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        alloc.allocationSize = requirements.size;
+        alloc.memoryTypeIndex = type.value_or(0);
+        if (!type ||
+            vkAllocateMemory(device_, &alloc, nullptr, &texture.memory) != VK_SUCCESS ||
+            vkBindImageMemory(device_, texture.image, texture.memory, 0) !=
+                VK_SUCCESS) {
+            destroyBuffer(staging);
+            destroyTexture(texture);
+            return {};
+        }
+
+        // One-shot copy with the two layout transitions around it.
+        vkResetCommandBuffer(commandBuffer_, 0);
+        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        vkBeginCommandBuffer(commandBuffer_, &begin);
+
+        VkImageMemoryBarrier toDst{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        toDst.srcAccessMask = 0;
+        toDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        toDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toDst.image = texture.image;
+        toDst.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                             1, &toDst);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {width, height, 1};
+        vkCmdCopyBufferToImage(commandBuffer_, staging.buffer, texture.image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        VkImageMemoryBarrier toRead = toDst;
+        toRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                             nullptr, 1, &toRead);
+
+        vkEndCommandBuffer(commandBuffer_);
+        VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer_;
+        vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(queue_);
+        destroyBuffer(staging);
+
+        VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        viewInfo.image = texture.image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = kColorFormat;
+        viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(device_, &viewInfo, nullptr, &texture.view) !=
+            VK_SUCCESS) {
+            destroyTexture(texture);
+            return {};
+        }
+
+        VkDescriptorSetAllocateInfo setAlloc{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        setAlloc.descriptorPool = descriptorPool_;
+        setAlloc.descriptorSetCount = 1;
+        setAlloc.pSetLayouts = &textureSetLayout_;
+        if (vkAllocateDescriptorSets(device_, &setAlloc, &texture.set) != VK_SUCCESS) {
+            destroyTexture(texture);
+            return {};
+        }
+        VkDescriptorImageInfo imageDescriptor{
+            sampler_, texture.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet samplerWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        samplerWrite.dstSet = texture.set;
+        samplerWrite.descriptorCount = 1;
+        samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerWrite.pImageInfo = &imageDescriptor;
+        vkUpdateDescriptorSets(device_, 1, &samplerWrite, 0, nullptr);
+        return texture;
+    }
+
+    void destroyTexture(GpuTexture& texture) {
+        if (texture.view) vkDestroyImageView(device_, texture.view, nullptr);
+        if (texture.image) vkDestroyImage(device_, texture.image, nullptr);
+        if (texture.memory) vkFreeMemory(device_, texture.memory, nullptr);
+        texture = {};
     }
 
     void drawBuffer(const GpuBuffer& mesh, const PushBlock& push) {
@@ -833,6 +1022,10 @@ private:
     GpuBuffer cube_;
     GpuBuffer ubo_;
     GpuBuffer readback_;
+    VkSampler sampler_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
+    GpuTexture whiteTexture_;
+    std::unordered_map<std::uint64_t, GpuTexture> textures_;
     void* uboMapped_ = nullptr;
     void* readbackMapped_ = nullptr;
 

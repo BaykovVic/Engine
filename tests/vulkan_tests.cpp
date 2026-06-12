@@ -102,6 +102,45 @@ void testVulkanFrame() {
     CHECK(centre2.b > centre2.r); // the cube is gone, sky remains
 }
 
+void testVulkanTexturing() {
+    const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+
+    // 2x2 vertical stripes: left texel column red, right column blue.
+    const std::uint8_t stripes[16] = {
+        255, 0, 0, 255,  0, 0, 255, 255, // row 0: red | blue
+        255, 0, 0, 255,  0, 0, 255, 255, // row 1: red | blue
+    };
+    const auto texture = renderer->createTextureFromData(2, 2, stripes);
+    CHECK(texture.isValid());
+
+    std::vector<sky::rendering::RenderCommand> commands(4);
+    commands[0].type = sky::rendering::RenderCommandType::BeginFrame;
+    commands[1].type = sky::rendering::RenderCommandType::SetCamera;
+    commands[1].transform.position = {0.0f, 0.0f, 2.2f};
+    commands[1].fovDegrees = 50.0f;
+    // White base colour: the ambient term exposes the texture's own
+    // colours (albedo = base * texel).
+    commands[2].type = sky::rendering::RenderCommandType::DrawMesh;
+    commands[2].transform.scale = {2.0f, 2.0f, 2.0f};
+    commands[2].color = {1.0f, 1.0f, 1.0f};
+    commands[2].texture = texture;
+    commands[3].type = sky::rendering::RenderCommandType::EndFrame;
+    renderer->submit(commands);
+    renderer->renderFrame();
+
+    // Without lights only ambient remains — instead verify the dominant
+    // channel flips between the left and right halves of the cube face.
+    const auto pixels = renderer->readbackFrame();
+    const auto left = pixelAt(pixels, kWidth / 2 - 24, kHeight / 2);
+    const auto right = pixelAt(pixels, kWidth / 2 + 24, kHeight / 2);
+    CHECK(left.r > left.b);
+    CHECK(right.b > right.r);
+}
+
 void testVulkanResourcesAndRegistry() {
     const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
     CHECK(renderer != nullptr);
@@ -134,6 +173,7 @@ void testVulkanResourcesAndRegistry() {
 
 int main() {
     testVulkanFrame();
+    testVulkanTexturing();
     testVulkanResourcesAndRegistry();
     return sky::test::summary("vulkan_tests");
 }

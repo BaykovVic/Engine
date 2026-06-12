@@ -14,11 +14,13 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 counts;
 } frame;
 
+layout(set = 1, binding = 0) uniform sampler2D uAlbedo;
+
 layout(push_constant) uniform Push {
     mat4 model;
     vec4 baseColor; // w = skyMode
     vec4 emissive;  // w = roughness
-    vec4 params;    // x = metallic
+    vec4 params;    // x = metallic, y = hasTexture
 } pc;
 
 layout(location = 0) out vec4 fragColor;
@@ -48,6 +50,9 @@ void main() {
     vec3 n = normalize(vNormal);
     vec3 v = normalize(frame.cameraPos.xyz - vWorldPos);
     vec3 albedo = pc.baseColor.rgb;
+    if (pc.params.y > 0.5) {
+        albedo *= texture(uAlbedo, vUv).rgb;
+    }
     vec3 result = albedo * 0.22;
     for (int i = 0; i < int(frame.counts.x); ++i) {
         vec3 l;
