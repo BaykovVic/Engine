@@ -45,6 +45,13 @@ sky_add_test(visual_pipeline_tests)
 target_compile_definitions(visual_pipeline_tests PRIVATE
     SKY_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
+# Native X11 windowing: needs an X server at runtime (Xvfb in CI).
+find_package(X11 QUIET)
+if(X11_FOUND)
+    sky_add_test(x11_window_tests)
+    target_link_libraries(x11_window_tests PRIVATE X11::X11)
+endif()
+
 # The Vulkan backend renders offscreen; gated on the SDK being present.
 if(SKY_BUILD_VULKAN_BACKEND)
     find_package(Vulkan QUIET)

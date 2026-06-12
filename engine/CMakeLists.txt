@@ -24,7 +24,16 @@ sky_add_module(sky_platform platform
     platform/src/std_threading.cpp
     platform/src/headless_window_system.cpp
     platform/src/virtual_file_system.cpp
-    platform/src/pak_archive.cpp)
+    platform/src/pak_archive.cpp
+    platform/src/x11_window_system.cpp)
+
+# Native windowing: X11 on Linux when available; the headless system always
+# remains as the fallback behind the same contracts.
+find_package(X11 QUIET)
+if(X11_FOUND)
+    target_compile_definitions(sky_platform PRIVATE SKY_HAS_X11)
+    target_link_libraries(sky_platform PRIVATE X11::X11)
+endif()
 
 sky_add_module(sky_core core
     core/src/console_logger.cpp
