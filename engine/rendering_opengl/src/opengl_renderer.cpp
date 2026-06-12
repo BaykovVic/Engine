@@ -55,6 +55,16 @@ constexpr GLenum GL_REPEAT = 0x2901;
 constexpr GLenum GL_TEXTURE0 = 0x84C0;
 constexpr GLenum GL_LEQUAL = 0x0203;
 constexpr GLenum GL_LESS = 0x0201;
+constexpr GLenum GL_FRAMEBUFFER = 0x8D40;
+constexpr GLenum GL_DEPTH_ATTACHMENT = 0x8D00;
+constexpr GLenum GL_DEPTH_COMPONENT = 0x1902;
+constexpr GLenum GL_DEPTH_COMPONENT24 = 0x81A6;
+constexpr GLenum GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
+constexpr GLenum GL_FRAMEBUFFER_BINDING = 0x8CA6;
+constexpr GLenum GL_TEXTURE1 = 0x84C1;
+constexpr GLenum GL_CLAMP_TO_EDGE = 0x812F;
+constexpr GLenum GL_NEAREST = 0x2600;
+constexpr GLenum GL_NONE_MODE = 0;
 
 struct GlApi {
     void (*Enable)(GLenum) = nullptr;
@@ -100,6 +110,13 @@ struct GlApi {
     void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
     void (*DepthMask)(GLboolean) = nullptr;
     void (*DepthFunc)(GLenum) = nullptr;
+    void (*GenFramebuffers)(GLsizei, GLuint*) = nullptr;
+    void (*BindFramebuffer)(GLenum, GLuint) = nullptr;
+    void (*FramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint) = nullptr;
+    GLenum (*CheckFramebufferStatus)(GLenum) = nullptr;
+    void (*DrawBuffer)(GLenum) = nullptr;
+    void (*ReadBuffer)(GLenum) = nullptr;
+    void (*GetIntegerv)(GLenum, GLint*) = nullptr;
 
     bool load(const GlLoader& loader) {
         const auto resolve = [&](auto& slot, const char* name) {
@@ -145,7 +162,14 @@ struct GlApi {
                resolve(ActiveTexture, "glActiveTexture") &&
                resolve(DeleteTextures, "glDeleteTextures") &&
                resolve(DepthMask, "glDepthMask") &&
-               resolve(DepthFunc, "glDepthFunc");
+               resolve(DepthFunc, "glDepthFunc") &&
+               resolve(GenFramebuffers, "glGenFramebuffers") &&
+               resolve(BindFramebuffer, "glBindFramebuffer") &&
+               resolve(FramebufferTexture2D, "glFramebufferTexture2D") &&
+               resolve(CheckFramebufferStatus, "glCheckFramebufferStatus") &&
+               resolve(DrawBuffer, "glDrawBuffer") &&
+               resolve(ReadBuffer, "glReadBuffer") &&
+               resolve(GetIntegerv, "glGetIntegerv");
     }
 };
 
@@ -209,6 +233,40 @@ Mat4 perspective(float fovDegrees, float aspect, float zNear, float zFar) {
     return r;
 }
 
+Mat4 orthographic(float halfExtent, float zNear, float zFar) {
+    Mat4 r;
+    r.m[0] = 1.0f / halfExtent;
+    r.m[5] = 1.0f / halfExtent;
+    r.m[10] = -2.0f / (zFar - zNear);
+    r.m[14] = -(zFar + zNear) / (zFar - zNear);
+    r.m[15] = 1.0f;
+    return r;
+}
+
+Mat4 lookAt(const core::Vec3& eye, const core::Vec3& target, const core::Vec3& up) {
+    const auto normalize = [](core::Vec3 v) {
+        const float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        return length > 1e-6f ? core::Vec3{v.x / length, v.y / length, v.z / length}
+                              : core::Vec3{0.0f, 0.0f, 1.0f};
+    };
+    const auto cross = [](const core::Vec3& a, const core::Vec3& b) {
+        return core::Vec3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
+                          a.x * b.y - a.y * b.x};
+    };
+    const auto f = normalize({target.x - eye.x, target.y - eye.y, target.z - eye.z});
+    const auto r = normalize(cross(f, up));
+    const auto u = cross(r, f);
+
+    Mat4 view = Mat4::identity();
+    view.m[0] = r.x; view.m[4] = r.y; view.m[8] = r.z;
+    view.m[1] = u.x; view.m[5] = u.y; view.m[9] = u.z;
+    view.m[2] = -f.x; view.m[6] = -f.y; view.m[10] = -f.z;
+    view.m[12] = -(r.x * eye.x + r.y * eye.y + r.z * eye.z);
+    view.m[13] = -(u.x * eye.x + u.y * eye.y + u.z * eye.z);
+    view.m[14] = f.x * eye.x + f.y * eye.y + f.z * eye.z;
+    return view;
+}
+
 /// Inverse of a rigid camera pose (rotation + translation).
 Mat4 viewFromCameraPose(const core::Transform& camera) {
     const core::Quat inv{-camera.rotation.x, -camera.rotation.y, -camera.rotation.z,
@@ -245,6 +303,22 @@ constexpr float kCubeVertices[] = {
     -0.5f, 0.5f,-0.5f, 0,1,0, 0,0,  -0.5f, 0.5f, 0.5f, 0,1,0, 0,1,   0.5f, 0.5f, 0.5f, 0,1,0, 1,1,
 };
 
+// Depth-only pass rendering the scene from the directional light.
+const char* kShadowVertexShader = R"glsl(
+#version 330 core
+layout(location = 0) in vec3 aPosition;
+uniform mat4 uModel;
+uniform mat4 uLightSpace;
+void main() {
+    gl_Position = uLightSpace * uModel * vec4(aPosition, 1.0);
+}
+)glsl";
+
+const char* kShadowFragmentShader = R"glsl(
+#version 330 core
+void main() {}
+)glsl";
+
 const char* kVertexShader = R"glsl(
 #version 330 core
 layout(location = 0) in vec3 aPosition;
@@ -273,6 +347,9 @@ in vec2 vUv;
 uniform vec3 uBaseColor;
 uniform sampler2D uTexture;
 uniform int uHasTexture;
+uniform sampler2D uShadowMap;
+uniform mat4 uLightSpace;
+uniform int uHasShadow; // the first directional light casts shadows
 uniform vec3 uEmissive;
 uniform float uRoughness;
 uniform float uMetallic;
@@ -309,11 +386,39 @@ void main() {
         albedo *= texture(uTexture, vUv).rgb;
     }
     vec3 result = albedo * 0.22; // ambient floor
+
+    // Shadow factor from the first directional light's depth map: 3x3 PCF
+    // with a slope-independent bias.
+    float shadowFactor = 1.0;
+    if (uHasShadow == 1) {
+        vec4 lightSpace = uLightSpace * vec4(vWorldPos, 1.0);
+        vec3 projected = lightSpace.xyz / lightSpace.w * 0.5 + 0.5;
+        if (projected.x > 0.0 && projected.x < 1.0 && projected.y > 0.0 &&
+            projected.y < 1.0 && projected.z < 1.0) {
+            float bias = 0.0028;
+            float lit = 0.0;
+            vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+            for (int sx = -1; sx <= 1; ++sx) {
+                for (int sy = -1; sy <= 1; ++sy) {
+                    float depth = texture(uShadowMap,
+                                          projected.xy + vec2(sx, sy) * texel).r;
+                    lit += projected.z - bias > depth ? 0.0 : 1.0;
+                }
+            }
+            shadowFactor = lit / 9.0;
+        }
+    }
+
+    bool firstDirectional = true;
     for (int i = 0; i < uLightCount; ++i) {
         vec3 l;
         float attenuation = 1.0;
         if (uLightType[i] == 0) {
             l = normalize(-uLightVec[i]);
+            if (firstDirectional) {
+                attenuation *= mix(0.25, 1.0, shadowFactor);
+                firstDirectional = false;
+            }
         } else {
             vec3 toLight = uLightVec[i] - vWorldPos;
             float dist = length(toLight);
@@ -344,10 +449,43 @@ public:
             return;
         }
         program_ = buildProgram(kVertexShader, kFragmentShader);
-        if (program_ == 0) {
+        shadowProgram_ = buildProgram(kShadowVertexShader, kShadowFragmentShader);
+        if (program_ == 0 || shadowProgram_ == 0) {
             return;
         }
         uSkyMode_ = gl_.GetUniformLocation(program_, "uSkyMode");
+        uShadowMap_ = gl_.GetUniformLocation(program_, "uShadowMap");
+        uLightSpace_ = gl_.GetUniformLocation(program_, "uLightSpace");
+        uHasShadow_ = gl_.GetUniformLocation(program_, "uHasShadow");
+        uShadowModel_ = gl_.GetUniformLocation(shadowProgram_, "uModel");
+        uShadowLightSpace_ = gl_.GetUniformLocation(shadowProgram_, "uLightSpace");
+
+        // The directional-light shadow map: a depth-only framebuffer.
+        gl_.GenTextures(1, &shadowTexture_);
+        gl_.BindTexture(GL_TEXTURE_2D, shadowTexture_);
+        gl_.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_DEPTH_COMPONENT24),
+                       kShadowMapSize, kShadowMapSize, 0, GL_DEPTH_COMPONENT,
+                       GL_FLOAT, nullptr);
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                          static_cast<GLint>(GL_NEAREST));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                          static_cast<GLint>(GL_NEAREST));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                          static_cast<GLint>(GL_CLAMP_TO_EDGE));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                          static_cast<GLint>(GL_CLAMP_TO_EDGE));
+        gl_.GenFramebuffers(1, &shadowFbo_);
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+        gl_.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                                 shadowTexture_, 0);
+        gl_.DrawBuffer(GL_NONE_MODE);
+        gl_.ReadBuffer(GL_NONE_MODE);
+        const bool shadowComplete =
+            gl_.CheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        gl_.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (!shadowComplete) {
+            return;
+        }
         uModel_ = gl_.GetUniformLocation(program_, "uModel");
         uViewProjection_ = gl_.GetUniformLocation(program_, "uViewProjection");
         uBaseColor_ = gl_.GetUniformLocation(program_, "uBaseColor");
@@ -408,7 +546,71 @@ public:
             return;
         }
         gl_.Enable(GL_DEPTH_TEST);
+
+        // --- Shadow pre-pass: depth from the first directional light ------
+        core::Transform cameraPose;
+        bool hasCamera = false;
+        bool hasSun = false;
+        core::Vec3 sunDirection{0.0f, -1.0f, 0.0f};
+        std::vector<std::pair<Mat4, std::uint64_t>> shadowDraws;
+        for (const auto& command : pending_) {
+            if (command.type == rendering::RenderCommandType::SetCamera) {
+                cameraPose = command.transform;
+                hasCamera = true;
+            } else if (command.type == rendering::RenderCommandType::AddLight &&
+                       command.lightType == rendering::LightType::Directional &&
+                       !hasSun) {
+                sunDirection = core::rotate(command.transform.rotation,
+                                            {0.0f, 0.0f, -1.0f});
+                hasSun = true;
+            } else if (command.type == rendering::RenderCommandType::DrawMesh &&
+                       command.resource.value != kWireframeResourceId) {
+                shadowDraws.emplace_back(fromTransform(command.transform),
+                                         command.resource.value);
+            }
+        }
+
+        Mat4 lightSpace = Mat4::identity();
+        const bool shadowsActive = hasSun && hasCamera && !shadowDraws.empty();
+        if (shadowsActive) {
+            // The shadow box follows the camera's neighbourhood.
+            const auto forward = core::rotate(cameraPose.rotation, {0.0f, 0.0f, -1.0f});
+            const core::Vec3 centre = cameraPose.position + forward * 12.0f;
+            const core::Vec3 eye = centre + sunDirection * -45.0f;
+            lightSpace = orthographic(32.0f, 1.0f, 120.0f) *
+                         lookAt(eye, centre, {0.0f, 1.0f, 0.0f});
+
+            GLint previousFbo = 0;
+            gl_.GetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+            gl_.BindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+            gl_.Viewport(0, 0, kShadowMapSize, kShadowMapSize);
+            gl_.Clear(GL_DEPTH_BUFFER_BIT);
+            gl_.UseProgram(shadowProgram_);
+            gl_.UniformMatrix4fv(uShadowLightSpace_, 1, 0, lightSpace.m.data());
+            for (const auto& [model, resource] : shadowDraws) {
+                gl_.UniformMatrix4fv(uShadowModel_, 1, 0, model.m.data());
+                GLuint vao = cubeVao_;
+                GLsizei vertexCount = 36;
+                if (const auto it = meshes_.find(resource); it != meshes_.end()) {
+                    vao = it->second.vao;
+                    vertexCount = it->second.vertexCount;
+                }
+                gl_.BindVertexArray(vao);
+                gl_.DrawArrays(GL_TRIANGLES, 0, vertexCount);
+            }
+            gl_.BindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFbo));
+            gl_.Viewport(0, 0, viewportW_, viewportH_);
+        }
+
         gl_.UseProgram(program_);
+        gl_.Uniform1i(uHasShadow_, shadowsActive ? 1 : 0);
+        if (shadowsActive) {
+            gl_.UniformMatrix4fv(uLightSpace_, 1, 0, lightSpace.m.data());
+            gl_.ActiveTexture(GL_TEXTURE1);
+            gl_.BindTexture(GL_TEXTURE_2D, shadowTexture_);
+            gl_.Uniform1i(uShadowMap_, 1);
+            gl_.ActiveTexture(GL_TEXTURE0);
+        }
 
         Mat4 viewProjection = Mat4::identity();
         float aspect = 16.0f / 9.0f;
@@ -682,9 +884,18 @@ private:
     GLint uTexture_ = -1;
     GLint uHasTexture_ = -1;
     GLint uSkyMode_ = -1;
+    GLuint shadowProgram_ = 0;
+    GLuint shadowFbo_ = 0;
+    GLuint shadowTexture_ = 0;
+    GLint uShadowMap_ = -1;
+    GLint uLightSpace_ = -1;
+    GLint uHasShadow_ = -1;
+    GLint uShadowModel_ = -1;
+    GLint uShadowLightSpace_ = -1;
+    GLsizei viewportW_ = 1280;
+    GLsizei viewportH_ = 720;
+    static constexpr GLsizei kShadowMapSize = 1024;
     float cameraPos_[3] = {0.0f, 0.0f, 0.0f};
-    GLsizei viewportW_ = 0;
-    GLsizei viewportH_ = 0;
     rendering::IRenderSurface* surface_ = nullptr;
     std::vector<rendering::RenderCommand> pending_;
     struct MeshResource {
