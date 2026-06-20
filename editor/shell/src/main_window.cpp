@@ -18,6 +18,7 @@
 #include "sky/editor/tools/project_panel.hpp"
 #include "sky/editor/tools/terrain_panel.hpp"
 #include "scene_view_3d.hpp"
+#include "icons.hpp"
 #include "viewport_widget.hpp"
 
 namespace sky::editor {
@@ -200,21 +201,23 @@ void MainWindow::buildToolbar() {
     auto* toolbar = addToolBar(tr("Main"));
     toolbar->setMovable(false);
 
+    toolbar->setIconSize(QSize(20, 20));
+
     // Transform tool group on the left, Unity-style: Q hand, W move,
     // E rotate, R scale.
     const struct {
-        QString glyph;
+        QString icon;
         QString tip;
         TransformTool tool;
     } tools[] = {
-        {QString::fromUtf8("✋"), tr("Hand tool (Q) — drag to pan"), TransformTool::Hand},
-        {QString::fromUtf8("✥"), tr("Move tool (W)"), TransformTool::Move},
-        {QString::fromUtf8("⟳"), tr("Rotate tool (E)"), TransformTool::Rotate},
-        {QString::fromUtf8("⤢"), tr("Scale tool (R)"), TransformTool::Scale},
+        {"hand", tr("Hand tool (Q) — drag to pan"), TransformTool::Hand},
+        {"move", tr("Move tool (W)"), TransformTool::Move},
+        {"rotate", tr("Rotate tool (E)"), TransformTool::Rotate},
+        {"scale", tr("Scale tool (R)"), TransformTool::Scale},
     };
     for (std::size_t i = 0; i < std::size(tools); ++i) {
         auto* button = new QToolButton(toolbar);
-        button->setText(tools[i].glyph);
+        button->setIcon(toolbarIcon(tools[i].icon));
         button->setToolTip(tools[i].tip);
         button->setCheckable(true);
         button->setChecked(tools[i].tool == viewport_->tool());
@@ -236,16 +239,17 @@ void MainWindow::buildToolbar() {
     leftSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolbar->addWidget(leftSpacer);
 
-    const auto makeButton = [&](const QString& glyph) {
+    const auto makeButton = [&](const QString& icon, const QString& objectName) {
         auto* button = new QToolButton(toolbar);
-        button->setText(glyph);
+        button->setIcon(toolbarIcon(icon));
+        button->setObjectName(objectName);
         button->setCheckable(true);
         toolbar->addWidget(button);
         return button;
     };
-    playButton_ = makeButton(QString::fromUtf8("▶"));
-    pauseButton_ = makeButton(QString::fromUtf8("⏸"));
-    stopButton_ = makeButton(QString::fromUtf8("⏹"));
+    playButton_ = makeButton("play", "playButton");
+    pauseButton_ = makeButton("pause", "pauseButton");
+    stopButton_ = makeButton("stop", "stopButton");
     stopButton_->setCheckable(false);
 
     connect(playButton_, &QToolButton::clicked, this, [this] {
@@ -273,7 +277,10 @@ void MainWindow::buildToolbar() {
     toolbar->addWidget(rightSpacer);
 
     auto* layoutButton = new QToolButton(toolbar);
-    layoutButton->setText(tr("Layout ▾"));
+    layoutButton->setObjectName("layoutButton");
+    layoutButton->setText(tr(" Layout"));
+    layoutButton->setIcon(toolbarIcon("chevron"));
+    layoutButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     toolbar->addWidget(layoutButton);
 
     syncPlayButtons();
