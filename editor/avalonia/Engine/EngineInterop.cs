@@ -1,0 +1,81 @@
+using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace SkyEditor.Engine;
+
+/// P/Invoke surface over libsky_editor_bridge.so — the native C ABI that
+/// drives the C++ engine. A custom resolver finds the .so in the CMake build
+/// tree (or SKY_BRIDGE_PATH), so the managed editor runs straight from source.
+internal static class EngineInterop
+{
+    private const string Lib = "sky_editor_bridge";
+
+    static EngineInterop()
+    {
+        NativeLibrary.SetDllImportResolver(typeof(EngineInterop).Assembly, Resolve);
+    }
+
+    private static IntPtr Resolve(string name, Assembly assembly, DllImportSearchPath? path)
+    {
+        if (name != Lib)
+            return IntPtr.Zero;
+        foreach (var candidate in Candidates())
+        {
+            if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle))
+                return handle;
+        }
+        return IntPtr.Zero;
+    }
+
+    private static string[] Candidates()
+    {
+        const string file = "libsky_editor_bridge.so";
+        var env = Environment.GetEnvironmentVariable("SKY_BRIDGE_PATH");
+        var dir = Path.GetDirectoryName(typeof(EngineInterop).Assembly.Location) ?? ".";
+        return new[]
+        {
+            env ?? "",
+            Path.Combine(dir, file),
+            // From editor/avalonia/bin/<cfg>/net8.0 up to the repo build tree.
+            Path.GetFullPath(Path.Combine(dir, "..", "..", "..", "..", "..",
+                "build", "editor", "native_bridge", file)),
+        };
+    }
+
+    // --- Lifecycle ---
+    [DllImport(Lib)] public static extern IntPtr sky_editor_create();
+    [DllImport(Lib)] public static extern void sky_editor_destroy(IntPtr ctx);
+
+    // --- Hierarchy ---
+    [DllImport(Lib)] public static extern int sky_editor_root_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern ulong sky_editor_root_at(IntPtr ctx, int index);
+    [DllImport(Lib)] public static extern int sky_editor_child_count(IntPtr ctx, ulong obj);
+    [DllImport(Lib)] public static extern ulong sky_editor_child_at(IntPtr ctx, ulong obj, int index);
+    [DllImport(Lib)] public static extern int sky_editor_object_name(IntPtr ctx, ulong obj, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_object_exists(IntPtr ctx, ulong obj);
+
+    // --- Transform ---
+    [DllImport(Lib)] public static extern void sky_editor_get_transform(IntPtr ctx, ulong obj, float[]? position, float[]? rotation, float[]? scale);
+    [DllImport(Lib)] public static extern void sky_editor_set_position(IntPtr ctx, ulong obj, float x, float y, float z);
+
+    // --- Components ---
+    [DllImport(Lib)] public static extern int sky_editor_component_count(IntPtr ctx, ulong obj);
+    [DllImport(Lib)] public static extern int sky_editor_component_type(IntPtr ctx, ulong obj, int index, byte[] buffer, int capacity);
+
+    // --- Authoring ---
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_primitive(IntPtr ctx, int kind, string name);
+    [DllImport(Lib)] public static extern ulong sky_editor_duplicate(IntPtr ctx, ulong obj);
+    [DllImport(Lib)] public static extern void sky_editor_delete(IntPtr ctx, ulong obj);
+
+    /// Reads a name/type string through the caller-owned-buffer ABI idiom.
+    public static string ReadString(Func<byte[], int, int> call)
+    {
+        var buffer = new byte[256];
+        var length = call(buffer, buffer.Length);
+        var copied = Math.Min(length, buffer.Length - 1);
+        return copied <= 0 ? string.Empty : Encoding.UTF8.GetString(buffer, 0, copied);
+    }
+}

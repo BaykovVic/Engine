@@ -1,0 +1,170 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SkyEditor.MainWindow"
+        x:CompileBindings="False"
+        Width="1200" Height="760"
+        Background="{StaticResource SkyAppBrush}"
+        Title="Sky Engine">
+  <DockPanel>
+
+    <!-- Menu bar -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="File">
+        <MenuItem Header="New Scene"/>
+        <MenuItem Header="Open Scene…"/>
+        <MenuItem Header="Save"/>
+        <Separator/>
+        <MenuItem Header="Quit"/>
+      </MenuItem>
+      <MenuItem Header="Edit"/>
+      <MenuItem Header="GameObject"/>
+      <MenuItem Header="Window"/>
+      <MenuItem Header="Help"/>
+    </Menu>
+
+    <!-- Toolbar: transform tools + transport -->
+    <Border Classes="toolbar" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <Border Classes="toolGroup">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconHand}"/></ToggleButton>
+              <ToggleButton Classes="tool" IsChecked="True"><Path Classes="icon" Data="{StaticResource IconMove}"/></ToggleButton>
+              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconRotate}"/></ToggleButton>
+              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconScale}"/></ToggleButton>
+            </StackPanel>
+          </Border>
+          <Border Classes="toolGroup">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Classes="tool"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></ToggleButton>
+              <ToggleButton Classes="tool"><Path Classes="iconFilled" Data="{StaticResource IconPause}" Fill="{StaticResource SkyTextSecondaryBrush}"/></ToggleButton>
+              <Button Classes="tool" Background="Transparent" BorderBrush="Transparent"><Path Classes="iconFilled" Data="{StaticResource IconStop}" Fill="{StaticResource SkyTextSecondaryBrush}"/></Button>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+        <Button Grid.Column="2" Content="Layout" Padding="11,5"
+                Background="{StaticResource SkyCardBrush}"
+                Foreground="{StaticResource SkyTextSecondaryBrush}"/>
+      </Grid>
+    </Border>
+
+    <!-- Status bar -->
+    <Border Classes="statusbar" DockPanel.Dock="Bottom">
+      <TextBlock Text="Ready"/>
+    </Border>
+
+    <!-- Three-column workspace -->
+    <Grid ColumnDefinitions="260,4,*,4,320">
+
+      <!-- Hierarchy -->
+      <Border Grid.Column="0" Classes="panel">
+        <DockPanel>
+          <Border Classes="panelHeader" DockPanel.Dock="Top">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="HIERARCHY"/>
+              <Button Grid.Column="1" Classes="tool" Width="26" Height="26"
+                      Background="Transparent" BorderBrush="Transparent" VerticalAlignment="Center">
+                <Path Classes="icon" Data="{StaticResource IconAdd}"/>
+              </Button>
+            </Grid>
+          </Border>
+          <TreeView Name="HierarchyTree" ItemsSource="{Binding Roots}"
+                    SelectedItem="{Binding SelectedObject, Mode=TwoWay}">
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                </StackPanel>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Column="1"/>
+
+      <!-- Center: Scene -->
+      <Grid Grid.Column="2" RowDefinitions="38,*,200">
+        <Border Classes="sceneHeader" Grid.Row="0">
+          <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="18">
+              <TextBlock Text="Scene" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+              <TextBlock Text="Game" Classes="secondary" VerticalAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0">
+              <ToggleButton Classes="viewMode" IsChecked="True" Content="3D" CornerRadius="6,0,0,6"/>
+              <ToggleButton Classes="viewMode" Content="2D" CornerRadius="0,6,6,0"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <!-- Scene host: the native Vulkan swapchain embeds here via
+             NativeControlHost in the next increment. -->
+        <Border Grid.Row="1" Background="#101216" Name="SceneHost">
+          <TextBlock Text="Viewport — Vulkan surface embeds here"
+                     Foreground="{StaticResource SkyTextMutedBrush}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+
+        <Border Grid.Row="2" Classes="panel" BorderBrush="{StaticResource SkyCardBrush}" BorderThickness="0,1,0,0">
+          <DockPanel>
+            <Border Classes="panelHeader" DockPanel.Dock="Top">
+              <StackPanel Orientation="Horizontal" Spacing="18">
+                <TextBlock Text="Console" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold"/>
+                <TextBlock Text="Project" Classes="secondary"/>
+              </StackPanel>
+            </Border>
+            <TextBlock Classes="mono" Margin="12,8"
+                       Text="[info] Sky Engine editor ready (Avalonia + native bridge)"
+                       Foreground="{StaticResource SkyTextSecondaryBrush}"/>
+          </DockPanel>
+        </Border>
+      </Grid>
+
+      <GridSplitter Grid.Column="3"/>
+
+      <!-- Inspector -->
+      <Border Grid.Column="4" Classes="panel">
+        <DockPanel>
+          <Border Classes="panelHeader" DockPanel.Dock="Top">
+            <TextBlock Text="INSPECTOR"/>
+          </Border>
+          <ScrollViewer>
+            <StackPanel Margin="12" Spacing="12" IsVisible="{Binding HasSelection}">
+              <TextBox Text="{Binding SelectedName}" />
+
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="cardTitle" Text="Transform"/>
+                  <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*">
+                    <TextBlock Text="X" Foreground="{StaticResource SkyAxisXBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Margin="6,0" Text="{Binding PositionX}"/>
+                    <TextBlock Grid.Column="2" Text="Y" Foreground="{StaticResource SkyAxisYBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="3" Margin="6,0" Text="{Binding PositionY}"/>
+                    <TextBlock Grid.Column="4" Text="Z" Foreground="{StaticResource SkyAxisZBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="5" Margin="6,0" Text="{Binding PositionZ}"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <ItemsControl ItemsSource="{Binding SelectedComponents}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Classes="card" Margin="0,0,0,8">
+                      <StackPanel Spacing="2">
+                        <TextBlock Classes="cardTitle" Text="{Binding DisplayName}"/>
+                        <TextBlock Classes="muted" Text="{Binding Category}"/>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Button Classes="primary" HorizontalAlignment="Stretch" Content="Add Component"/>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

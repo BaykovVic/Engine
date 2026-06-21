@@ -1,0 +1,610 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  ====================================================================
+          SKY ENGINE — control & panel styles (Avalonia 11, Fluent base)
+          Requires Themes/SkyDark.axaml in Application.Resources.
+          Load order in App.axaml:
+              <Application.Styles>
+                <FluentTheme/>
+                <StyleInclude Source="avares://Dock.Avalonia/Themes/DockFluentTheme.axaml"/>
+                <StyleInclude Source="avares://SkyEngine/Themes/SkyStyles.axaml"/>
+              </Application.Styles>
+          Selectors target type + .Class + #Name + /template/ parts only.
+          No external UI packages other than Dock.Avalonia.
+          ==================================================================== -->
+
+    <!-- ============================ GLOBAL ============================ -->
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{StaticResource SkyAppBrush}"/>
+        <Setter Property="FontFamily" Value="{StaticResource SkyFontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontBody}"/>
+    </Style>
+
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontBody}"/>
+        <Setter Property="TextWrapping" Value="NoWrap"/>
+    </Style>
+    <Style Selector="TextBlock.secondary"><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/><Setter Property="FontSize" Value="{StaticResource SkyFontLabel}"/></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/><Setter Property="FontSize" Value="{StaticResource SkyFontHint}"/></Style>
+    <Style Selector="TextBlock.mono"><Setter Property="FontFamily" Value="{StaticResource SkyFontMono}"/><Setter Property="FontSize" Value="{StaticResource SkyFontMonoSize}"/></Style>
+
+    <!-- ============================ ICONS ============================
+         <Path Classes="icon"        Data="{StaticResource IconMove}"/>   line
+         <Path Classes="icon-filled" Data="{StaticResource IconPlay}"/>   solid -->
+    <Style Selector="Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="StrokeThickness" Value="{StaticResource SkyIconStroke}"/>
+        <Setter Property="StrokeLineCap" Value="Round"/>
+        <Setter Property="StrokeJoin" Value="Round"/>
+        <Setter Property="Fill" Value="Transparent"/>
+        <Setter Property="Stretch" Value="Uniform"/>
+        <Setter Property="Width" Value="{StaticResource SkyIconSize}"/>
+        <Setter Property="Height" Value="{StaticResource SkyIconSize}"/>
+    </Style>
+    <Style Selector="Path.icon-filled">
+        <Setter Property="Fill" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="Stretch" Value="Uniform"/>
+        <Setter Property="Width" Value="{StaticResource SkyIconSize}"/>
+        <Setter Property="Height" Value="{StaticResource SkyIconSize}"/>
+    </Style>
+    <!-- tints -->
+    <Style Selector="Path.icon.x, Path.icon-filled.x"><Setter Property="Stroke" Value="{StaticResource SkyAxisXBrush}"/><Setter Property="Fill" Value="{StaticResource SkyAxisXBrush}"/></Style>
+    <Style Selector="Path.icon.y, Path.icon-filled.y"><Setter Property="Stroke" Value="{StaticResource SkyAxisYBrush}"/><Setter Property="Fill" Value="{StaticResource SkyAxisYBrush}"/></Style>
+    <Style Selector="Path.icon.z, Path.icon-filled.z"><Setter Property="Stroke" Value="{StaticResource SkyAxisZBrush}"/><Setter Property="Fill" Value="{StaticResource SkyAxisZBrush}"/></Style>
+    <Style Selector="Path.icon.play, Path.icon-filled.play"><Setter Property="Stroke" Value="{StaticResource SkyPlayBrush}"/><Setter Property="Fill" Value="{StaticResource SkyPlayBrush}"/></Style>
+    <Style Selector="Path.icon.warn"><Setter Property="Stroke" Value="{StaticResource SkyWarnBrush}"/></Style>
+    <Style Selector="Path.icon.error"><Setter Property="Stroke" Value="{StaticResource SkyErrorBrush}"/></Style>
+    <Style Selector="Path.icon.accent"><Setter Property="Stroke" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
+    <Style Selector="PathIcon"><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/></Style>
+
+    <!-- ============================ MENU BAR ========================== -->
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="{StaticResource SkyAppBrush}"/>
+        <Setter Property="Padding" Value="6,2"/>
+    </Style>
+    <Style Selector="Menu > MenuItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="CornerRadius" Value="5"/>
+    </Style>
+    <Style Selector="Menu > MenuItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    </Style>
+    <Style Selector="Menu > MenuItem:selected"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+
+    <!-- ====================== MENUS / FLYOUTS / POPUPS ================ -->
+    <Style Selector="ContextMenu, MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="Padding" Value="5"/>
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="Padding" Value="12,7"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Margin" Value="1"/>
+    </Style>
+    <Style Selector="MenuItem /template/ Border#PART_LayoutRoot"><Setter Property="CornerRadius" Value="6"/></Style>
+    <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/></Style>
+    <Style Selector="MenuItem:selected"><Setter Property="Foreground" Value="White"/></Style>
+    <Style Selector="MenuItem:disabled"><Setter Property="Foreground" Value="{StaticResource SkyTextDisabledBrush}"/></Style>
+    <Style Selector="MenuItem /template/ ContentPresenter#PART_InputGestureText"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/></Style>
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="8,5"/>
+    </Style>
+
+    <!-- ======================= MAIN TOOLBAR ==========================
+         Host:  <Border Classes="toolbar"> ... </Border> (no native ToolBar) -->
+    <Style Selector="Border.toolbar">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Height" Value="{StaticResource SkyToolbarHeight}"/>
+        <Setter Property="Padding" Value="14,0"/>
+    </Style>
+    <Style Selector="Border.tool-group">
+        <Setter Property="Background" Value="{StaticResource SkyAppBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <!-- Ghost square toggle/icon button used across toolbar & dock chrome -->
+    <Style Selector="Button.tool, ToggleButton.tool">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Width" Value="{StaticResource SkyToolButtonSize}"/>
+        <Setter Property="Height" Value="{StaticResource SkyToolButtonSize}"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton.tool:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton.tool:checked Path.icon"><Setter Property="Stroke" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
+    <Style Selector="ToggleButton.tool:checked Path.icon-filled"><Setter Property="Fill" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
+
+    <!-- transport buttons keep semantic tints -->
+    <Style Selector="ToggleButton#playButton Path.icon-filled"><Setter Property="Fill" Value="{StaticResource SkyPlayBrush}"/></Style>
+    <Style Selector="ToggleButton#playButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#293FB950"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyPlayBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton#pauseButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#29E0A53B"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyWarnBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton#pauseButton:checked Path.icon-filled"><Setter Property="Fill" Value="{StaticResource SkyWarnBrush}"/></Style>
+    <Style Selector="Button#stopButton:pointerover Path.icon"><Setter Property="Stroke" Value="{StaticResource SkyErrorBrush}"/></Style>
+
+    <!-- Layout dropdown reads as a chip -->
+    <Style Selector="Button#layoutButton, ToggleButton#toggle2D">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="Padding" Value="11,5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ToggleButton#toggle2D:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton#toggle2D:checked"><Setter Property="Foreground" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
+
+    <!-- ===================== DOCK.AVALONIA CHROME =====================
+         Dockable Hierarchy / Inspector / Scene / Game / Project panels. -->
+    <Style Selector="ToolChromeControl /template/ Border#PART_Border">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="ToolChromeControl /template/ Border#PART_TitleBar">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="Height" Value="{StaticResource SkyTabHeight}"/>
+    </Style>
+    <Style Selector="ToolChromeControl Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+        <Setter Property="CornerRadius" Value="5"/>
+    </Style>
+    <Style Selector="ToolChromeControl Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    </Style>
+
+    <!-- Dock tab strips: tool tabs + document tabs -->
+    <Style Selector="ToolTabStripItem, DocumentTabStripItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontLabel}"/>
+        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="BorderThickness" Value="0,0,0,2"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="ToolTabStripItem:pointerover, DocumentTabStripItem:pointerover">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ToolTabStripItem:selected, DocumentTabStripItem:selected">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="DockTarget Path, DockTarget Rectangle"><Setter Property="Fill" Value="{StaticResource SkyAccentTintBrush}"/></Style>
+
+    <!-- ============ TABCONTROL (inspector / center, .dock-tabs) =======
+         For non-Dock TabControls styled as panel tabs with accent underline. -->
+    <Style Selector="TabControl.dock-tabs">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="TabControl.dock-tabs > TabItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontLabel}"/>
+        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="MinHeight" Value="{StaticResource SkyTabHeight}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TabControl.dock-tabs > TabItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="TabControl.dock-tabs > TabItem:pointerover"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+    <Style Selector="TabControl.dock-tabs > TabItem:selected">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TabControl.dock-tabs > TabItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,2"/>
+    </Style>
+
+    <!-- ======================= TREEVIEW (Hierarchy) ================== -->
+    <Style Selector="TreeView#hierarchyTree, TreeView.sky">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="Padding" Value="6,4"/>
+    </Style>
+    <Style Selector="TreeViewItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="MinHeight" Value="27"/>
+    </Style>
+    <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Margin" Value="0,1"/>
+    </Style>
+    <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="2,0,0,0"/>
+    </Style>
+    <Style Selector="TreeViewItem:selected"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+
+    <!-- ================= LISTBOX (Project grid + Packages) =========== -->
+    <Style Selector="ListBox#projectEntries">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal"/>
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox#projectEntries ListBoxItem">
+        <Setter Property="Width" Value="84"/>
+        <Setter Property="Height" Value="90"/>
+        <Setter Property="Margin" Value="5"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ListBox#projectEntries ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="ListBox#projectEntries ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- Packages "table" = ListBox with column cells (.packages) -->
+    <Style Selector="ListBox.packages"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/><Setter Property="Padding" Value="0"/></Style>
+    <Style Selector="ListBox.packages ListBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="BorderBrush" Value="#20232A"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    </Style>
+    <Style Selector="ListBox.packages ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="2,0,0,0"/>
+    </Style>
+    <Style Selector="Border.table-header">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Height" Value="30"/>
+        <Setter Property="Padding" Value="14,0"/>
+    </Style>
+    <Style Selector="Border.table-header TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- ========================= CARDS / GROUPS =====================
+         <Border Classes="card"> with a <TextBlock Classes="card-title"/> -->
+    <Style Selector="Border.card, HeaderedContentControl.card">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="Padding" Value="12"/>
+    </Style>
+    <Style Selector="TextBlock.card-title, Label.card-title">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontSection}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- =========================== LABELS =========================== -->
+    <Style Selector="TextBlock#axisLabel, TextBlock.axis">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock#axisLabel.x, TextBlock.axis.x"><Setter Property="Foreground" Value="{StaticResource SkyAxisXBrush}"/></Style>
+    <Style Selector="TextBlock#axisLabel.y, TextBlock.axis.y"><Setter Property="Foreground" Value="{StaticResource SkyAxisYBrush}"/></Style>
+    <Style Selector="TextBlock#axisLabel.z, TextBlock.axis.z"><Setter Property="Foreground" Value="{StaticResource SkyAxisZBrush}"/></Style>
+    <Style Selector="TextBlock#componentName">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontLabel}"/>
+    </Style>
+    <Style Selector="TextBlock#scriptTypeName">
+        <Setter Property="Foreground" Value="{StaticResource SkyAccentHoverBrush}"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="FontFamily" Value="{StaticResource SkyFontMono}"/>
+    </Style>
+    <Style Selector="TextBlock#projectPathLabel">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="FontFamily" Value="{StaticResource SkyFontMono}"/>
+        <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <!-- ===================== INPUTS (TextBox / spin) ================ -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="SelectionBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Padding" Value="9,5"/>
+        <Setter Property="MinHeight" Value="{StaticResource SkyControlHeight}"/>
+    </Style>
+    <Style Selector="TextBox /template/ Border#PART_BorderElement"><Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/></Style>
+    <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement"><Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/></Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement"><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+    <Style Selector="TextBox /template/ TextBlock#PART_Watermark"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/></Style>
+    <Style Selector="TextBox:disabled"><Setter Property="Foreground" Value="{StaticResource SkyTextDisabledBrush}"/></Style>
+
+    <Style Selector="NumericUpDown, NumericUpDown TextBox">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="FontFamily" Value="{StaticResource SkyFontMono}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="MinHeight" Value="{StaticResource SkyControlHeight}"/>
+    </Style>
+    <Style Selector="NumericUpDown /template/ Border#PART_BorderElement"><Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/></Style>
+    <Style Selector="NumericUpDown:focus-within /template/ Border#PART_BorderElement"><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+    <Style Selector="NumericUpDown RepeatButton">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+    </Style>
+
+    <!-- ============================ COMBOBOX ======================== -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Padding" Value="9,5"/>
+        <Setter Property="MinHeight" Value="{StaticResource SkyControlHeight}"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background"><Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/></Style>
+    <Style Selector="ComboBox:focus /template/ Border#Background"><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+    <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/></Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/></Style>
+    <Style Selector="ComboBox Popup > Border, ComboBox /template/ Border#PopupBorder">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+
+    <!-- ============================ BUTTONS ========================= -->
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Padding" Value="16,7"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#313742"/>
+        <Setter Property="BorderBrush" Value="#444B57"/>
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#262A32"/></Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#1D2026"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+    </Style>
+    <Style Selector="Button:disabled"><Setter Property="Foreground" Value="{StaticResource SkyTextDisabledBrush}"/></Style>
+
+    <!-- Primary / accent -->
+    <Style Selector="Button.primary, Button#addComponentButton">
+        <Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="16,9"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button#addComponentButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentHoverBrush}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter, Button#addComponentButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentPressedBrush}"/>
+    </Style>
+
+    <!-- Secondary (already the default Button look) -->
+    <!-- Secondary (e.g. the "New Material" button — give it Classes="secondary") -->
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="#2A2E37"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    </Style>
+
+    <!-- Ghost -->
+    <Style Selector="Button.ghost, Button#consoleClearButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+    </Style>
+    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button#consoleClearButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#2A2E37"/>
+    </Style>
+
+    <!-- Tiny remove (−) icon button -->
+    <Style Selector="Button#removeComponentButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Padding" Value="3"/>
+        <Setter Property="Width" Value="22"/>
+        <Setter Property="Height" Value="22"/>
+    </Style>
+    <Style Selector="Button#removeComponentButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#2A2E37"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    </Style>
+    <Style Selector="Button#removeComponentButton:pointerover Path.icon"><Setter Property="Stroke" Value="{StaticResource SkyErrorBrush}"/></Style>
+
+    <!-- ===================== TOGGLE (sculpt brushes) ================ -->
+    <Style Selector="ToggleButton.sculpt">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ToggleButton.sculpt:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="ToggleButton.sculpt:checked"><Setter Property="Foreground" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
+
+    <!-- ============================ SLIDER ========================== -->
+    <Style Selector="Slider"><Setter Property="MinHeight" Value="18"/></Style>
+    <Style Selector="Slider /template/ Border#TrackBackground">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="Height" Value="4"/>
+        <Setter Property="CornerRadius" Value="2"/>
+    </Style>
+    <Style Selector="Slider /template/ RepeatButton#PART_DecreaseButton">
+        <Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="Slider /template/ Thumb">
+        <Setter Property="Background" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="Width" Value="14"/>
+        <Setter Property="Height" Value="14"/>
+        <Setter Property="CornerRadius" Value="7"/>
+    </Style>
+    <Style Selector="Slider /template/ Thumb:pointerover"><Setter Property="Background" Value="White"/></Style>
+
+    <!-- ========================== SCROLLBAR ========================= -->
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="AllowAutoHide" Value="True"/>
+    </Style>
+    <Style Selector="ScrollBar:vertical"><Setter Property="Width" Value="{StaticResource SkyScrollSize}"/></Style>
+    <Style Selector="ScrollBar:horizontal"><Setter Property="Height" Value="{StaticResource SkyScrollSize}"/></Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Margin" Value="2"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb:pointerover"><Setter Property="Background" Value="#4A515E"/></Style>
+    <Style Selector="ScrollBar /template/ RepeatButton"><Setter Property="Background" Value="Transparent"/><Setter Property="Opacity" Value="0"/></Style>
+
+    <!-- ====================== GRIDSPLITTER (docks) ================= -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{StaticResource SkyAppBrush}"/>
+        <Setter Property="MinWidth" Value="1"/>
+        <Setter Property="MinHeight" Value="1"/>
+    </Style>
+    <Style Selector="GridSplitter:pointerover"><Setter Property="Background" Value="{StaticResource SkyLineBrush}"/></Style>
+
+    <!-- =================== CHECKBOX / RADIO ========================= -->
+    <Style Selector="CheckBox, RadioButton"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+    <Style Selector="CheckBox /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Path"><Setter Property="Fill" Value="White"/><Setter Property="Stroke" Value="White"/></Style>
+    <Style Selector="RadioButton:checked /template/ Ellipse#CheckGlyph"><Setter Property="Fill" Value="{StaticResource SkyAccentBrush}"/></Style>
+
+    <!-- ====================== CONSOLE (monospace) ================== -->
+    <Style Selector="Border#consoleToolbar">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="10,0"/>
+    </Style>
+    <Style Selector="TextBox#consoleOutput, SelectableTextBlock#consoleOutput">
+        <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/>
+        <Setter Property="FontFamily" Value="{StaticResource SkyFontMono}"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontMonoSize}"/>
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <!-- per-line level classes for log rows (apply to the row TextBlock) -->
+    <Style Selector="TextBlock.log-info"><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/></Style>
+    <Style Selector="TextBlock.log-warn"><Setter Property="Foreground" Value="{StaticResource SkyWarnBrush}"/></Style>
+    <Style Selector="TextBlock.log-error"><Setter Property="Foreground" Value="{StaticResource SkyErrorBrush}"/></Style>
+
+    <!-- =========================== STATUS BAR ====================== -->
+    <Style Selector="Border.statusbar">
+        <Setter Property="Background" Value="{StaticResource SkyAppBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        <Setter Property="Height" Value="{StaticResource SkyStatusHeight}"/>
+        <Setter Property="Padding" Value="12,0"/>
+    </Style>
+    <Style Selector="Border.statusbar TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <!-- ============================ TOOLTIP ======================== -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="#0C0D10"/>
+        <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="9,5"/>
+        <Setter Property="FontSize" Value="{StaticResource SkyFontLabel}"/>
+    </Style>
+
+    <!-- =================== PLAY-STATE VIEWPORT BADGE =============== -->
+    <Style Selector="Border.play-badge">
+        <Setter Property="Background" Value="#B80C0E12"/>
+        <Setter Property="BorderBrush" Value="#14FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="20"/>
+        <Setter Property="Padding" Value="13,6"/>
+    </Style>
+
+</Styles>
