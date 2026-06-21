@@ -206,15 +206,22 @@ Collider (в физике уже есть формы `Sphere/Capsule/TerrainHeig
    типы помечены Rendering/Physics/Scripting — основа секций попапа Add Component.
 5. **Персист раскладки** — реализовать `IEditorShell::applyLayout()` +
    сохранение/восстановление состояния доков (Dock.Avalonia). Делается на этапе UI.
-6. 🏗 **В РАБОТЕ — C#-editor API (аналог UnityEditor).** Заложен фундамент:
-   нативный C ABI `editor/native_bridge` (`libsky_editor_bridge.so`,
-   `extern "C"`, 15 функций — lifecycle, обход иерархии, имена, трансформы,
-   компоненты, createPrimitive/duplicate/delete). Avalonia-редактор владеет
-   окном и процессом и дёргает движок через P/Invoke против этого ABI.
-   Сборка переведена в position-independent code, чтобы статические либы
-   движка линковались в .so. Покрыто `editor_bridge_tests` (C-ABI round-trip).
-   Дальше surface ABI расширяется (рендер-таргет под окно, submit кадра,
-   материалы, террейн, плеймод) по мере отрисовки панелей.
+6. 🏗 **В РАБОТЕ — C#-editor API + Avalonia-редактор.** Рабочий вертикальный
+   срез уже собран и проверен:
+   - Нативный C ABI `editor/native_bridge` (`libsky_editor_bridge.so`,
+     `extern "C"`, 18 функций — lifecycle, иерархия, трансформы, компоненты,
+     createPrimitive/duplicate/delete, **attach/render/detach вьюпорта**).
+   - Avalonia-приложение `editor/avalonia` (.NET 8): тема дизайна (токены
+     `SkyDark.axaml`), раскладка панелей, Hierarchy/Inspector на живых данных
+     движка через P/Invoke, и **встроенный Vulkan-вьюпорт** — свопчейн движка
+     рендерит сцену в `NativeControlHost` дочерним окном (UI владеет окном,
+     рендер встраивается). Общая логика «сцена→команды» вынесена в
+     `frame_builder.hpp` (делят плеер и мост).
+   - Проверено: `editor_bridge_tests` (C-ABI + рендер в реальное X11-окно),
+     и реальный запуск под Xvfb со скриншотом (сцена видна во вьюпорте).
+   Дальше: оставшиеся панели на живые данные, орбитальная камера и пикинг во
+   вьюпорте, undo/redo и плеймод через ABI, полный порт дизайн-стилей
+   (`SkyStyles.axaml`) под Avalonia, докинг (Dock.Avalonia) и персист раскладки.
 7. **Мелочи:** tri-count в оверлей статистики; Build Settings — отдельной фичей.
 
 ## Что НЕ требует движковых правок (мапится напрямую)
