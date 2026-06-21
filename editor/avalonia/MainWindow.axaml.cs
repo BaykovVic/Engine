@@ -11,6 +11,12 @@ public partial class MainWindow : Window
         AvaloniaXamlLoader.Load(this);
         var vm = new MainViewModel();
         DataContext = vm;
-        this.FindControl<VulkanViewport>("Viewport")?.SetContext(vm.NativeContext);
+
+        var viewport = this.FindControl<VulkanViewport>("Viewport");
+        if (viewport != null)
+        {
+            viewport.SetContext(vm.NativeContext);
+            viewport.ObjectPicked += vm.SelectById;
+        }
     }
 }

@@ -31,6 +31,15 @@ internal static class Program
         var window = new MainWindow();
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // Drive a few viewport frames so the offscreen scene is present.
+        var viewport = window.FindControl<Controls.VulkanViewport>("Viewport");
+        for (var i = 0; i < 4; ++i)
+        {
+            viewport?.RenderOnce();
+            Dispatcher.UIThread.RunJobs();
+        }
+
         var frame = window.CaptureRenderedFrame();
         if (frame is null)
         {

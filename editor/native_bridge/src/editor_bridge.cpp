@@ -1,10 +1,13 @@
 #include "sky/editor/bridge/editor_bridge.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <string>
 
+#include "editor_camera.hpp"
 #include "editor_context.hpp"
 #include "frame_builder.hpp"
 
@@ -21,14 +24,23 @@ namespace {
 /// a window-bound renderer and the shared frame builder.
 struct BridgeSession {
     EditorContext context;
+    sky::editor::EditorCamera camera;
 #ifdef SKY_BRIDGE_VULKAN
     Display* ownDisplay = nullptr; // opened when the caller provides no display
     std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> renderer;
     std::unique_ptr<sky::editor::FrameBuilder> frame;
+    // Offscreen path: the editor viewport renders to a texture it blits into a
+    // normal UI control (so it receives input and hosts overlays).
+    std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> offscreen;
+    std::unique_ptr<sky::editor::FrameBuilder> offscreenFrame;
+    std::uint32_t offscreenWidth = 0;
+    std::uint32_t offscreenHeight = 0;
 
     ~BridgeSession() {
         frame.reset();
         renderer.reset(); // releases the Vulkan surface before the display closes
+        offscreenFrame.reset();
+        offscreen.reset();
         if (ownDisplay != nullptr) {
             XCloseDisplay(ownDisplay);
         }
@@ -44,6 +56,60 @@ EditorContext& ec(SkyEditorContext* ctx) { return self(ctx)->context; }
 
 sky::object::ObjectHandle handle(SkyObjectId id) {
     return sky::object::ObjectHandle{id};
+}
+
+/// Picks the nearest object whose scaled unit-cube AABB the camera ray
+/// through the viewport pixel intersects (the editor's 3D-view pick).
+sky::object::ObjectHandle pickObject(EditorContext& context,
+                                     const sky::editor::EditorCamera& camera,
+                                     float pixelX, float pixelY, std::uint32_t width,
+                                     std::uint32_t height) {
+    const auto pose = camera.pose();
+    const auto direction =
+        camera.rayThrough(pixelX, pixelY, float(width), float(height));
+    sky::object::ObjectHandle best;
+    float bestDistance = 1e9f;
+    const std::function<void(sky::object::ObjectHandle)> test =
+        [&](sky::object::ObjectHandle object) {
+            if (!context.objects->exists(object)) {
+                return;
+            }
+            const auto world = context.objects->worldTransform(object);
+            const float origins[] = {pose.position.x, pose.position.y, pose.position.z};
+            const float dirs[] = {direction.x, direction.y, direction.z};
+            const float centers[] = {world.position.x, world.position.y, world.position.z};
+            const float halves[] = {std::max(0.125f, world.scale.x * 0.5f),
+                                    std::max(0.125f, world.scale.y * 0.5f),
+                                    std::max(0.125f, world.scale.z * 0.5f)};
+            float tMin = 0.0f, tMax = 1e9f;
+            bool hit = true;
+            for (int axis = 0; axis < 3 && hit; ++axis) {
+                if (std::fabs(dirs[axis]) < 1e-7f) {
+                    hit = std::fabs(origins[axis] - centers[axis]) <= halves[axis];
+                    continue;
+                }
+                const float inv = 1.0f / dirs[axis];
+                float t1 = (centers[axis] - halves[axis] - origins[axis]) * inv;
+                float t2 = (centers[axis] + halves[axis] - origins[axis]) * inv;
+                if (t1 > t2) {
+                    std::swap(t1, t2);
+                }
+                tMin = std::max(tMin, t1);
+                tMax = std::min(tMax, t2);
+                hit = tMin <= tMax;
+            }
+            if (hit && tMax >= 0.0f && tMin < bestDistance) {
+                bestDistance = tMin;
+                best = object;
+            }
+            for (const auto child : context.objects->childrenOf(object)) {
+                test(child);
+            }
+        };
+    for (const auto root : context.rootObjects()) {
+        test(root);
+    }
+    return best;
 }
 
 /// Copies `value` into a caller-owned buffer (NUL-terminated, truncated to
@@ -199,11 +265,78 @@ void sky_editor_render_viewport(SkyEditorContext* ctx, uint32_t width,
     if (session->renderer == nullptr || session->frame == nullptr) {
         return;
     }
+    session->frame->setCamera(session->camera.pose()); // the editor orbit view
     session->renderer->submit(session->frame->build(width, height));
     session->renderer->renderFrame();
 #else
     (void)ctx; (void)width; (void)height;
 #endif
+}
+
+int32_t sky_editor_render_offscreen(SkyEditorContext* ctx, uint32_t width,
+                                    uint32_t height, uint8_t* out_rgba,
+                                    int32_t out_length) {
+#ifdef SKY_BRIDGE_VULKAN
+    if (width == 0 || height == 0 || out_rgba == nullptr ||
+        out_length < int32_t(width * height * 4)) {
+        return 0;
+    }
+    auto* session = self(ctx);
+    if (session->offscreen == nullptr || session->offscreenWidth != width ||
+        session->offscreenHeight != height) {
+        session->offscreenFrame.reset();
+        session->offscreen = sky::rendering_vulkan::createVulkanRenderer(width, height);
+        if (session->offscreen == nullptr) {
+            return 0;
+        }
+        session->offscreenFrame = std::make_unique<sky::editor::FrameBuilder>(
+            session->context, *session->offscreen);
+        session->offscreenWidth = width;
+        session->offscreenHeight = height;
+    }
+    session->offscreenFrame->setCamera(session->camera.pose());
+    session->offscreen->submit(session->offscreenFrame->build(width, height));
+    session->offscreen->renderFrame();
+    const auto pixels = session->offscreen->readbackFrame();
+    if (pixels.size() != std::size_t(width) * height * 4) {
+        return 0;
+    }
+    std::memcpy(out_rgba, pixels.data(), pixels.size());
+    return 1;
+#else
+    (void)ctx; (void)width; (void)height; (void)out_rgba; (void)out_length;
+    return 0;
+#endif
+}
+
+void sky_editor_viewport_orbit(SkyEditorContext* ctx, float delta_yaw_degrees,
+                               float delta_pitch_degrees) {
+    self(ctx)->camera.orbit(delta_yaw_degrees, delta_pitch_degrees);
+}
+
+void sky_editor_viewport_pan(SkyEditorContext* ctx, float delta_right,
+                             float delta_up) {
+    self(ctx)->camera.pan(delta_right, delta_up);
+}
+
+void sky_editor_viewport_zoom(SkyEditorContext* ctx, float factor) {
+    self(ctx)->camera.zoom(factor);
+}
+
+SkyObjectId sky_editor_pick(SkyEditorContext* ctx, float pixel_x, float pixel_y,
+                            uint32_t width, uint32_t height) {
+    auto* session = self(ctx);
+    return pickObject(session->context, session->camera, pixel_x, pixel_y, width,
+                      height)
+        .value;
+}
+
+void sky_editor_frame_object(SkyEditorContext* ctx, SkyObjectId object) {
+    auto* session = self(ctx);
+    if (session->context.objects->exists(handle(object))) {
+        session->camera.target =
+            session->context.objects->worldTransform(handle(object)).position;
+    }
 }
 
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {

@@ -70,10 +70,18 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern ulong sky_editor_duplicate(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern void sky_editor_delete(IntPtr ctx, ulong obj);
 
-    // --- Viewport (Vulkan swapchain bound to the embedded native window) ---
+    // --- Viewport (Vulkan swapchain bound to a native window; player path) ---
     [DllImport(Lib)] public static extern int sky_editor_attach_viewport(IntPtr ctx, IntPtr x11Display, ulong x11Window, uint width, uint height);
     [DllImport(Lib)] public static extern void sky_editor_render_viewport(IntPtr ctx, uint width, uint height);
     [DllImport(Lib)] public static extern void sky_editor_detach_viewport(IntPtr ctx);
+
+    // --- Offscreen viewport + orbit camera + pick (the editor path) ---
+    [DllImport(Lib)] public static extern int sky_editor_render_offscreen(IntPtr ctx, uint width, uint height, byte[] outRgba, int outLength);
+    [DllImport(Lib)] public static extern void sky_editor_viewport_orbit(IntPtr ctx, float deltaYawDegrees, float deltaPitchDegrees);
+    [DllImport(Lib)] public static extern void sky_editor_viewport_pan(IntPtr ctx, float deltaRight, float deltaUp);
+    [DllImport(Lib)] public static extern void sky_editor_viewport_zoom(IntPtr ctx, float factor);
+    [DllImport(Lib)] public static extern ulong sky_editor_pick(IntPtr ctx, float pixelX, float pixelY, uint width, uint height);
+    [DllImport(Lib)] public static extern void sky_editor_frame_object(IntPtr ctx, ulong obj);
 
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)

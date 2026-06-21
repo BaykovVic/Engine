@@ -89,6 +89,31 @@ SKY_BRIDGE_API void sky_editor_render_viewport(SkyEditorContext* ctx,
                                                uint32_t width, uint32_t height);
 SKY_BRIDGE_API void sky_editor_detach_viewport(SkyEditorContext* ctx);
 
+/* Offscreen viewport: renders the scene (through the editor orbit camera)
+ * into a width*height RGBA8 buffer the UI blits into a normal control — the
+ * path the editor uses so the viewport receives input and hosts overlays.
+ * `out_length` must be at least width*height*4. Returns 1 on success. */
+SKY_BRIDGE_API int32_t sky_editor_render_offscreen(SkyEditorContext* ctx,
+                                                   uint32_t width, uint32_t height,
+                                                   uint8_t* out_rgba,
+                                                   int32_t out_length);
+
+/* Editor orbit-camera controls and click-to-pick. Orbit/pan deltas are in
+ * the front-end's drag units (degrees for orbit, pixels for pan); zoom is a
+ * multiplier (<1 closer, >1 farther). Pick returns the object id under the
+ * viewport pixel, or 0 for empty space. */
+SKY_BRIDGE_API void sky_editor_viewport_orbit(SkyEditorContext* ctx,
+                                              float delta_yaw_degrees,
+                                              float delta_pitch_degrees);
+SKY_BRIDGE_API void sky_editor_viewport_pan(SkyEditorContext* ctx,
+                                            float delta_right, float delta_up);
+SKY_BRIDGE_API void sky_editor_viewport_zoom(SkyEditorContext* ctx, float factor);
+SKY_BRIDGE_API SkyObjectId sky_editor_pick(SkyEditorContext* ctx, float pixel_x,
+                                           float pixel_y, uint32_t width,
+                                           uint32_t height);
+SKY_BRIDGE_API void sky_editor_frame_object(SkyEditorContext* ctx,
+                                            SkyObjectId object);
+
 #ifdef __cplusplus
 }
 #endif

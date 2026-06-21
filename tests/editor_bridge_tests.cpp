@@ -96,6 +96,36 @@ void testBridgeAuthoring() {
     sky_editor_destroy(ctx);
 }
 
+// Editor orbit camera + click-to-pick. Pure scene math, so it needs no
+// window: frame the camera on a known cube and confirm the centre ray hits it,
+// before and after an orbit (which moves the camera but keeps the target).
+void testBridgePicking()
+{
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    const SkyObjectId cube =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Pick Target");
+    CHECK(cube != 0);
+
+    sky_editor_frame_object(ctx, cube); // orbit target = cube (origin)
+    sky_editor_viewport_zoom(ctx, 0.2f);
+    sky_editor_viewport_zoom(ctx, 0.2f); // pull in close
+
+    const std::uint32_t width = 400;
+    const std::uint32_t height = 300;
+    const SkyObjectId hit = sky_editor_pick(ctx, width / 2.0f, height / 2.0f, width, height);
+    CHECK(hit == cube);
+
+    // After orbiting, the camera has moved but still frames the cube, so the
+    // centre ray keeps hitting it.
+    sky_editor_viewport_orbit(ctx, 40.0f, 12.0f);
+    const SkyObjectId hit2 = sky_editor_pick(ctx, width / 2.0f, height / 2.0f, width, height);
+    CHECK(hit2 == cube);
+
+    sky_editor_destroy(ctx);
+}
+
 // Drives the viewport ABI exactly as the Avalonia editor does: hand the
 // bridge a native window XID (and let it open its own X11 display, as it does
 // for Avalonia's embedded surface), render the scene, and confirm the frame
@@ -163,6 +193,7 @@ void testBridgeViewport()
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
+    testBridgePicking();
     testBridgeViewport();
     return sky::test::summary("editor_bridge_tests");
 }

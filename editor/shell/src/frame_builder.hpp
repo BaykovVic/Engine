@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -27,6 +28,10 @@ public:
     FrameBuilder(EditorContext& context, rendering::IRenderResourceFactory& factory)
         : context_(context), factory_(factory) {}
 
+    /// Overrides the camera (the editor's orbit view). Cleared by passing
+    /// nullopt, which falls back to the scene's Main Camera.
+    void setCamera(std::optional<core::Transform> pose) { cameraOverride_ = pose; }
+
     std::vector<rendering::RenderCommand> build(std::uint32_t width,
                                                 std::uint32_t height) {
         std::vector<rendering::RenderCommand> commands;
@@ -44,7 +49,7 @@ public:
 
         rendering::RenderCommand camera;
         camera.type = rendering::RenderCommandType::SetCamera;
-        camera.transform = cameraPose();
+        camera.transform = cameraOverride_ ? *cameraOverride_ : cameraPose();
         camera.fovDegrees = 50.0f;
         commands.push_back(camera);
 
@@ -221,6 +226,7 @@ private:
 
     EditorContext& context_;
     rendering::IRenderResourceFactory& factory_;
+    std::optional<core::Transform> cameraOverride_;
     rendering::RenderResourceHandle terrainMesh_;
     std::uint64_t terrainVersion_ = 0;
     std::unordered_map<std::string, rendering::RenderResourceHandle> meshes_;

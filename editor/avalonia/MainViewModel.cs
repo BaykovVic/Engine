@@ -40,6 +40,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// Selects the object with the given native id (e.g. from a viewport pick).
+    public void SelectById(ulong id)
+    {
+        SelectedObject = id == 0 ? null : Find(Roots, id);
+    }
+
+    private static SkyObject? Find(System.Collections.Generic.IEnumerable<SkyObject> objects, ulong id)
+    {
+        foreach (var o in objects)
+        {
+            if (o.Id == id)
+                return o;
+            var child = Find(o.Children, id);
+            if (child != null)
+                return child;
+        }
+        return null;
+    }
+
     public bool HasSelection => _selected != null;
     public string SelectedName => _selected?.Name ?? string.Empty;
     public System.Collections.Generic.IReadOnlyList<SkyComponent> SelectedComponents =>
