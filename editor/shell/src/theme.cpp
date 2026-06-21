@@ -80,6 +80,19 @@ QDockWidget::title { background: #181b21; padding: 7px 12px; border: none;
                      text-transform: uppercase; }
 QDockWidget > QWidget { background: #22262e; }
 
+/* ---- Scene header & 2D/3D toggle ----------------------------------------- */
+QWidget#sceneHeader { background: #1d2027; border-bottom: 1px solid #0f1116; }
+QToolButton[class="viewModeButton"] { background: #15171c; color: #9aa1ac;
+    border: 1px solid #2c313b; padding: 4px 14px; font-weight: 600;
+    min-width: 26px; }
+QToolButton#viewModeFirst { border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px; border-right: none; }
+QToolButton#viewModeLast { border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px; }
+QToolButton[class="viewModeButton"]:hover { color: #d6dae0; }
+QToolButton[class="viewModeButton"]:checked { background: #2f4f86; color: #ffffff;
+    border-color: #3d82f6; }
+
 /* ---- Tabs ---------------------------------------------------------------- */
 QTabWidget::pane { border: none; background: #22262e; }
 QTabBar { background: transparent; }

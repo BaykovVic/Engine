@@ -1,14 +1,18 @@
 #include "main_window.hpp"
 
 #include <QApplication>
+#include <QButtonGroup>
 #include <QDockWidget>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <QVBoxLayout>
 
 #include "sky/editor/tools/console_panel.hpp"
 #include "sky/editor/tools/hierarchy_panel.hpp"
@@ -29,15 +33,49 @@ MainWindow::MainWindow(EditorContext& context)
     resize(1500, 900);
     setDockOptions(AllowNestedDocks | AllowTabbedDocks | AnimatedDocks);
 
-    // Central Scene view wrapped in a Unity-like tab strip: the 3D view
-    // renders through the engine's OpenGL backend; the 2D view keeps the
-    // transform gizmos.
+    // Central area: a single "Scene" tab whose 3D/2D mode is switched by a
+    // toggle in its own header — there is no separate "Scene 2D" tab.
+    // Hierarchy is a distinct panel (left dock), not a view here.
+    sceneView3d_ = new SceneView3D(context_, false, this);
+    viewport_ = new ViewportWidget(context_, this);
+    gameView_ = new SceneView3D(context_, true, this);
+
+    auto* sceneStack = new QStackedWidget(this);
+    sceneStack->addWidget(sceneView3d_);  // index 0 = 3D
+    sceneStack->addWidget(viewport_);     // index 1 = 2D
+
+    auto* sceneHeader = new QWidget(this);
+    sceneHeader->setObjectName("sceneHeader");
+    auto* headerLayout = new QHBoxLayout(sceneHeader);
+    headerLayout->setContentsMargins(8, 5, 8, 5);
+    headerLayout->setSpacing(0);
+    auto* viewModeGroup = new QButtonGroup(this);
+    viewModeGroup->setExclusive(true);
+    const auto addModeButton = [&](const QString& text, int id, bool on) {
+        auto* button = new QToolButton(sceneHeader);
+        button->setObjectName(id == 0 ? "viewModeFirst" : "viewModeLast");
+        button->setProperty("class", "viewModeButton");
+        button->setText(text);
+        button->setCheckable(true);
+        button->setChecked(on);
+        viewModeGroup->addButton(button, id);
+        headerLayout->addWidget(button);
+    };
+    addModeButton(tr("3D"), 0, true);
+    addModeButton(tr("2D"), 1, false);
+    headerLayout->addStretch(1);
+    connect(viewModeGroup, QOverload<int>::of(&QButtonGroup::idClicked), this,
+            [sceneStack](int id) { sceneStack->setCurrentIndex(id); });
+
+    auto* sceneContainer = new QWidget(this);
+    auto* containerLayout = new QVBoxLayout(sceneContainer);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(0);
+    containerLayout->addWidget(sceneHeader);
+    containerLayout->addWidget(sceneStack, 1);
+
     auto* sceneTabs = new QTabWidget(this);
-    sceneView3d_ = new SceneView3D(context_, false, sceneTabs);
-    viewport_ = new ViewportWidget(context_, sceneTabs);
-    gameView_ = new SceneView3D(context_, true, sceneTabs);
-    sceneTabs->addTab(sceneView3d_, tr("Scene"));
-    sceneTabs->addTab(viewport_, tr("Scene 2D"));
+    sceneTabs->addTab(sceneContainer, tr("Scene"));
     sceneTabs->addTab(gameView_, tr("Game"));
     setCentralWidget(sceneTabs);
 
