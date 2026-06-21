@@ -152,6 +152,17 @@ object::ObjectHandle EditorContext::createEmpty(const std::string& name) {
     return object;
 }
 
+object::ObjectHandle EditorContext::createPrimitive(scene::PrimitiveKind kind,
+                                                    const std::string& name) {
+    const scene::AuthoringServices services{*objects,    *objects,
+                                            *objects,     *components,
+                                            *components,  *components};
+    const auto object = scene::createPrimitive(services, kind, name);
+    scenes->addRootObject(activeScene, object);
+    roots_.push_back(object);
+    return object;
+}
+
 object::ObjectHandle EditorContext::createCrate(const std::string& name,
                                                 core::Vec3 position) {
     const auto crate = createEmpty(name);

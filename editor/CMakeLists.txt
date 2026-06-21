@@ -3,6 +3,7 @@
 # and must never become a dependency of the engine core targets.
 
 add_subdirectory(viewport_bridge)
+add_subdirectory(native_bridge)
 
 if(SKY_BUILD_EDITOR)
     find_package(Qt5 5.15 COMPONENTS Widgets REQUIRED)

@@ -206,9 +206,15 @@ Collider (в физике уже есть формы `Sphere/Capsule/TerrainHeig
    типы помечены Rendering/Physics/Scripting — основа секций попапа Add Component.
 5. **Персист раскладки** — реализовать `IEditorShell::applyLayout()` +
    сохранение/восстановление состояния доков (Dock.Avalonia). Делается на этапе UI.
-6. **C#-editor API (аналог UnityEditor)** — отдельное архитектурное направление:
-   сегодня скриптинг только рантаймовый (`IScriptHost`), editor-расширений нет.
-   Проектируется вместе с переходом редактора на C#/Avalonia.
+6. 🏗 **В РАБОТЕ — C#-editor API (аналог UnityEditor).** Заложен фундамент:
+   нативный C ABI `editor/native_bridge` (`libsky_editor_bridge.so`,
+   `extern "C"`, 15 функций — lifecycle, обход иерархии, имена, трансформы,
+   компоненты, createPrimitive/duplicate/delete). Avalonia-редактор владеет
+   окном и процессом и дёргает движок через P/Invoke против этого ABI.
+   Сборка переведена в position-independent code, чтобы статические либы
+   движка линковались в .so. Покрыто `editor_bridge_tests` (C-ABI round-trip).
+   Дальше surface ABI расширяется (рендер-таргет под окно, submit кадра,
+   материалы, террейн, плеймод) по мере отрисовки панелей.
 7. **Мелочи:** tri-count в оверлей статистики; Build Settings — отдельной фичей.
 
 ## Что НЕ требует движковых правок (мапится напрямую)

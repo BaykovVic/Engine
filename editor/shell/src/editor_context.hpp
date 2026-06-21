@@ -24,6 +24,7 @@
 #include "sky/platform/platform_services.hpp"
 #include "sky/platform/virtual_file_system.hpp"
 #include "sky/rendering/renderer_registry.hpp"
+#include "sky/scene/scene_authoring.hpp"
 #include "sky/scene/scene_world.hpp"
 #include "sky/serialization/backends.hpp"
 
@@ -65,6 +66,10 @@ public:
     [[nodiscard]] std::uint64_t terrainVersion() const { return terrainVersion_; }
 
     object::ObjectHandle createEmpty(const std::string& name);
+    /// A scene-root object carrying a Mesh Renderer bound to a built-in
+    /// primitive (no physics) — the GameObject > 3D Object menu entries.
+    object::ObjectHandle createPrimitive(scene::PrimitiveKind kind,
+                                         const std::string& name);
     /// A cube with a dynamic rigid body and box collider, Unity-style.
     object::ObjectHandle createCrate(const std::string& name, core::Vec3 position);
     void destroyObject(object::ObjectHandle object);

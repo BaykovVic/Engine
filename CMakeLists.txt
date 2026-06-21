@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The engine ships as static libraries that also link into shared objects —
+# notably the native editor bridge the .NET editor loads — so build everything
+# position-independent.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 option(SKY_BUILD_EDITOR "Build the Qt5-based editor layer" OFF)
 option(SKY_BUILD_OPENGL_BACKEND "Build the OpenGL rendering backend" ON)
 option(SKY_BUILD_VULKAN_BACKEND "Build the Vulkan rendering backend" ON)

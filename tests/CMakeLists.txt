@@ -95,3 +95,7 @@ target_sources(undo_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_commands.cpp)
 target_include_directories(undo_tests PRIVATE ${CMAKE_SOURCE_DIR}/editor/shell/src)
 target_link_libraries(undo_tests PRIVATE sky::viewport_bridge sky::sky_rendering_opengl)
+
+# Exercises the native C ABI the Avalonia editor will P/Invoke.
+sky_add_test(editor_bridge_tests)
+target_link_libraries(editor_bridge_tests PRIVATE sky::editor_bridge)
