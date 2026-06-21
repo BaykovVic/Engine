@@ -78,6 +78,17 @@ SKY_BRIDGE_API SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx,
                                                 SkyObjectId object);
 SKY_BRIDGE_API void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object);
 
+/* Viewport: attaches a Vulkan swapchain to a native window (X11 display +
+ * window from the UI toolkit's embedded surface), renders the current scene
+ * into it, and tears it down. Returns 1 on a successful attach, 0 otherwise. */
+SKY_BRIDGE_API int32_t sky_editor_attach_viewport(SkyEditorContext* ctx,
+                                                  void* x11Display,
+                                                  uint64_t x11Window,
+                                                  uint32_t width, uint32_t height);
+SKY_BRIDGE_API void sky_editor_render_viewport(SkyEditorContext* ctx,
+                                               uint32_t width, uint32_t height);
+SKY_BRIDGE_API void sky_editor_detach_viewport(SkyEditorContext* ctx);
+
 #ifdef __cplusplus
 }
 #endif

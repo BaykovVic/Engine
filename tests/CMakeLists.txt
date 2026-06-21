@@ -98,4 +98,8 @@ target_link_libraries(undo_tests PRIVATE sky::viewport_bridge sky::sky_rendering
 
 # Exercises the native C ABI the Avalonia editor will P/Invoke.
 sky_add_test(editor_bridge_tests)
-target_link_libraries(editor_bridge_tests PRIVATE sky::editor_bridge)
+target_link_libraries(editor_bridge_tests PRIVATE sky::editor_bridge sky::engine)
+find_package(X11 QUIET)
+if(X11_FOUND)
+    target_link_libraries(editor_bridge_tests PRIVATE X11::X11)
+endif()

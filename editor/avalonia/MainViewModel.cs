@@ -19,6 +19,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<SkyObject> Roots => _session.Roots;
 
+    /// Native session handle for the embedded Vulkan viewport.
+    public System.IntPtr NativeContext => _session.Native;
+
     public SkyObject? SelectedObject
     {
         get => _selected;

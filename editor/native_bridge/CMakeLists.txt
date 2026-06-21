@@ -17,6 +17,8 @@ target_link_libraries(sky_editor_bridge PRIVATE
     sky::engine sky::viewport_bridge sky::sky_rendering_opengl)
 
 find_package(Vulkan QUIET)
-if(Vulkan_FOUND)
-    target_link_libraries(sky_editor_bridge PRIVATE sky::sky_rendering_vulkan)
+find_package(X11 QUIET)
+if(Vulkan_FOUND AND X11_FOUND)
+    target_link_libraries(sky_editor_bridge PRIVATE sky::sky_rendering_vulkan X11::X11)
+    target_compile_definitions(sky_editor_bridge PRIVATE SKY_BRIDGE_VULKAN)
 endif()

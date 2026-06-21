@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SkyEditor.MainWindow"
+        xmlns:controls="clr-namespace:SkyEditor.Controls"
         x:CompileBindings="False"
         Width="1200" Height="760"
         Background="{StaticResource SkyAppBrush}"
@@ -98,13 +99,11 @@
           </Grid>
         </Border>
 
-        <!-- Scene host: the native Vulkan swapchain embeds here via
-             NativeControlHost in the next increment. -->
-        <Border Grid.Row="1" Background="#101216" Name="SceneHost">
-          <TextBlock Text="Viewport — Vulkan surface embeds here"
-                     Foreground="{StaticResource SkyTextMutedBrush}"
-                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
+        <!-- Scene host: the engine's Vulkan swapchain embeds here as a child
+             native window (NativeControlHost). -->
+        <Panel Grid.Row="1" Background="#101216">
+          <controls:VulkanViewport Name="Viewport"/>
+        </Panel>
 
         <Border Grid.Row="2" Classes="panel" BorderBrush="{StaticResource SkyCardBrush}" BorderThickness="0,1,0,0">
           <DockPanel>

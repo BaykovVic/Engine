@@ -1,10 +1,15 @@
 // Drives the engine purely through the C ABI the Avalonia (.NET) editor will
 // P/Invoke — no C++ engine types — proving the marshalling surface round-trips.
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
 #include "sky/editor/bridge/editor_bridge.h"
+#include "sky/platform/x11_window_system.hpp"
 #include "sky_test.hpp"
 
 namespace {
@@ -91,10 +96,73 @@ void testBridgeAuthoring() {
     sky_editor_destroy(ctx);
 }
 
+// Drives the viewport ABI exactly as the Avalonia editor does: hand the
+// bridge a native window XID (and let it open its own X11 display, as it does
+// for Avalonia's embedded surface), render the scene, and confirm the frame
+// reached the window.
+void testBridgeViewport()
+{
+    const std::uint32_t width = 200;
+    const std::uint32_t height = 150;
+
+    auto windows = sky::platform::createX11WindowSystem();
+    if (windows == nullptr)
+    {
+        std::puts("editor_bridge_tests: no X display, skipping viewport case");
+        return;
+    }
+    const auto window = windows->createWindow({"Sky Bridge Viewport", width, height, false});
+    CHECK(window.isValid());
+    CHECK(windows->pumpEvents());
+
+    void* display = nullptr;
+    std::uint64_t xid = 0;
+    CHECK(windows->nativeHandles(window, &display, &xid));
+
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    // Pass a null display so the bridge opens its own connection — the path
+    // the Avalonia NativeControlHost takes.
+    const int attached = sky_editor_attach_viewport(ctx, nullptr, xid, width, height);
+    CHECK(attached == 1);
+    if (attached == 1)
+    {
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            sky_editor_render_viewport(ctx, width, height);
+            windows->pumpEvents();
+        }
+
+        // The scene's sky fills the top of the frame: a bright, non-black,
+        // blue-leaning pixel proves real content reached the window.
+        auto* xdisplay = static_cast<Display*>(display);
+        XSync(xdisplay, False);
+        XImage* image = XGetImage(xdisplay, static_cast<Window>(xid),
+                                  int(width / 2), 8, 1, 1, AllPlanes, ZPixmap);
+        CHECK(image != nullptr);
+        if (image != nullptr)
+        {
+            const unsigned long pixel = XGetPixel(image, 0, 0);
+            const auto red = (pixel & image->red_mask) >> 16;
+            const auto green = (pixel & image->green_mask) >> 8;
+            const auto blue = pixel & image->blue_mask;
+            CHECK(red + green + blue > 120); // not the black clear colour
+            CHECK(blue >= red);              // sky leans blue
+            XDestroyImage(image);
+        }
+    }
+
+    sky_editor_detach_viewport(ctx);
+    sky_editor_destroy(ctx);
+    windows->destroyWindow(window);
+}
+
 } // namespace
 
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
+    testBridgeViewport();
     return sky::test::summary("editor_bridge_tests");
 }

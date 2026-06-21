@@ -70,6 +70,11 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern ulong sky_editor_duplicate(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern void sky_editor_delete(IntPtr ctx, ulong obj);
 
+    // --- Viewport (Vulkan swapchain bound to the embedded native window) ---
+    [DllImport(Lib)] public static extern int sky_editor_attach_viewport(IntPtr ctx, IntPtr x11Display, ulong x11Window, uint width, uint height);
+    [DllImport(Lib)] public static extern void sky_editor_render_viewport(IntPtr ctx, uint width, uint height);
+    [DllImport(Lib)] public static extern void sky_editor_detach_viewport(IntPtr ctx);
+
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)
     {

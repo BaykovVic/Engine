@@ -87,6 +87,10 @@ public sealed class EditorSession : IDisposable
         Reload();
     }
 
+    /// The native session handle, shared with the viewport control so the
+    /// embedded renderer draws the very scene the panels edit.
+    public IntPtr Native => _ctx;
+
     public ObservableCollection<SkyObject> Roots { get; } = new();
 
     public void Reload()
