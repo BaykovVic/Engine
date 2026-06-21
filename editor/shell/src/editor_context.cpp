@@ -76,19 +76,28 @@ EditorContext::EditorContext() {
 
     components->registerComponentType(
         {"sky.mesh", "Mesh Renderer", false, "",
-         {{"material", "string"}, {"mesh", "string"}}});
+         {{"material", "string"}, {"mesh", "string"}}, "Rendering"});
     components->registerComponentType(
-        {"sky.collider.box", "Box Collider", false, "", {{"halfExtents", "Vec3"}}});
+        {"sky.camera", "Camera", false, "",
+         {{"projection", "string"},
+          {"fieldOfView", "float"},
+          {"nearPlane", "float"},
+          {"farPlane", "float"}},
+         "Rendering"});
     components->registerComponentType(
-        {"sky.rigidbody", "Rigidbody", false, "", {{"mass", "float"}}});
+        {"sky.collider.box", "Box Collider", false, "", {{"halfExtents", "Vec3"}},
+         "Physics"});
     components->registerComponentType(
-        {"sky.script", "Script", true, "Game.Behaviour", {}});
+        {"sky.rigidbody", "Rigidbody", false, "", {{"mass", "float"}}, "Physics"});
+    components->registerComponentType(
+        {"sky.script", "Script", true, "Game.Behaviour", {}, "Scripting"});
     components->registerComponentType(
         {"sky.light", "Light", false, "",
          {{"type", "string"},
           {"color", "Vec3"},
           {"intensity", "float"},
-          {"range", "float"}}});
+          {"range", "float"}},
+         "Rendering"});
 
     // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
     assets = asset::createAssetDatabase();
@@ -199,7 +208,11 @@ object::ObjectHandle EditorContext::cloneSubtree(object::ObjectHandle source,
     objects->setLocalTransform(copy, objects->localTransform(source));
 
     for (const auto component : components->componentsOf(source)) {
-        components->attach(copy, components->descriptorOf(component).typeId);
+        const auto& descriptor = components->descriptorOf(component);
+        const auto cloned = components->attach(copy, descriptor.typeId);
+        for (const auto& [field, value] : components->fields(component)) {
+            components->setField(cloned, field, value);
+        }
     }
     if (bodies_.contains(source.value)) {
         attachCrateBody(copy);
@@ -433,6 +446,11 @@ void EditorContext::buildDemoScene() {
     objects->setLocalTransform(camera,
                                {{0.0f, 2.5f, -12.0f}, {0.0f, 1.0f, 0.0f, 0.0f},
                                 {1, 1, 1}});
+    const auto cameraComponent = components->attach(camera, "sky.camera");
+    components->setField(cameraComponent, "projection", std::string("perspective"));
+    components->setField(cameraComponent, "fieldOfView", 60.0f);
+    components->setField(cameraComponent, "nearPlane", 0.1f);
+    components->setField(cameraComponent, "farPlane", 1000.0f);
 }
 
 } // namespace sky::editor

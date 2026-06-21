@@ -26,6 +26,9 @@ struct ComponentDescriptor {
     /// For script components: the managed type bound via Scripting Boundary.
     std::string managedTypeName;
     std::vector<InspectableField> fields;
+    /// Grouping shown in the Add Component menu (e.g. "Rendering",
+    /// "Physics", "Scripting"). Empty groups under "Other".
+    std::string category;
 };
 
 /// Component Model contract: registry of available component types,

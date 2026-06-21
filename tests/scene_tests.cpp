@@ -3,6 +3,7 @@
 #include "sky/component/component_world.hpp"
 #include "sky/object/object_world.hpp"
 #include "sky/platform/platform_services.hpp"
+#include "sky/scene/scene_authoring.hpp"
 #include "sky/scene/scene_world.hpp"
 #include "sky/serialization/backends.hpp"
 #include "sky_test.hpp"
@@ -89,10 +90,55 @@ void testLoadRejectsCorruptScene() {
                                 "sky_engine_tests");
 }
 
+void testSceneAuthoring() {
+    SceneFixture fx;
+    fx.components->registerComponentType(
+        {"sky.mesh", "Mesh Renderer", false, "",
+         {{"material", "string"}, {"mesh", "string"}}, "Rendering"});
+
+    const sky::scene::AuthoringServices svc{*fx.objects,    *fx.objects,
+                                            *fx.objects,    *fx.components,
+                                            *fx.components, *fx.components};
+
+    // createPrimitive: an object carrying a Mesh Renderer bound to the cube.
+    const auto cube =
+        sky::scene::createPrimitive(svc, sky::scene::PrimitiveKind::Cube, "Cube");
+    CHECK(fx.objects->exists(cube));
+    const auto comps = fx.components->componentsOf(cube);
+    CHECK(comps.size() == 1u);
+    const auto meshField = fx.components->field(comps.front(), "mesh");
+    CHECK(meshField.has_value());
+    CHECK(std::get<std::string>(*meshField) == "cube");
+
+    // Give it a non-default field value and a child, then duplicate.
+    fx.components->setField(comps.front(), "material", std::string("Crate"));
+    const auto child = fx.objects->createObject("Child");
+    fx.objects->setParent(child, cube);
+    fx.objects->setLocalTransform(child, {{1.0f, 2.0f, 3.0f}, {}, {1, 1, 1}});
+
+    const auto copy = sky::scene::duplicateObject(svc, cube);
+    CHECK(fx.objects->exists(copy));
+    CHECK(fx.objects->nameOf(copy) == "Cube Copy");
+
+    // Component field values carry across (the faithful-copy guarantee).
+    const auto copyComps = fx.components->componentsOf(copy);
+    CHECK(copyComps.size() == 1u);
+    const auto material = fx.components->field(copyComps.front(), "material");
+    CHECK(material.has_value());
+    CHECK(std::get<std::string>(*material) == "Crate");
+
+    // The child is duplicated under the copy, keeping its name and transform.
+    const auto copyChildren = fx.objects->childrenOf(copy);
+    CHECK(copyChildren.size() == 1u);
+    CHECK(fx.objects->nameOf(copyChildren.front()) == "Child");
+    CHECK(fx.objects->localTransform(copyChildren.front()).position.y == 2.0f);
+}
+
 } // namespace
 
 int main() {
     testSceneRoundTrip();
     testLoadRejectsCorruptScene();
+    testSceneAuthoring();
     return sky::test::summary("scene_tests");
 }

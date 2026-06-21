@@ -186,22 +186,26 @@ Collider (в физике уже есть формы `Sphere/Capsule/TerrainHeig
 
 ## Сводка пробелов (что «неготовое» реализуем до отрисовки UI)
 
-Отсортировано по влиянию на дизайн:
+Отсортировано по влиянию на дизайн. Статус обновляется по мере закрытия.
 
-1. **PBR-слоты материала (Normal/Roughness/Metallic/Occlusion/Height) + UV Tiling +
-   parallax Depth.** Самый большой кусок: правки `MaterialDesc`, `RenderCommand`,
-   обоих бэкендов (OpenGL/Vulkan), шейдеров и вершинного формата (тангенты для
-   normal-mapping). Требует решения по объёму v1.
-2. **Компонент Camera** — есть в иерархии дизайна (Main Camera, FollowCamera),
-   но как тип компонента в движке отсутствует. Нужен `sky.camera` + поля
-   (fov/near/far/projection).
-3. **API примитивов и duplicate в ядре** — сейчас `createCrate()`/`cloneSubtree()`
-   живут в Qt-редакторе; для переносимости в Avalonia вынести в движок/общую
-   editor-библиотеку.
-4. **Категории компонентов** — поле `category` в `ComponentDescriptor` для секций
-   Rendering/Physics в попапе Add Component.
+1. ✅ **СДЕЛАНО — полный metal-rough PBR.** `MaterialDesc` и `DrawMesh` расширены
+   слотами Normal/Roughness/Metallic/Occlusion/Height + UV Tiling + parallax Depth;
+   оба бэкенда (OpenGL и Vulkan) переведены на Cook-Torrance GGX. Тангент-базис
+   считается из экранных производных, поэтому вершинный формат остался
+   position+normal+uv (импортёры не тронуты). Отсутствующие слоты подставляют
+   нейтральные дефолты (white / flat-normal). Проверено тестом occlusion-карты в
+   Vulkan; все 18 наборов зелёные.
+2. ✅ **СДЕЛАНО — компонент Camera.** Зарегистрирован тип `sky.camera`
+   (projection/fieldOfView/nearPlane/farPlane), прикреплён к Main Camera в демо-сцене.
+3. ✅ **СДЕЛАНО — примитивы и duplicate в ядре.** Новый модуль
+   `engine/scene/scene_authoring` (`createPrimitive`, `duplicateObject`), не зависит
+   от UI/рендера/физики. `duplicateObject` копирует и значения полей компонентов
+   (раньше Qt-клон их терял — баг исправлен и в редакторе). Покрыто тестом в
+   `scene_tests`.
+4. ✅ **СДЕЛАНО — категории компонентов.** Поле `category` в `ComponentDescriptor`;
+   типы помечены Rendering/Physics/Scripting — основа секций попапа Add Component.
 5. **Персист раскладки** — реализовать `IEditorShell::applyLayout()` +
-   сохранение/восстановление состояния доков (Dock.Avalonia).
+   сохранение/восстановление состояния доков (Dock.Avalonia). Делается на этапе UI.
 6. **C#-editor API (аналог UnityEditor)** — отдельное архитектурное направление:
    сегодня скриптинг только рантаймовый (`IScriptHost`), editor-расширений нет.
    Проектируется вместе с переходом редактора на C#/Avalonia.

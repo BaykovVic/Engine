@@ -57,7 +57,8 @@ sky_add_module(sky_ecs ecs
     ecs/src/object_sync.cpp)
 
 sky_add_module(sky_scene scene
-    scene/src/scene_world.cpp)
+    scene/src/scene_world.cpp
+    scene/src/scene_authoring.cpp)
 
 sky_add_module(sky_project project
     project/src/project_repository.cpp)
