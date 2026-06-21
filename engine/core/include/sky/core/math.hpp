@@ -4,6 +4,13 @@ namespace sky::core {
 
 /// Minimal math value types shared by Object Model transforms, Physics and
 /// Rendering. Kept deliberately small; the math library grows behind these.
+struct Vec2 {
+    float x = 0.0f;
+    float y = 0.0f;
+
+    auto operator<=>(const Vec2&) const = default;
+};
+
 struct Vec3 {
     float x = 0.0f;
     float y = 0.0f;

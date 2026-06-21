@@ -85,6 +85,7 @@ struct GlApi {
     GLint (*GetUniformLocation)(GLuint, const GLchar*) = nullptr;
     void (*UniformMatrix4fv)(GLint, GLsizei, GLboolean, const GLfloat*) = nullptr;
     void (*Uniform3f)(GLint, GLfloat, GLfloat, GLfloat) = nullptr;
+    void (*Uniform2f)(GLint, GLfloat, GLfloat) = nullptr;
     void (*Uniform1f)(GLint, GLfloat) = nullptr;
     void (*Uniform1i)(GLint, GLint) = nullptr;
     void (*Uniform3fv)(GLint, GLsizei, const GLfloat*) = nullptr;
@@ -140,6 +141,7 @@ struct GlApi {
                resolve(GetUniformLocation, "glGetUniformLocation") &&
                resolve(UniformMatrix4fv, "glUniformMatrix4fv") &&
                resolve(Uniform3f, "glUniform3f") &&
+               resolve(Uniform2f, "glUniform2f") &&
                resolve(Uniform1f, "glUniform1f") &&
                resolve(Uniform1i, "glUniform1i") &&
                resolve(Uniform3fv, "glUniform3fv") &&
@@ -338,16 +340,25 @@ void main() {
 }
 )glsl";
 
-// Blinn-Phong with material parameters and up to 4 scene lights.
+// Cook-Torrance metal-rough PBR with up to 4 scene lights, a sky backdrop
+// mode, tangent-space normal/parallax mapping (tangent basis reconstructed
+// from screen-space derivatives, so the engine vertex format stays
+// position+normal+uv) and ambient occlusion.
 const char* kFragmentShader = R"glsl(
 #version 330 core
 in vec3 vNormal;
 in vec3 vWorldPos;
 in vec2 vUv;
 uniform vec3 uBaseColor;
-uniform sampler2D uTexture;
-uniform int uHasTexture;
-uniform sampler2D uShadowMap;
+uniform sampler2D uTexture;       // albedo       (unit 0)
+uniform sampler2D uShadowMap;     // shadow depth (unit 1)
+uniform sampler2D uNormalMap;     // tangent normal (unit 2)
+uniform sampler2D uRoughnessMap;  // roughness    (unit 3)
+uniform sampler2D uMetallicMap;   // metallic     (unit 4)
+uniform sampler2D uOcclusionMap;  // ambient occ  (unit 5)
+uniform sampler2D uHeightMap;     // parallax     (unit 6)
+uniform vec2 uUvTiling;
+uniform float uParallaxDepth;
 uniform mat4 uLightSpace;
 uniform int uHasShadow; // the first directional light casts shadows
 uniform vec3 uEmissive;
@@ -361,6 +372,24 @@ uniform vec3 uLightColor[4]; // colour premultiplied by intensity
 uniform int uLightType[4];   // 0 directional, 1 point
 uniform float uLightRange[4];
 out vec4 fragColor;
+
+const float PI = 3.14159265359;
+
+float distributionGGX(float ndh, float rough) {
+    float a = rough * rough;
+    float a2 = a * a;
+    float d = ndh * ndh * (a2 - 1.0) + 1.0;
+    return a2 / max(PI * d * d, 1e-7);
+}
+float geometrySchlick(float ndv, float rough) {
+    float r = rough + 1.0;
+    float k = (r * r) / 8.0;
+    return ndv / (ndv * (1.0 - k) + k);
+}
+vec3 fresnelSchlick(float vdh, vec3 f0) {
+    return f0 + (1.0 - f0) * pow(clamp(1.0 - vdh, 0.0, 1.0), 5.0);
+}
+
 void main() {
     if (uSkyMode == 1) {
         // Sky backdrop: uBaseColor = horizon, uEmissive = zenith; the sun
@@ -379,13 +408,36 @@ void main() {
         fragColor = vec4(skyColor, 1.0);
         return;
     }
-    vec3 n = normalize(vNormal);
+
+    vec3 ng = normalize(vNormal);
     vec3 v = normalize(uCameraPos - vWorldPos);
-    vec3 albedo = uBaseColor;
-    if (uHasTexture == 1) {
-        albedo *= texture(uTexture, vUv).rgb;
+    vec2 uv = vUv * uUvTiling;
+
+    // Tangent basis from screen-space derivatives — no per-vertex tangents.
+    vec3 dp1 = dFdx(vWorldPos);
+    vec3 dp2 = dFdy(vWorldPos);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, ng);
+    vec3 dp1perp = cross(ng, dp1);
+    vec3 tang = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 bitan = dp2perp * duv1.y + dp1perp * duv2.y;
+    float invmax = inversesqrt(max(dot(tang, tang), dot(bitan, bitan)));
+    mat3 tbn = mat3(tang * invmax, bitan * invmax, ng);
+
+    // Parallax offset along the tangent-space view direction.
+    if (uParallaxDepth > 0.0) {
+        vec3 vTan = normalize(v * tbn); // transpose(tbn) * v
+        float height = texture(uHeightMap, uv).r;
+        uv += (vTan.xy / max(vTan.z, 0.3)) * (height - 0.5) * uParallaxDepth;
     }
-    vec3 result = albedo * 0.22; // ambient floor
+
+    vec3 albedo = uBaseColor * texture(uTexture, uv).rgb;
+    vec3 mapN = texture(uNormalMap, uv).xyz * 2.0 - 1.0;
+    vec3 n = normalize(tbn * mapN);
+    float rough = clamp(uRoughness * texture(uRoughnessMap, uv).r, 0.045, 1.0);
+    float metal = clamp(uMetallic * texture(uMetallicMap, uv).r, 0.0, 1.0);
+    float ao = texture(uOcclusionMap, uv).r;
 
     // Shadow factor from the first directional light's depth map: 3x3 PCF
     // with a slope-independent bias.
@@ -409,6 +461,9 @@ void main() {
         }
     }
 
+    vec3 f0 = mix(vec3(0.04), albedo, metal);
+    float ndv = max(dot(n, v), 1e-4);
+    vec3 lo = vec3(0.0);
     bool firstDirectional = true;
     for (int i = 0; i < uLightCount; ++i) {
         vec3 l;
@@ -426,17 +481,22 @@ void main() {
             attenuation = clamp(1.0 - dist / uLightRange[i], 0.0, 1.0);
             attenuation *= attenuation;
         }
-        float ndl = max(dot(n, l), 0.0);
         vec3 h = normalize(l + v);
-        float shininess = mix(96.0, 4.0, uRoughness);
-        float spec = pow(max(dot(n, h), 0.0), shininess) * (1.0 - uRoughness * 0.7);
-        vec3 diffuse = albedo * (1.0 - uMetallic);
-        vec3 specColor = mix(vec3(0.04), albedo, uMetallic);
-        result += (diffuse * ndl + specColor * spec * ndl) *
-                  uLightColor[i] * attenuation;
+        float ndl = max(dot(n, l), 0.0);
+        float ndh = max(dot(n, h), 0.0);
+        float vdh = max(dot(v, h), 0.0);
+        float d = distributionGGX(ndh, rough);
+        float g = geometrySchlick(ndv, rough) * geometrySchlick(ndl, rough);
+        vec3 f = fresnelSchlick(vdh, f0);
+        vec3 spec = (d * g * f) / max(4.0 * ndv * ndl, 1e-4);
+        // Diffuse keeps the 1/PI folded into the light, matching the engine's
+        // existing exposure (so unlit/scalar materials read the same).
+        vec3 kd = (vec3(1.0) - f) * (1.0 - metal);
+        vec3 radiance = uLightColor[i] * attenuation;
+        lo += (kd * albedo + spec) * radiance * ndl;
     }
-    result += uEmissive;
-    fragColor = vec4(result, 1.0);
+    vec3 ambient = albedo * ao * 0.22; // ambient floor, modulated by occlusion
+    fragColor = vec4(ambient + lo + uEmissive, 1.0);
 }
 )glsl";
 
@@ -499,7 +559,22 @@ public:
         uLightType_ = gl_.GetUniformLocation(program_, "uLightType");
         uLightRange_ = gl_.GetUniformLocation(program_, "uLightRange");
         uTexture_ = gl_.GetUniformLocation(program_, "uTexture");
-        uHasTexture_ = gl_.GetUniformLocation(program_, "uHasTexture");
+        uNormalMap_ = gl_.GetUniformLocation(program_, "uNormalMap");
+        uRoughnessMap_ = gl_.GetUniformLocation(program_, "uRoughnessMap");
+        uMetallicMap_ = gl_.GetUniformLocation(program_, "uMetallicMap");
+        uOcclusionMap_ = gl_.GetUniformLocation(program_, "uOcclusionMap");
+        uHeightMap_ = gl_.GetUniformLocation(program_, "uHeightMap");
+        uUvTiling_ = gl_.GetUniformLocation(program_, "uUvTiling");
+        uParallaxDepth_ = gl_.GetUniformLocation(program_, "uParallaxDepth");
+
+        // Neutral defaults bound when a material leaves a PBR slot empty, so
+        // the shader can sample every map unconditionally: white is a no-op
+        // multiplier (albedo/roughness/metallic/occlusion/height), the flat
+        // normal (0.5,0.5,1) decodes to (0,0,1) — no perturbation.
+        const std::uint8_t white[4] = {255, 255, 255, 255};
+        const std::uint8_t flatNormal[4] = {128, 128, 255, 255};
+        whiteTexture_ = makeSolidTexture(white);
+        flatNormalTexture_ = makeSolidTexture(flatNormal);
 
         gl_.GenVertexArrays(1, &cubeVao_);
         gl_.BindVertexArray(cubeVao_);
@@ -524,6 +599,30 @@ public:
         gl_.EnableVertexAttribArray(2);
         gl_.VertexAttribPointer(2, 2, GL_FLOAT, 0, kStride,
                                 reinterpret_cast<const void*>(6 * sizeof(float)));
+    }
+
+    /// Binds the texture named by `handleValue` to `unit` (or `defaultTex`
+    /// when the handle names no uploaded texture) and points `uniform` at it.
+    void bindMap(GLint unit, GLint uniform, std::uint64_t handleValue,
+                 GLuint defaultTex) {
+        gl_.ActiveTexture(GL_TEXTURE0 + unit);
+        const auto it = textures_.find(handleValue);
+        gl_.BindTexture(GL_TEXTURE_2D, it != textures_.end() ? it->second : defaultTex);
+        gl_.Uniform1i(uniform, unit);
+    }
+
+    /// 1x1 RGBA texture used as a neutral default for unbound PBR slots.
+    GLuint makeSolidTexture(const std::uint8_t rgba[4]) {
+        GLuint texture = 0;
+        gl_.GenTextures(1, &texture);
+        gl_.BindTexture(GL_TEXTURE_2D, texture);
+        gl_.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8), 1, 1, 0,
+                       GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                          static_cast<GLint>(GL_NEAREST));
+        gl_.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                          static_cast<GLint>(GL_NEAREST));
+        return texture;
     }
 
     bool ready() const override { return ready_; }
@@ -715,16 +814,22 @@ public:
                 }
                 case rendering::RenderCommandType::DrawMesh: {
                     flushLights();
-                    // Albedo texture, when the command names one.
-                    if (const auto it = textures_.find(command.texture.value);
-                        it != textures_.end()) {
-                        gl_.ActiveTexture(GL_TEXTURE0);
-                        gl_.BindTexture(GL_TEXTURE_2D, it->second);
-                        gl_.Uniform1i(uTexture_, 0);
-                        gl_.Uniform1i(uHasTexture_, 1);
-                    } else {
-                        gl_.Uniform1i(uHasTexture_, 0);
-                    }
+                    // Bind every PBR map; absent slots fall back to a neutral
+                    // default. Unit 1 is reserved for the shadow map.
+                    bindMap(0, uTexture_, command.texture.value, whiteTexture_);
+                    bindMap(2, uNormalMap_, command.normalTexture.value,
+                            flatNormalTexture_);
+                    bindMap(3, uRoughnessMap_, command.roughnessTexture.value,
+                            whiteTexture_);
+                    bindMap(4, uMetallicMap_, command.metallicTexture.value,
+                            whiteTexture_);
+                    bindMap(5, uOcclusionMap_, command.occlusionTexture.value,
+                            whiteTexture_);
+                    bindMap(6, uHeightMap_, command.heightTexture.value,
+                            whiteTexture_);
+                    gl_.ActiveTexture(GL_TEXTURE0);
+                    gl_.Uniform2f(uUvTiling_, command.uvTiling.x, command.uvTiling.y);
+                    gl_.Uniform1f(uParallaxDepth_, command.parallaxDepth);
                     const auto model = fromTransform(command.transform);
                     gl_.UniformMatrix4fv(uModel_, 1, 0, model.m.data());
                     gl_.Uniform3f(uBaseColor_, command.color.x, command.color.y,
@@ -882,7 +987,15 @@ private:
     GLint uLightType_ = -1;
     GLint uLightRange_ = -1;
     GLint uTexture_ = -1;
-    GLint uHasTexture_ = -1;
+    GLint uNormalMap_ = -1;
+    GLint uRoughnessMap_ = -1;
+    GLint uMetallicMap_ = -1;
+    GLint uOcclusionMap_ = -1;
+    GLint uHeightMap_ = -1;
+    GLint uUvTiling_ = -1;
+    GLint uParallaxDepth_ = -1;
+    GLuint whiteTexture_ = 0;
+    GLuint flatNormalTexture_ = 0;
     GLint uSkyMode_ = -1;
     GLuint shadowProgram_ = 0;
     GLuint shadowFbo_ = 0;

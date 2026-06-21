@@ -214,16 +214,29 @@ void SceneView3D::buildCommands(std::vector<rendering::RenderCommand>& commands)
                     draw.roughness = desc.roughness;
                     draw.metallic = desc.metallic;
                     draw.emissive = desc.emissive;
-                    if (!desc.texturePath.empty() && resourceFactory_ != nullptr) {
-                        auto& texture = textures_[desc.texturePath];
-                        if (!texture.isValid()) {
-                            if (const auto image = asset::loadPngImage(
-                                    *context_.fileSystem, desc.texturePath)) {
-                                texture = resourceFactory_->createTextureFromData(
-                                    image->width, image->height, image->pixels);
+                    draw.uvTiling = desc.uvTiling;
+                    draw.parallaxDepth = desc.parallaxDepth;
+                    if (resourceFactory_ != nullptr) {
+                        const auto resolveTex = [&](const std::string& path) {
+                            if (path.empty()) {
+                                return rendering::RenderResourceHandle::invalid();
                             }
-                        }
-                        draw.texture = texture;
+                            auto& texture = textures_[path];
+                            if (!texture.isValid()) {
+                                if (const auto image = asset::loadPngImage(
+                                        *context_.fileSystem, path)) {
+                                    texture = resourceFactory_->createTextureFromData(
+                                        image->width, image->height, image->pixels);
+                                }
+                            }
+                            return texture;
+                        };
+                        draw.texture = resolveTex(desc.texturePath);
+                        draw.normalTexture = resolveTex(desc.normalPath);
+                        draw.roughnessTexture = resolveTex(desc.roughnessPath);
+                        draw.metallicTexture = resolveTex(desc.metallicPath);
+                        draw.occlusionTexture = resolveTex(desc.occlusionPath);
+                        draw.heightTexture = resolveTex(desc.heightPath);
                     }
                 }
                 const auto meshPath = fieldOr<std::string>(context_, mesh, "mesh", "");

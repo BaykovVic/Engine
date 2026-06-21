@@ -18,6 +18,7 @@ layout(push_constant) uniform Push {
     vec4 baseColor; // w = skyMode
     vec4 emissive;  // w = roughness
     vec4 params;    // x = metallic
+    vec4 params2;   // xy = uvTiling, z = parallaxDepth
 } pc;
 
 layout(location = 0) out vec3 vWorldPos;

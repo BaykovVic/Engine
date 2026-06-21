@@ -187,9 +187,19 @@ private:
             draw.roughness = desc.roughness;
             draw.metallic = desc.metallic;
             draw.emissive = desc.emissive;
-            if (!desc.texturePath.empty()) {
-                draw.texture = uploadedTexture(desc.texturePath);
-            }
+            draw.uvTiling = desc.uvTiling;
+            draw.parallaxDepth = desc.parallaxDepth;
+            const auto resolve = [&](const std::string& path) {
+                return path.empty()
+                           ? sky::rendering::RenderResourceHandle::invalid()
+                           : uploadedTexture(path);
+            };
+            draw.texture = resolve(desc.texturePath);
+            draw.normalTexture = resolve(desc.normalPath);
+            draw.roughnessTexture = resolve(desc.roughnessPath);
+            draw.metallicTexture = resolve(desc.metallicPath);
+            draw.occlusionTexture = resolve(desc.occlusionPath);
+            draw.heightTexture = resolve(desc.heightPath);
         }
     }
 

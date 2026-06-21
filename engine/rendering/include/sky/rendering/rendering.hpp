@@ -65,6 +65,16 @@ struct RenderCommand {
     float metallic = 0.0f;
     /// DrawMesh: albedo texture (invalid = untextured).
     RenderResourceHandle texture;
+    /// DrawMesh: metal-rough PBR maps (invalid = backend binds a neutral
+    /// default, so the scalar material parameters take over).
+    RenderResourceHandle normalTexture;
+    RenderResourceHandle roughnessTexture;
+    RenderResourceHandle metallicTexture;
+    RenderResourceHandle occlusionTexture;
+    RenderResourceHandle heightTexture;
+    /// DrawMesh: UV tiling and parallax depth (see MaterialDesc).
+    core::Vec2 uvTiling{1.0f, 1.0f};
+    float parallaxDepth = 0.0f;
     // AddLight parameters.
     LightType lightType = LightType::Directional;
     float lightIntensity = 1.0f;

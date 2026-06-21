@@ -24,6 +24,17 @@ struct MaterialDesc {
     core::Vec3 emissive{0.0f, 0.0f, 0.0f};
     /// Albedo texture source path (empty = untextured).
     std::string texturePath;
+    /// Metal-rough PBR texture maps (empty = use the scalar fallbacks above).
+    /// All are sampled with the same UV as the albedo map.
+    std::string normalPath;    // tangent-space normal map (RGB)
+    std::string roughnessPath; // grayscale, multiplies `roughness`
+    std::string metallicPath;  // grayscale, multiplies `metallic`
+    std::string occlusionPath; // grayscale ambient occlusion
+    std::string heightPath;    // grayscale height for parallax
+    /// UV scale applied to every map (1,1 = no tiling).
+    core::Vec2 uvTiling{1.0f, 1.0f};
+    /// Parallax displacement strength for the height map (0 = disabled).
+    float parallaxDepth = 0.0f;
 };
 
 /// Rendering Abstraction contract: authoring and lookup of materials.

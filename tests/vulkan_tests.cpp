@@ -145,6 +145,45 @@ void testVulkanTexturing() {
     CHECK(right.b > right.r);
 }
 
+void testVulkanPbrMaps() {
+    const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+
+    // A 1x1 black occlusion map drives ambient occlusion to zero. With no
+    // lights, only the ambient term remains, so the map must visibly darken
+    // the cube versus an unoccluded draw — proving the metal-rough map slots
+    // reach the shader through the per-draw descriptor sets.
+    const std::uint8_t black[4] = {0, 0, 0, 255};
+    const auto occlusion = renderer->createTextureFromData(1, 1, black);
+    CHECK(occlusion.isValid());
+
+    const auto renderCube = [&](bool occluded) {
+        std::vector<sky::rendering::RenderCommand> commands(4);
+        commands[0].type = sky::rendering::RenderCommandType::BeginFrame;
+        commands[1].type = sky::rendering::RenderCommandType::SetCamera;
+        commands[1].transform.position = {0.0f, 0.0f, 2.2f};
+        commands[1].fovDegrees = 50.0f;
+        commands[2].type = sky::rendering::RenderCommandType::DrawMesh;
+        commands[2].transform.scale = {2.0f, 2.0f, 2.0f};
+        commands[2].color = {1.0f, 1.0f, 1.0f}; // white: ambient shows directly
+        if (occluded) {
+            commands[2].occlusionTexture = occlusion;
+        }
+        commands[3].type = sky::rendering::RenderCommandType::EndFrame;
+        renderer->submit(commands);
+        renderer->renderFrame();
+        return pixelAt(renderer->readbackFrame(), kWidth / 2, kHeight / 2);
+    };
+
+    const auto lit = renderCube(false);
+    const auto dark = renderCube(true);
+    CHECK(lit.r > 30);        // ambient floor exposes the white cube
+    CHECK(dark.r + 15 < lit.r); // occlusion map zeros it out
+}
+
 void testVulkanResourcesAndRegistry() {
     const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
     CHECK(renderer != nullptr);
@@ -236,6 +275,7 @@ void testSwapchainPresentation() {
 int main() {
     testVulkanFrame();
     testVulkanTexturing();
+    testVulkanPbrMaps();
     testVulkanResourcesAndRegistry();
     testSwapchainPresentation();
     return sky::test::summary("vulkan_tests");

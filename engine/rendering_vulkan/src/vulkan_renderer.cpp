@@ -39,7 +39,8 @@ struct PushBlock {
     float model[16];
     float baseColor[4]; // w = skyMode
     float emissive[4];  // w = roughness
-    float params[4];    // x = metallic, y = hasTexture
+    float params[4];    // x = metallic
+    float params2[4];   // xy = uvTiling, z = parallaxDepth
 };
 
 // --- Matrix helpers (column-major, Vulkan clip space) ------------------------
@@ -165,6 +166,7 @@ public:
                 destroyTexture(texture);
             }
             destroyTexture(whiteTexture_);
+            destroyTexture(flatNormalTexture_);
             if (sampler_) vkDestroySampler(device_, sampler_, nullptr);
             if (textureSetLayout_)
                 vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
@@ -334,10 +336,10 @@ public:
                     push.emissive[0] = command.emissive.x;
                     push.emissive[1] = command.emissive.y;
                     push.emissive[2] = command.emissive.z;
-                    vkCmdBindDescriptorSets(commandBuffer_,
-                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                            pipelineLayout_, 1, 1,
-                                            &whiteTexture_.set, 0, nullptr);
+                    push.params2[0] = 1.0f;
+                    push.params2[1] = 1.0f;
+                    bindMaterial(command); // sky samples nothing, but the
+                                           // pipeline needs all sets bound
                     drawBuffer(cube_, push);
                     break;
                 }
@@ -353,15 +355,10 @@ public:
                     push.emissive[2] = command.emissive.z;
                     push.emissive[3] = command.roughness;
                     push.params[0] = command.metallic;
-                    const auto textureIt = textures_.find(command.texture.value);
-                    const auto& texture =
-                        textureIt != textures_.end() ? textureIt->second
-                                                     : whiteTexture_;
-                    push.params[1] = textureIt != textures_.end() ? 1.0f : 0.0f;
-                    vkCmdBindDescriptorSets(commandBuffer_,
-                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                            pipelineLayout_, 1, 1, &texture.set, 0,
-                                            nullptr);
+                    push.params2[0] = command.uvTiling.x;
+                    push.params2[1] = command.uvTiling.y;
+                    push.params2[2] = command.parallaxDepth;
+                    bindMaterial(command);
                     const auto it = meshes_.find(command.resource.value);
                     drawBuffer(it != meshes_.end() ? it->second : cube_, push);
                     break;
@@ -856,10 +853,16 @@ private:
         pushRange.stageFlags =
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.size = sizeof(PushBlock);
-        const VkDescriptorSetLayout setLayouts[2] = {setLayout_, textureSetLayout_};
+        // set 0 = frame UBO; sets 1..6 = the PBR maps (albedo, normal,
+        // roughness, metallic, occlusion, height), all sharing the single
+        // combined-image-sampler layout so any uploaded texture fits any slot.
+        const VkDescriptorSetLayout setLayouts[7] = {
+            setLayout_,        textureSetLayout_, textureSetLayout_,
+            textureSetLayout_, textureSetLayout_, textureSetLayout_,
+            textureSetLayout_};
         VkPipelineLayoutCreateInfo layoutInfo{
             VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        layoutInfo.setLayoutCount = 2;
+        layoutInfo.setLayoutCount = 7;
         layoutInfo.pSetLayouts = setLayouts;
         layoutInfo.pushConstantRangeCount = 1;
         layoutInfo.pPushConstantRanges = &pushRange;
@@ -1052,11 +1055,14 @@ private:
             return false;
         }
 
-        // Untextured draws bind a 1x1 white texture so the pipeline layout
-        // is always complete.
+        // Neutral 1x1 defaults for unbound PBR slots: white is a no-op
+        // multiplier, the flat normal (0.5,0.5,1) decodes to (0,0,1).
         const std::uint8_t white[4] = {255, 255, 255, 255};
+        const std::uint8_t flatNormal[4] = {128, 128, 255, 255};
         whiteTexture_ = uploadTexture(1, 1, white);
-        return whiteTexture_.set != VK_NULL_HANDLE;
+        flatNormalTexture_ = uploadTexture(1, 1, flatNormal);
+        return whiteTexture_.set != VK_NULL_HANDLE &&
+               flatNormalTexture_.set != VK_NULL_HANDLE;
     }
 
     GpuTexture uploadTexture(std::uint32_t width, std::uint32_t height,
@@ -1180,6 +1186,26 @@ private:
         texture = {};
     }
 
+    /// Binds the six PBR-map descriptor sets (set 1..6) for a draw, falling
+    /// back to neutral defaults — white for albedo/roughness/metallic/
+    /// occlusion/height, a flat normal for the normal slot.
+    void bindMaterial(const rendering::RenderCommand& command) {
+        const auto setFor = [&](std::uint64_t handle, const GpuTexture& fallback) {
+            const auto it = textures_.find(handle);
+            return it != textures_.end() ? it->second.set : fallback.set;
+        };
+        const VkDescriptorSet sets[6] = {
+            setFor(command.texture.value, whiteTexture_),
+            setFor(command.normalTexture.value, flatNormalTexture_),
+            setFor(command.roughnessTexture.value, whiteTexture_),
+            setFor(command.metallicTexture.value, whiteTexture_),
+            setFor(command.occlusionTexture.value, whiteTexture_),
+            setFor(command.heightTexture.value, whiteTexture_),
+        };
+        vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipelineLayout_, 1, 6, sets, 0, nullptr);
+    }
+
     void drawBuffer(const GpuBuffer& mesh, const PushBlock& push) {
         vkCmdPushConstants(commandBuffer_, pipelineLayout_,
                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1244,6 +1270,7 @@ private:
     VkSampler sampler_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
     GpuTexture whiteTexture_;
+    GpuTexture flatNormalTexture_;
     std::unordered_map<std::uint64_t, GpuTexture> textures_;
     void* uboMapped_ = nullptr;
     void* readbackMapped_ = nullptr;
