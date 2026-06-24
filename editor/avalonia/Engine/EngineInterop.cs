@@ -90,6 +90,7 @@ internal static class EngineInterop
 
     // --- Offscreen viewport + orbit camera + pick (the editor path) ---
     [DllImport(Lib)] public static extern int sky_editor_render_offscreen(IntPtr ctx, uint width, uint height, byte[] outRgba, int outLength);
+    [DllImport(Lib)] public static extern int sky_editor_render_game_offscreen(IntPtr ctx, uint width, uint height, byte[] outRgba, int outLength);
     [DllImport(Lib)] public static extern void sky_editor_viewport_orbit(IntPtr ctx, float deltaYawDegrees, float deltaPitchDegrees);
     [DllImport(Lib)] public static extern void sky_editor_viewport_pan(IntPtr ctx, float deltaRight, float deltaUp);
     [DllImport(Lib)] public static extern void sky_editor_viewport_zoom(IntPtr ctx, float factor);

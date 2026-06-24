@@ -40,6 +40,13 @@ struct BridgeSession {
     std::unique_ptr<sky::editor::FrameBuilder> offscreenFrame;
     std::uint32_t offscreenWidth = 0;
     std::uint32_t offscreenHeight = 0;
+    // Second offscreen path for the Game view: the scene through its Main
+    // Camera (no editor-orbit override), separate so the two panel sizes do
+    // not thrash a single swapchain.
+    std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> gameOffscreen;
+    std::unique_ptr<sky::editor::FrameBuilder> gameFrame;
+    std::uint32_t gameWidth = 0;
+    std::uint32_t gameHeight = 0;
 #endif
 #ifdef SKY_BRIDGE_X11
     Display* ownDisplay = nullptr; // opened when the caller provides no display
@@ -54,6 +61,8 @@ struct BridgeSession {
 #endif
         offscreenFrame.reset();
         offscreen.reset();
+        gameFrame.reset();
+        gameOffscreen.reset();
 #ifdef SKY_BRIDGE_X11
         if (ownDisplay != nullptr) {
             XCloseDisplay(ownDisplay);
@@ -462,6 +471,45 @@ int32_t sky_editor_render_offscreen(SkyEditorContext* ctx, uint32_t width,
     session->offscreen->submit(session->offscreenFrame->build(width, height));
     session->offscreen->renderFrame();
     const auto pixels = session->offscreen->readbackFrame();
+    if (pixels.size() != std::size_t(width) * height * 4) {
+        return 0;
+    }
+    std::memcpy(out_rgba, pixels.data(), pixels.size());
+    return 1;
+#else
+    (void)ctx; (void)width; (void)height; (void)out_rgba; (void)out_length;
+    return 0;
+#endif
+}
+
+int32_t sky_editor_render_game_offscreen(SkyEditorContext* ctx, uint32_t width,
+                                         uint32_t height, uint8_t* out_rgba,
+                                         int32_t out_length) {
+#ifdef SKY_BRIDGE_VULKAN
+    if (width == 0 || height == 0 || out_rgba == nullptr ||
+        out_length < int32_t(width * height * 4)) {
+        return 0;
+    }
+    auto* session = self(ctx);
+    if (session->gameOffscreen == nullptr || session->gameWidth != width ||
+        session->gameHeight != height) {
+        session->gameFrame.reset();
+        session->gameOffscreen = sky::rendering_vulkan::createVulkanRenderer(width, height);
+        if (session->gameOffscreen == nullptr) {
+            return 0;
+        }
+        session->gameFrame = std::make_unique<sky::editor::FrameBuilder>(
+            session->context, *session->gameOffscreen);
+        session->gameWidth = width;
+        session->gameHeight = height;
+    }
+    // No camera override: the frame builder renders through the scene's Main
+    // Camera — the runtime/game view. Simulation is advanced by the Scene
+    // viewport's tick.
+    session->gameFrame->setCamera(std::nullopt);
+    session->gameOffscreen->submit(session->gameFrame->build(width, height));
+    session->gameOffscreen->renderFrame();
+    const auto pixels = session->gameOffscreen->readbackFrame();
     if (pixels.size() != std::size_t(width) * height * 4) {
         return 0;
     }

@@ -114,6 +114,12 @@ SKY_BRIDGE_API int32_t sky_editor_render_offscreen(SkyEditorContext* ctx,
                                                    uint32_t width, uint32_t height,
                                                    uint8_t* out_rgba,
                                                    int32_t out_length);
+/* Like render_offscreen but through the scene's Main Camera — the Game view. */
+SKY_BRIDGE_API int32_t sky_editor_render_game_offscreen(SkyEditorContext* ctx,
+                                                        uint32_t width,
+                                                        uint32_t height,
+                                                        uint8_t* out_rgba,
+                                                        int32_t out_length);
 
 /* Editor orbit-camera controls and click-to-pick. Orbit/pan deltas are in
  * the front-end's drag units (degrees for orbit, pixels for pan); zoom is a

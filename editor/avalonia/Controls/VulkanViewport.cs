@@ -58,6 +58,10 @@ public sealed class VulkanViewport : Control
     /// space); otherwise they are world-aligned (global space).
     public bool LocalSpace { get; set; }
 
+    /// When true, render through the scene's Main Camera (the Game view) with
+    /// no gizmo or editor camera input.
+    public bool GameView { get; set; }
+
     /// Raised with the picked object's native id (0 = empty space).
     public event Action<ulong>? ObjectPicked;
 
@@ -108,8 +112,10 @@ public sealed class VulkanViewport : Control
             _buffer = new byte[width * height * 4];
         }
 
-        if (EngineInterop.sky_editor_render_offscreen(
-                _context, (uint)width, (uint)height, _buffer!, _buffer!.Length) != 1)
+        var rendered = GameView
+            ? EngineInterop.sky_editor_render_game_offscreen(_context, (uint)width, (uint)height, _buffer!, _buffer!.Length)
+            : EngineInterop.sky_editor_render_offscreen(_context, (uint)width, (uint)height, _buffer!, _buffer!.Length);
+        if (rendered != 1)
         {
             // The offscreen Vulkan renderer produced nothing (e.g. no Vulkan
             // device). Surface that instead of a silent black viewport.
@@ -152,7 +158,8 @@ public sealed class VulkanViewport : Control
                 14, new SolidColorBrush(Color.Parse("#9AA1AC")));
             context.DrawText(text, new Point(24, Math.Max(24, Bounds.Height / 2 - 40)));
         }
-        DrawGizmo(context);
+        if (!GameView)
+            DrawGizmo(context);
     }
 
     // --- Move gizmo ---------------------------------------------------------
@@ -239,6 +246,8 @@ public sealed class VulkanViewport : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (GameView)
+            return; // the Game view has no editor camera/gizmo interaction
         var position = e.GetPosition(this);
         var point = e.GetCurrentPoint(this).Properties;
 

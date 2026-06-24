@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:SkyEditor.Controls"
+             x:Class="SkyEditor.Views.GameView"
+             x:CompileBindings="False">
+  <Panel Background="#0C0D10">
+    <controls:VulkanViewport Name="Viewport" GameView="True"/>
+    <TextBlock Classes="muted" Text="Game · Main Camera" Margin="14,10"
+               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+  </Panel>
+</UserControl>
