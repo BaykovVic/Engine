@@ -23,7 +23,7 @@ public sealed class DockFactory : Factory
         var game = new GameDocument { Id = "Game", Title = "Game", Main = _main };
 
         var inspector = new InspectorTool { Id = "Inspector", Title = "Inspector", Main = _main };
-        var terrain = new PlaceholderTool { Id = "Terrain", Title = "Terrain", Caption = "Terrain tools", Main = _main };
+        var terrain = new TerrainTool { Id = "Terrain", Title = "Terrain", Main = _main };
         var materials = new MaterialsTool { Id = "Materials", Title = "Materials", Main = _main };
 
         var project = new ProjectTool { Id = "Project", Title = "Project", Main = _main };

@@ -415,6 +415,10 @@ void materialFieldSet(sky::rendering::MaterialDesc& m, int field, const std::str
 
 } // namespace
 
+int32_t sky_editor_terrain_generate(SkyEditorContext* ctx, uint64_t seed) {
+    return int32_t(ec(ctx).generateTerrain(seed));
+}
+
 int32_t sky_editor_material_count(SkyEditorContext* ctx) {
     return int32_t(ec(ctx).materials->allMaterials().size());
 }

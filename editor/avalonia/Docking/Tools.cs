@@ -17,6 +17,7 @@ public class EditorDocument : Document
 public sealed class HierarchyTool : EditorTool { }
 public sealed class InspectorTool : EditorTool { }
 public sealed class MaterialsTool : EditorTool { }
+public sealed class TerrainTool : EditorTool { }
 public sealed class ProjectTool : EditorTool { }
 public sealed class SceneDocument : EditorDocument { }
 

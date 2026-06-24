@@ -82,6 +82,10 @@ SKY_BRIDGE_API int32_t sky_editor_component_field_type(SkyEditorContext* ctx, Sk
 SKY_BRIDGE_API int32_t sky_editor_component_field_value(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, char* buffer, int32_t capacity);
 SKY_BRIDGE_API void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, const char* value);
 
+/* Terrain (Terrain panel): regenerate the terrain procedurally from a seed,
+ * scattering objects; returns the scattered object count. */
+SKY_BRIDGE_API int32_t sky_editor_terrain_generate(SkyEditorContext* ctx, uint64_t seed);
+
 /* Materials (Materials panel): the material list and a data-driven field
  * surface (baseColor, roughness, metallic, emissive, the PBR map paths,
  * uvTiling, parallax) read/written as strings. */

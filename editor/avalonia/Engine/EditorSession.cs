@@ -383,6 +383,15 @@ public sealed class EditorSession : IDisposable
     public void SetMaterialField(int material, int field, string value) =>
         EngineInterop.sky_editor_set_material_field(_ctx, material, field, value);
 
+    /// Regenerates the terrain from a seed and reloads the hierarchy (the
+    /// scattered objects change).
+    public int GenerateTerrain(ulong seed)
+    {
+        var count = EngineInterop.sky_editor_terrain_generate(_ctx, seed);
+        Reload();
+        return count;
+    }
+
     /// Lists a VFS directory; entries ending in '/' are folders.
     public List<ProjectEntry> ListProject(string dir)
     {

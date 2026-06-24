@@ -57,6 +57,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SelectedMaterial = Materials.Count > 0 ? Materials[0] : null;
     }
 
+    // --- Terrain ---
+    private string _terrainSeed = "1337";
+    public string TerrainSeed
+    {
+        get => _terrainSeed;
+        set { _terrainSeed = value; OnPropertyChanged(); }
+    }
+
+    public void GenerateTerrain()
+    {
+        ulong.TryParse(_terrainSeed, out var seed);
+        _session.GenerateTerrain(seed);
+        SelectedObject = Roots.Count > 0 ? Roots[0] : null;
+    }
+
     public ObservableCollection<SkyObject> Roots => _session.Roots;
     public IntPtr NativeContext => _session.Native;
     public string SceneTitle => "SampleScene";
