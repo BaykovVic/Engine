@@ -41,6 +41,17 @@ public sealed class VulkanViewport : Control
     private Vector _dragAxisScreen;
     private (float X, float Y, float Z) _dragAxisWorld;
     private readonly float[] _dragStartWorld = new float[3];
+    private readonly float[] _scaleStart = new float[3]; // local scale at drag start
+    private bool _scaleUniform;
+
+    // Rotate gizmo drag state.
+    private int _rotateAxis = -1;
+    private (float X, float Y, float Z) _rotateAxisWorld;
+    private Point _rotateOrigin;     // projected object origin (screen)
+    private double _rotateLastAngle; // last pointer angle around the origin
+    private double _rotateSign;      // screen-to-rotation sign for this axis
+
+    private const int RingSegments = 48;
 
     private static readonly Color[] AxisColors =
     {
@@ -61,6 +72,9 @@ public sealed class VulkanViewport : Control
     /// When true, render through the scene's Main Camera (the Game view) with
     /// no gizmo or editor camera input.
     public bool GameView { get; set; }
+
+    /// Active manipulation tool: Hand (camera only), Move, Rotate or Scale.
+    public GizmoTool Tool { get; set; } = GizmoTool.Move;
 
     /// Raised with the picked object's native id (0 = empty space).
     public event Action<ulong>? ObjectPicked;
@@ -162,6 +176,17 @@ public sealed class VulkanViewport : Control
             DrawGizmo(context);
     }
 
+    private void DrawGizmo(DrawingContext context)
+    {
+        switch (Tool)
+        {
+            case GizmoTool.Move: DrawMoveGizmo(context); break;
+            case GizmoTool.Rotate: DrawRotateGizmo(context); break;
+            case GizmoTool.Scale: DrawScaleGizmo(context); break;
+            // Hand: camera only, no gizmo.
+        }
+    }
+
     // --- Move gizmo ---------------------------------------------------------
 
     private static (float, float, float) RotateByQuat(float[] q, float vx, float vy, float vz)
@@ -201,10 +226,13 @@ public sealed class VulkanViewport : Control
             return false;
         origin = new Point(ox, oy);
 
+        // Scale acts on local axes (like Unity's scale tool); move and rotate
+        // follow the Global/Local toggle.
+        var useLocal = LocalSpace || Tool == GizmoTool.Scale;
         for (var i = 0; i < 3; ++i)
         {
             var (ax, ay, az) = AxisDirs[i];
-            worldAxes[i] = LocalSpace ? RotateByQuat(rotation, ax, ay, az) : (ax, ay, az);
+            worldAxes[i] = useLocal ? RotateByQuat(rotation, ax, ay, az) : (ax, ay, az);
             if (EngineInterop.sky_editor_project(_context,
                     worldPos[0] + worldAxes[i].X * GizmoLength,
                     worldPos[1] + worldAxes[i].Y * GizmoLength,
@@ -217,7 +245,7 @@ public sealed class VulkanViewport : Control
         return true;
     }
 
-    private void DrawGizmo(DrawingContext context)
+    private void DrawMoveGizmo(DrawingContext context)
     {
         if (!GizmoAxes(out var origin, out var tips, out _, out _))
             return;
@@ -227,6 +255,76 @@ public sealed class VulkanViewport : Control
             context.DrawLine(new Pen(brush, 2.5), origin, tips[i]);
             context.DrawEllipse(brush, null, tips[i], 4.5, 4.5);
         }
+    }
+
+    // --- Scale gizmo: axis stubs with square handles + a centre box ---------
+
+    private void DrawScaleGizmo(DrawingContext context)
+    {
+        if (!GizmoAxes(out var origin, out var tips, out _, out _))
+            return;
+        for (var i = 0; i < 3; ++i)
+        {
+            var brush = new SolidColorBrush(AxisColors[i]);
+            context.DrawLine(new Pen(brush, 2.5), origin, tips[i]);
+            var box = new Rect(tips[i].X - 4, tips[i].Y - 4, 8, 8);
+            context.FillRectangle(brush, box);
+        }
+        // Uniform-scale handle at the centre.
+        context.FillRectangle(new SolidColorBrush(Color.Parse("#E8EAED")),
+            new Rect(origin.X - 4, origin.Y - 4, 8, 8));
+    }
+
+    // --- Rotate gizmo: three projected rings --------------------------------
+
+    /// Screen-space points of the ring perpendicular to world axis `axis`,
+    /// sampled around the selection origin. Empty when off-screen.
+    private Point[] RingPoints(float[] worldPos, (float X, float Y, float Z) axis)
+    {
+        // Two unit vectors spanning the plane perpendicular to the axis.
+        var (ax, ay, az) = axis;
+        var refv = Math.Abs(ay) > 0.9f ? (1f, 0f, 0f) : (0f, 1f, 0f);
+        var u = Normalize(Cross((ax, ay, az), refv));
+        var v = Cross((ax, ay, az), u);
+        var pts = new Point[RingSegments + 1];
+        var n = 0;
+        var w = (uint)Bounds.Width;
+        var h = (uint)Bounds.Height;
+        for (var s = 0; s <= RingSegments; ++s)
+        {
+            var t = s / (double)RingSegments * Math.PI * 2;
+            float cs = (float)Math.Cos(t) * GizmoLength, sn = (float)Math.Sin(t) * GizmoLength;
+            var px = worldPos[0] + u.Item1 * cs + v.Item1 * sn;
+            var py = worldPos[1] + u.Item2 * cs + v.Item2 * sn;
+            var pz = worldPos[2] + u.Item3 * cs + v.Item3 * sn;
+            if (EngineInterop.sky_editor_project(_context, px, py, pz, w, h, out var ex, out var ey) == 1)
+                pts[n++] = new Point(ex, ey);
+        }
+        return n == pts.Length ? pts : pts[..n];
+    }
+
+    private void DrawRotateGizmo(DrawingContext context)
+    {
+        if (!GizmoAxes(out _, out _, out var worldPos, out var worldAxes))
+            return;
+        for (var i = 0; i < 3; ++i)
+        {
+            var pts = RingPoints(worldPos, worldAxes[i]);
+            if (pts.Length < 2)
+                continue;
+            var pen = new Pen(new SolidColorBrush(AxisColors[i]), 2.0);
+            for (var s = 0; s < pts.Length - 1; ++s)
+                context.DrawLine(pen, pts[s], pts[s + 1]);
+        }
+    }
+
+    private static (float, float, float) Cross((float X, float Y, float Z) a, (float X, float Y, float Z) b) =>
+        (a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
+
+    private static (float, float, float) Normalize((float X, float Y, float Z) a)
+    {
+        var len = (float)Math.Sqrt(a.X * a.X + a.Y * a.Y + a.Z * a.Z);
+        return len < 1e-6f ? a : (a.X / len, a.Y / len, a.Z / len);
     }
 
     private static double DistanceToSegment(Point p, Point a, Point b)
@@ -243,6 +341,82 @@ public sealed class VulkanViewport : Control
 
     // --- Input --------------------------------------------------------------
 
+    /// Begins a Move/Rotate/Scale gizmo drag if the pointer grabbed a handle.
+    private bool BeginGizmoDrag(Point position)
+    {
+        if (SelectedId == 0 ||
+            !GizmoAxes(out var origin, out var tips, out var worldPos, out var worldAxes))
+            return false;
+
+        if (Tool == GizmoTool.Rotate)
+        {
+            var bestAxis = -1;
+            var bestDist = 8.0;
+            for (var i = 0; i < 3; ++i)
+            {
+                var pts = RingPoints(worldPos, worldAxes[i]);
+                for (var s = 0; s < pts.Length - 1; ++s)
+                {
+                    var d = DistanceToSegment(position, pts[s], pts[s + 1]);
+                    if (d < bestDist) { bestDist = d; bestAxis = i; }
+                }
+            }
+            if (bestAxis < 0)
+                return false;
+            _rotateAxis = bestAxis;
+            _rotateAxisWorld = worldAxes[bestAxis];
+            _rotateOrigin = origin;
+            _rotateLastAngle = Math.Atan2(position.Y - origin.Y, position.X - origin.X);
+            // Screen Y is down (clockwise-positive). A positive screen angle
+            // reads as CCW about an axis facing the camera, so flip the sign
+            // when the axis points away from the viewer.
+            var cam = new float[3];
+            EngineInterop.sky_editor_camera_position(_context, cam);
+            var dot = _rotateAxisWorld.X * (worldPos[0] - cam[0]) +
+                      _rotateAxisWorld.Y * (worldPos[1] - cam[1]) +
+                      _rotateAxisWorld.Z * (worldPos[2] - cam[2]);
+            _rotateSign = dot >= 0 ? 1.0 : -1.0;
+            return true;
+        }
+
+        // Move and Scale pick the nearest axis stub.
+        var best = -1;
+        var bestDistance = 9.0; // pixels
+        for (var i = 0; i < 3; ++i)
+        {
+            var distance = DistanceToSegment(position, origin, tips[i]);
+            if (distance < bestDistance) { bestDistance = distance; best = i; }
+        }
+
+        if (Tool == GizmoTool.Scale)
+        {
+            var dCentre = Math.Sqrt(Math.Pow(position.X - origin.X, 2) +
+                                    Math.Pow(position.Y - origin.Y, 2));
+            _scaleUniform = dCentre < 7.0;
+            if (!_scaleUniform && best < 0)
+                return false;
+            var pos = new float[3];
+            var rot = new float[4];
+            EngineInterop.sky_editor_get_transform(_context, SelectedId, pos, rot, _scaleStart);
+            _dragAxis = _scaleUniform ? 0 : best;
+            _dragStartPointer = position;
+            _dragAxisScreen = tips[Math.Max(best, 0)] - origin;
+            return true;
+        }
+
+        // Move
+        if (best < 0)
+            return false;
+        _dragAxis = best;
+        _dragStartPointer = position;
+        _dragAxisScreen = tips[best] - origin;
+        _dragAxisWorld = worldAxes[best];
+        _dragStartWorld[0] = worldPos[0];
+        _dragStartWorld[1] = worldPos[1];
+        _dragStartWorld[2] = worldPos[2];
+        return true;
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -252,32 +426,11 @@ public sealed class VulkanViewport : Control
         var point = e.GetCurrentPoint(this).Properties;
 
         if (point.IsLeftButtonPressed && _context != IntPtr.Zero &&
-            GizmoAxes(out var origin, out var tips, out var worldPos, out var worldAxes))
+            Tool != GizmoTool.Hand && BeginGizmoDrag(position))
         {
-            var best = -1;
-            var bestDistance = 9.0; // pixels
-            for (var i = 0; i < 3; ++i)
-            {
-                var distance = DistanceToSegment(position, origin, tips[i]);
-                if (distance < bestDistance)
-                {
-                    bestDistance = distance;
-                    best = i;
-                }
-            }
-            if (best >= 0)
-            {
-                _dragAxis = best;
-                _dragStartPointer = position;
-                _dragAxisScreen = tips[best] - origin;
-                _dragAxisWorld = worldAxes[best];
-                _dragStartWorld[0] = worldPos[0];
-                _dragStartWorld[1] = worldPos[1];
-                _dragStartWorld[2] = worldPos[2];
-                e.Pointer.Capture(this);
-                e.Handled = true;
-                return;
-            }
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
         }
 
         _lastPointer = position;
@@ -291,6 +444,46 @@ public sealed class VulkanViewport : Control
     {
         base.OnPointerMoved(e);
         var position = e.GetPosition(this);
+
+        if (_rotateAxis >= 0 && _context != IntPtr.Zero)
+        {
+            var angle = Math.Atan2(position.Y - _rotateOrigin.Y, position.X - _rotateOrigin.X);
+            var delta = angle - _rotateLastAngle;
+            if (delta > Math.PI) delta -= 2 * Math.PI;
+            else if (delta < -Math.PI) delta += 2 * Math.PI;
+            _rotateLastAngle = angle;
+            EngineInterop.sky_editor_rotate_world_axis(_context, SelectedId,
+                _rotateAxisWorld.X, _rotateAxisWorld.Y, _rotateAxisWorld.Z,
+                (float)(delta * _rotateSign));
+            return;
+        }
+
+        if (_dragAxis >= 0 && _context != IntPtr.Zero && Tool == GizmoTool.Scale)
+        {
+            double f;
+            if (_scaleUniform)
+            {
+                f = Math.Max(0.01, 1.0 + (_dragStartPointer.Y - position.Y) / 120.0);
+                EngineInterop.sky_editor_set_scale(_context, SelectedId,
+                    (float)(_scaleStart[0] * f), (float)(_scaleStart[1] * f),
+                    (float)(_scaleStart[2] * f));
+            }
+            else
+            {
+                double dx = position.X - _dragStartPointer.X;
+                double dy = position.Y - _dragStartPointer.Y;
+                double lengthSq = _dragAxisScreen.X * _dragAxisScreen.X +
+                                  _dragAxisScreen.Y * _dragAxisScreen.Y;
+                var t = lengthSq > 1e-3
+                    ? (dx * _dragAxisScreen.X + dy * _dragAxisScreen.Y) / lengthSq
+                    : 0.0;
+                f = Math.Max(0.01, 1.0 + t);
+                var ns = (float[])_scaleStart.Clone();
+                ns[_dragAxis] = (float)(_scaleStart[_dragAxis] * f);
+                EngineInterop.sky_editor_set_scale(_context, SelectedId, ns[0], ns[1], ns[2]);
+            }
+            return;
+        }
 
         if (_dragAxis >= 0 && _context != IntPtr.Zero)
         {
@@ -326,9 +519,10 @@ public sealed class VulkanViewport : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        if (_dragAxis >= 0)
+        if (_dragAxis >= 0 || _rotateAxis >= 0)
         {
             _dragAxis = -1;
+            _rotateAxis = -1;
             e.Pointer.Capture(null);
             return;
         }

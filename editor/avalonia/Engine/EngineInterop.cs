@@ -109,12 +109,14 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern void sky_editor_frame_object(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern int sky_editor_project(IntPtr ctx, float worldX, float worldY, float worldZ, uint width, uint height, out float outX, out float outY);
     [DllImport(Lib)] public static extern void sky_editor_world_position(IntPtr ctx, ulong obj, float[] outXyz);
+    [DllImport(Lib)] public static extern void sky_editor_camera_position(IntPtr ctx, float[] outXyz);
 
     // --- Transforms across spaces (world / self / parent) ---
     [DllImport(Lib)] public static extern void sky_editor_get_world_transform(IntPtr ctx, ulong obj, float[] outPosition, float[] outRotation, float[] outScale);
     [DllImport(Lib)] public static extern void sky_editor_set_world_position(IntPtr ctx, ulong obj, float x, float y, float z);
     [DllImport(Lib)] public static extern void sky_editor_translate_self(IntPtr ctx, ulong obj, float dx, float dy, float dz);
     [DllImport(Lib)] public static extern void sky_editor_set_local_euler(IntPtr ctx, ulong obj, float xDegrees, float yDegrees, float zDegrees);
+    [DllImport(Lib)] public static extern void sky_editor_rotate_world_axis(IntPtr ctx, ulong obj, float axisX, float axisY, float axisZ, float radians);
 
     // --- Play mode ---
     [DllImport(Lib)] public static extern int sky_editor_play(IntPtr ctx);

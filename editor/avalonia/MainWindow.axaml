@@ -27,10 +27,10 @@
         <StackPanel Orientation="Horizontal" Spacing="12">
           <Border Classes="toolGroup">
             <StackPanel Orientation="Horizontal" Spacing="2">
-              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconHand}"/></ToggleButton>
-              <ToggleButton Classes="tool" IsChecked="True"><Path Classes="icon" Data="{StaticResource IconMove}"/></ToggleButton>
-              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconRotate}"/></ToggleButton>
-              <ToggleButton Classes="tool"><Path Classes="icon" Data="{StaticResource IconScale}"/></ToggleButton>
+              <ToggleButton Name="HandTool" Classes="tool" Click="OnToolHand" ToolTip.Tip="Hand (Q)"><Path Classes="icon" Data="{StaticResource IconHand}"/></ToggleButton>
+              <ToggleButton Name="MoveTool" Classes="tool" IsChecked="True" Click="OnToolMove" ToolTip.Tip="Move (W)"><Path Classes="icon" Data="{StaticResource IconMove}"/></ToggleButton>
+              <ToggleButton Name="RotateTool" Classes="tool" Click="OnToolRotate" ToolTip.Tip="Rotate (E)"><Path Classes="icon" Data="{StaticResource IconRotate}"/></ToggleButton>
+              <ToggleButton Name="ScaleTool" Classes="tool" Click="OnToolScale" ToolTip.Tip="Scale (R)"><Path Classes="icon" Data="{StaticResource IconScale}"/></ToggleButton>
             </StackPanel>
           </Border>
           <Border Classes="toolGroup">

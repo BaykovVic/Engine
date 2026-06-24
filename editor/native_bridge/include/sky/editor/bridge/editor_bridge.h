@@ -151,6 +151,11 @@ SKY_BRIDGE_API SkyObjectId sky_editor_pick(SkyEditorContext* ctx, float pixel_x,
 SKY_BRIDGE_API void sky_editor_frame_object(SkyEditorContext* ctx,
                                             SkyObjectId object);
 
+/* Fills the editor orbit camera's world position into a float[3]. Used by
+ * the rotate gizmo to choose the screen-to-rotation sign. */
+SKY_BRIDGE_API void sky_editor_camera_position(SkyEditorContext* ctx,
+                                               float* out_xyz);
+
 /* Projects a world point to a viewport pixel (inverse of the pick ray), so
  * the on-screen transform gizmo lines up with the render. Returns 1 when the
  * point is in front of the camera. world_position fills the object's world
@@ -182,6 +187,13 @@ SKY_BRIDGE_API void sky_editor_translate_self(SkyEditorContext* ctx,
 SKY_BRIDGE_API void sky_editor_set_local_euler(SkyEditorContext* ctx,
                                                SkyObjectId object, float x_degrees,
                                                float y_degrees, float z_degrees);
+/* World space: rotate the object about a world-space axis through its origin
+ * by an angle in radians (axis need not be normalized). Correct for nested
+ * objects (written back through the local-only model). */
+SKY_BRIDGE_API void sky_editor_rotate_world_axis(SkyEditorContext* ctx,
+                                                 SkyObjectId object, float axis_x,
+                                                 float axis_y, float axis_z,
+                                                 float radians);
 
 /* Play mode: enter/pause/stop the running simulation (physics, scripts, ECS).
  * play_state returns 0 = editing, 1 = playing, 2 = paused. The simulation

@@ -8,6 +8,10 @@ using SkyEditor.Engine;
 
 namespace SkyEditor;
 
+/// Active manipulation tool, shared between the toolbar (which sets it) and
+/// the scene viewport (which draws the matching gizmo). Hand = camera only.
+public enum GizmoTool { Hand, Move, Rotate, Scale }
+
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly EditorSession _session;
@@ -183,6 +187,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public void Stop() => EngineInterop.sky_editor_stop(NativeContext);
+
+    // --- Active gizmo tool (toolbar <-> viewport) ---
+    private GizmoTool _tool = GizmoTool.Move;
+    public GizmoTool Tool
+    {
+        get => _tool;
+        set { if (_tool == value) return; _tool = value; OnPropertyChanged(); }
+    }
 
     // --- Project browser (Unity-like: scoped to Assets and Packages) ---
     private readonly List<string> _projectPath = new();

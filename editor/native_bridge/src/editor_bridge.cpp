@@ -651,6 +651,16 @@ void sky_editor_frame_object(SkyEditorContext* ctx, SkyObjectId object) {
     }
 }
 
+void sky_editor_camera_position(SkyEditorContext* ctx, float* out_xyz) {
+    if (out_xyz == nullptr) {
+        return;
+    }
+    const auto p = self(ctx)->camera.pose().position;
+    out_xyz[0] = p.x;
+    out_xyz[1] = p.y;
+    out_xyz[2] = p.z;
+}
+
 int32_t sky_editor_project(SkyEditorContext* ctx, float world_x, float world_y,
                            float world_z, uint32_t width, uint32_t height,
                            float* out_x, float* out_y) {
@@ -715,6 +725,24 @@ void sky_editor_translate_self(SkyEditorContext* ctx, SkyObjectId object, float 
     auto& objects = *ec(ctx).objects;
     auto world = objects.worldTransform(handle(object));
     world.position = world.position + sky::core::rotate(world.rotation, {dx, dy, dz});
+    sky::object::setWorldTransform(objects, handle(object), world);
+}
+
+/// World space: rotate about a world axis through the object's origin.
+void sky_editor_rotate_world_axis(SkyEditorContext* ctx, SkyObjectId object,
+                                  float axis_x, float axis_y, float axis_z,
+                                  float radians) {
+    const float length =
+        std::sqrt(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+    if (length < 1e-6f) {
+        return;
+    }
+    const float s = std::sin(radians / 2.0f) / length;
+    const float c = std::cos(radians / 2.0f);
+    const sky::core::Quat delta{axis_x * s, axis_y * s, axis_z * s, c};
+    auto& objects = *ec(ctx).objects;
+    auto world = objects.worldTransform(handle(object));
+    world.rotation = delta * world.rotation;
     sky::object::setWorldTransform(objects, handle(object), world);
 }
 

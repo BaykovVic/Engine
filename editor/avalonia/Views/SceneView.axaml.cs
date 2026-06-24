@@ -53,10 +53,13 @@ public partial class SceneView : UserControl
         _viewport.SetContext(vm.NativeContext);
         _viewport.ObjectPicked += vm.SelectById;
         _viewport.SelectedId = vm.SelectedObject?.Id ?? 0;
+        _viewport.Tool = vm.Tool;
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MainViewModel.SelectedObject))
                 _viewport.SelectedId = vm.SelectedObject?.Id ?? 0;
+            else if (e.PropertyName == nameof(MainViewModel.Tool))
+                _viewport.Tool = vm.Tool;
         };
     }
 
