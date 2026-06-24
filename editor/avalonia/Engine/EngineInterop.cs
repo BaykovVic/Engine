@@ -32,7 +32,9 @@ internal static class EngineInterop
 
     private static string[] Candidates()
     {
-        const string file = "libsky_editor_bridge.so";
+        var file = OperatingSystem.IsMacOS() ? "libsky_editor_bridge.dylib"
+            : OperatingSystem.IsWindows() ? "sky_editor_bridge.dll"
+            : "libsky_editor_bridge.so";
         var env = Environment.GetEnvironmentVariable("SKY_BRIDGE_PATH");
         var dir = Path.GetDirectoryName(typeof(EngineInterop).Assembly.Location) ?? ".";
         return new[]
