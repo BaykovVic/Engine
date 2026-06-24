@@ -20,7 +20,7 @@ public sealed class DockFactory : Factory
         var hierarchy = new HierarchyTool { Id = "Hierarchy", Title = "Hierarchy", Main = _main };
 
         var scene = new SceneDocument { Id = "Scene", Title = "Scene", Main = _main };
-        var game = new PlaceholderTool { Id = "Game", Title = "Game", Caption = "Game view", Main = _main };
+        var game = new GameDocument { Id = "Game", Title = "Game", Main = _main };
 
         var inspector = new InspectorTool { Id = "Inspector", Title = "Inspector", Main = _main };
         var terrain = new PlaceholderTool { Id = "Terrain", Title = "Terrain", Caption = "Terrain tools", Main = _main };
@@ -40,7 +40,7 @@ public sealed class DockFactory : Factory
         {
             Id = "Documents", IsCollapsable = false,
             ActiveDockable = scene,
-            VisibleDockables = CreateList<IDockable>(scene),
+            VisibleDockables = CreateList<IDockable>(scene, game),
         };
         var rightDock = new ToolDock
         {

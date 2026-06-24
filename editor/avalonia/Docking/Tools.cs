@@ -19,6 +19,11 @@ public sealed class InspectorTool : EditorTool { }
 public sealed class ProjectTool : EditorTool { }
 public sealed class SceneDocument : EditorDocument { }
 
+public sealed class GameDocument : EditorDocument
+{
+    public string Caption { get; set; } = "Game view — runs in play mode";
+}
+
 /// A not-yet-built tab (Terrain, Materials, Console, Packages, Game).
 public sealed class PlaceholderTool : EditorTool
 {

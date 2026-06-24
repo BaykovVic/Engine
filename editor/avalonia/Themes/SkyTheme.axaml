@@ -175,4 +175,20 @@
 
   <Style Selector="GridSplitter"><Setter Property="Background" Value="{StaticResource SkyAppBrush}"/></Style>
   <Style Selector="ScrollBar"><Setter Property="Background" Value="Transparent"/><Setter Property="AllowAutoHide" Value="True"/></Style>
+
+  <!-- ============ Dock chrome (Dock.Avalonia) ============ -->
+  <Style Selector="ToolChromeControl"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/></Style>
+  <Style Selector="ToolChromeControl /template/ Border#PART_Border"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/><Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/><Setter Property="BorderThickness" Value="0"/></Style>
+  <Style Selector="ToolChromeControl /template/ Border#PART_TitleBar"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/><Setter Property="Height" Value="40"/></Style>
+  <Style Selector="ToolChromeControl Button"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/><Setter Property="CornerRadius" Value="5"/></Style>
+
+  <Style Selector="ToolTabStrip"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/></Style>
+  <Style Selector="DocumentTabStrip"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/></Style>
+  <Style Selector="ToolTabStripItem"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/><Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="12,0"/><Setter Property="BorderThickness" Value="0,0,0,2"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+  <Style Selector="ToolTabStripItem:pointerover"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+  <Style Selector="ToolTabStripItem:selected"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="DocumentTabStripItem"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/><Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="14,0"/><Setter Property="BorderThickness" Value="0,0,0,2"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
+  <Style Selector="DocumentTabStripItem:pointerover"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+  <Style Selector="DocumentTabStripItem:selected"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="DockTarget Path"><Setter Property="Fill" Value="{StaticResource SkyAccentTintBrush}"/></Style>
 </Styles>

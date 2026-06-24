@@ -8,6 +8,7 @@
     <DataTemplate DataType="docking:HierarchyTool"><views:HierarchyView/></DataTemplate>
     <DataTemplate DataType="docking:InspectorTool"><views:InspectorView/></DataTemplate>
     <DataTemplate DataType="docking:SceneDocument"><views:SceneView/></DataTemplate>
+    <DataTemplate DataType="docking:GameDocument"><views:PlaceholderView/></DataTemplate>
     <DataTemplate DataType="docking:ProjectTool"><views:ProjectView/></DataTemplate>
     <DataTemplate DataType="docking:PlaceholderTool"><views:PlaceholderView/></DataTemplate>
   </Application.DataTemplates>
