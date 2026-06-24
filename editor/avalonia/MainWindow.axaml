@@ -18,7 +18,11 @@
         <MenuItem Header="Quit"/>
       </MenuItem>
       <MenuItem Header="Edit"/>
-      <MenuItem Header="GameObject"/>
+      <MenuItem Header="GameObject">
+        <MenuItem Header="Create Cube" Click="OnCreateCube"/>
+        <MenuItem Header="Duplicate" Click="OnDuplicate" InputGesture="Ctrl+D"/>
+        <MenuItem Header="Delete" Click="OnDelete" InputGesture="Delete"/>
+      </MenuItem>
       <MenuItem Header="Window"/>
       <MenuItem Header="Help"/>
     </Menu>
@@ -64,7 +68,9 @@
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Text="HIERARCHY"/>
               <Button Grid.Column="1" Classes="tool" Width="26" Height="26"
-                      Background="Transparent" BorderBrush="Transparent" VerticalAlignment="Center">
+                      Background="Transparent" BorderBrush="Transparent"
+                      VerticalAlignment="Center" Click="OnCreateCube"
+                      ToolTip.Tip="Create Cube">
                 <Path Classes="icon" Data="{StaticResource IconAdd}"/>
               </Button>
             </Grid>
@@ -137,11 +143,11 @@
                   <TextBlock Classes="cardTitle" Text="Transform"/>
                   <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*">
                     <TextBlock Text="X" Foreground="{StaticResource SkyAxisXBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="1" Margin="6,0" Text="{Binding PositionX}"/>
+                    <TextBox Grid.Column="1" Margin="6,0" Text="{Binding PositionX, Mode=TwoWay}"/>
                     <TextBlock Grid.Column="2" Text="Y" Foreground="{StaticResource SkyAxisYBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="3" Margin="6,0" Text="{Binding PositionY}"/>
+                    <TextBox Grid.Column="3" Margin="6,0" Text="{Binding PositionY, Mode=TwoWay}"/>
                     <TextBlock Grid.Column="4" Text="Z" Foreground="{StaticResource SkyAxisZBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="5" Margin="6,0" Text="{Binding PositionZ}"/>
+                    <TextBox Grid.Column="5" Margin="6,0" Text="{Binding PositionZ, Mode=TwoWay}"/>
                   </Grid>
                 </StackPanel>
               </Border>

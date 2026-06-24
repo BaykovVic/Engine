@@ -16,11 +16,11 @@ internal static class Program
     {
         var shotIndex = Array.IndexOf(args, "--screenshot");
         if (shotIndex >= 0 && shotIndex + 1 < args.Length)
-            return Screenshot(args[shotIndex + 1]);
+            return Screenshot(args[shotIndex + 1], Array.IndexOf(args, "--demo") >= 0);
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    private static int Screenshot(string path)
+    private static int Screenshot(string path, bool demo)
     {
         AppBuilder.Configure<App>()
             .UseSkia()
@@ -31,6 +31,16 @@ internal static class Program
         var window = new MainWindow();
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // Exercise the editing path: create a cube and move it, so the capture
+        // shows it both in the Hierarchy and in the live viewport.
+        if (demo && window.DataContext is MainViewModel vm)
+        {
+            vm.CreateCube();
+            vm.PositionX = "3";
+            vm.PositionY = "3";
+            Dispatcher.UIThread.RunJobs();
+        }
 
         // Drive a few viewport frames so the offscreen scene is present.
         var viewport = window.FindControl<Controls.VulkanViewport>("Viewport");

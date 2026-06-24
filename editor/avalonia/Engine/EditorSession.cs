@@ -139,6 +139,22 @@ public sealed class EditorSession : IDisposable
         return id;
     }
 
+    public ulong Duplicate(ulong id)
+    {
+        var copy = EngineInterop.sky_editor_duplicate(_ctx, id);
+        Reload();
+        return copy;
+    }
+
+    public void Delete(ulong id)
+    {
+        EngineInterop.sky_editor_delete(_ctx, id);
+        Reload();
+    }
+
+    public void SetPosition(ulong id, float x, float y, float z) =>
+        EngineInterop.sky_editor_set_position(_ctx, id, x, y, z);
+
     public void Dispose()
     {
         if (_ctx != IntPtr.Zero)
