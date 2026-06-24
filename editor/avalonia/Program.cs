@@ -39,6 +39,8 @@ internal static class Program
             vm.CreateCube();
             vm.PositionX = "3";
             vm.PositionY = "3";
+            SkyEditor.Engine.EngineInterop.sky_editor_set_local_euler(
+                vm.NativeContext, vm.SelectedObject!.Id, 0, 40, 0);
             Dispatcher.UIThread.RunJobs();
         }
 

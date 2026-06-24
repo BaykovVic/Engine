@@ -54,4 +54,19 @@ public:
     [[nodiscard]] virtual std::vector<ObjectHandle> findByName(const std::string& name) const = 0;
 };
 
+/// Sets an object's transform in world space, written back through the
+/// local-only hierarchy: a root takes the world transform as its local, a
+/// child takes invCompose(parentWorld, world). Composed from the existing
+/// contract so any IObjectHierarchyAccess gains world-space placement.
+inline void setWorldTransform(IObjectHierarchyAccess& access, ObjectHandle object,
+                              const core::Transform& world) {
+    const auto parent = access.parentOf(object);
+    if (!parent.isValid()) {
+        access.setLocalTransform(object, world);
+    } else {
+        access.setLocalTransform(
+            object, core::invCompose(access.worldTransform(parent), world));
+    }
+}
+
 } // namespace sky::object

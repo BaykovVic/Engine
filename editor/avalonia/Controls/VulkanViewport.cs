@@ -14,10 +14,10 @@ namespace SkyEditor.Controls;
 
 /// The editor's 3D viewport. The engine renders the scene offscreen through
 /// the orbit camera; the control blits the result into a bitmap each frame,
-/// draws the move gizmo over the selection, and turns pointer input into
-/// camera orbit/pan/zoom, click-to-pick and gizmo axis drags. Because it is an
-/// ordinary Avalonia control, it receives input and hosts overlays — the
-/// renderer embeds into the UI, not the other way round.
+/// draws the move gizmo over the selection (in world or the object's own local
+/// space) and turns pointer input into camera orbit/pan/zoom, click-to-pick
+/// and gizmo axis drags. An ordinary Avalonia control — input and overlays
+/// work, so the renderer embeds into the UI, not the other way round.
 public sealed class VulkanViewport : Control
 {
     private const float GizmoLength = 1.2f; // world units along each axis
@@ -36,7 +36,8 @@ public sealed class VulkanViewport : Control
     private int _dragAxis = -1;
     private Point _dragStartPointer;
     private Vector _dragAxisScreen;
-    private readonly float[] _dragStartPosition = new float[3];
+    private (float X, float Y, float Z) _dragAxisWorld;
+    private readonly float[] _dragStartWorld = new float[3];
 
     private static readonly Color[] AxisColors =
     {
@@ -49,6 +50,10 @@ public sealed class VulkanViewport : Control
 
     /// The selected object the gizmo is drawn for (0 = none).
     public ulong SelectedId { get; set; }
+
+    /// When true, the gizmo axes follow the object's own orientation (local
+    /// space); otherwise they are world-aligned (global space).
+    public bool LocalSpace { get; set; }
 
     /// Raised with the picked object's native id (0 = empty space).
     public event Action<ulong>? ObjectPicked;
@@ -122,31 +127,51 @@ public sealed class VulkanViewport : Control
 
     // --- Move gizmo ---------------------------------------------------------
 
-    /// Projects the selection's origin and its three axis tips to control
-    /// (DIP) coordinates. Returns false when there is no selection on screen.
-    private bool GizmoAxes(out Point origin, out Point[] tips)
+    private static (float, float, float) RotateByQuat(float[] q, float vx, float vy, float vz)
+    {
+        float ux = q[0], uy = q[1], uz = q[2], w = q[3];
+        float tx = 2f * (uy * vz - uz * vy);
+        float ty = 2f * (uz * vx - ux * vz);
+        float tz = 2f * (ux * vy - uy * vx);
+        float cx = uy * tz - uz * ty;
+        float cy = uz * tx - ux * tz;
+        float cz = ux * ty - uy * tx;
+        return (vx + w * tx + cx, vy + w * ty + cy, vz + w * tz + cz);
+    }
+
+    /// Projects the selection's origin and axis tips to control (DIP) coords,
+    /// also returning the world origin and the (world or local) axis vectors
+    /// the drag uses. Returns false when there is no selection on screen.
+    private bool GizmoAxes(out Point origin, out Point[] tips, out float[] worldPos,
+        out (float X, float Y, float Z)[] worldAxes)
     {
         origin = default;
         tips = new[] { default(Point), default(Point), default(Point) };
+        worldPos = new float[3];
+        worldAxes = new (float, float, float)[3];
         if (SelectedId == 0 || _context == IntPtr.Zero ||
             Bounds.Width < 1 || Bounds.Height < 1)
             return false;
 
-        var world = new float[3];
-        EngineInterop.sky_editor_world_position(_context, SelectedId, world);
+        var rotation = new float[4];
+        var scale = new float[3];
+        EngineInterop.sky_editor_get_world_transform(_context, SelectedId, worldPos, rotation, scale);
+
         var w = (uint)Bounds.Width;
         var h = (uint)Bounds.Height;
-        if (EngineInterop.sky_editor_project(_context, world[0], world[1], world[2],
+        if (EngineInterop.sky_editor_project(_context, worldPos[0], worldPos[1], worldPos[2],
                 w, h, out var ox, out var oy) != 1)
             return false;
         origin = new Point(ox, oy);
 
         for (var i = 0; i < 3; ++i)
         {
+            var (ax, ay, az) = AxisDirs[i];
+            worldAxes[i] = LocalSpace ? RotateByQuat(rotation, ax, ay, az) : (ax, ay, az);
             if (EngineInterop.sky_editor_project(_context,
-                    world[0] + AxisDirs[i].X * GizmoLength,
-                    world[1] + AxisDirs[i].Y * GizmoLength,
-                    world[2] + AxisDirs[i].Z * GizmoLength,
+                    worldPos[0] + worldAxes[i].X * GizmoLength,
+                    worldPos[1] + worldAxes[i].Y * GizmoLength,
+                    worldPos[2] + worldAxes[i].Z * GizmoLength,
                     w, h, out var ex, out var ey) == 1)
                 tips[i] = new Point(ex, ey);
             else
@@ -157,7 +182,7 @@ public sealed class VulkanViewport : Control
 
     private void DrawGizmo(DrawingContext context)
     {
-        if (!GizmoAxes(out var origin, out var tips))
+        if (!GizmoAxes(out var origin, out var tips, out _, out _))
             return;
         for (var i = 0; i < 3; ++i)
         {
@@ -179,25 +204,6 @@ public sealed class VulkanViewport : Control
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    /// The gizmo axis under the pointer (-1 = none).
-    private int AxisAt(Point position)
-    {
-        if (!GizmoAxes(out var origin, out var tips))
-            return -1;
-        var best = -1;
-        var bestDistance = 9.0; // pixels
-        for (var i = 0; i < 3; ++i)
-        {
-            var distance = DistanceToSegment(position, origin, tips[i]);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                best = i;
-            }
-        }
-        return best;
-    }
-
     // --- Input --------------------------------------------------------------
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -206,15 +212,29 @@ public sealed class VulkanViewport : Control
         var position = e.GetPosition(this);
         var point = e.GetCurrentPoint(this).Properties;
 
-        if (point.IsLeftButtonPressed && _context != IntPtr.Zero)
+        if (point.IsLeftButtonPressed && _context != IntPtr.Zero &&
+            GizmoAxes(out var origin, out var tips, out var worldPos, out var worldAxes))
         {
-            var axis = AxisAt(position);
-            if (axis >= 0 && GizmoAxes(out var origin, out var tips))
+            var best = -1;
+            var bestDistance = 9.0; // pixels
+            for (var i = 0; i < 3; ++i)
             {
-                _dragAxis = axis;
+                var distance = DistanceToSegment(position, origin, tips[i]);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+            if (best >= 0)
+            {
+                _dragAxis = best;
                 _dragStartPointer = position;
-                _dragAxisScreen = tips[axis] - origin;
-                EngineInterop.sky_editor_world_position(_context, SelectedId, _dragStartPosition);
+                _dragAxisScreen = tips[best] - origin;
+                _dragAxisWorld = worldAxes[best];
+                _dragStartWorld[0] = worldPos[0];
+                _dragStartWorld[1] = worldPos[1];
+                _dragStartWorld[2] = worldPos[2];
                 e.Pointer.Capture(this);
                 e.Handled = true;
                 return;
@@ -235,31 +255,32 @@ public sealed class VulkanViewport : Control
 
         if (_dragAxis >= 0 && _context != IntPtr.Zero)
         {
-            var delta = position - _dragStartPointer;
-            var lengthSq = _dragAxisScreen.X * _dragAxisScreen.X +
-                           _dragAxisScreen.Y * _dragAxisScreen.Y;
+            double dx = position.X - _dragStartPointer.X;
+            double dy = position.Y - _dragStartPointer.Y;
+            double lengthSq = _dragAxisScreen.X * _dragAxisScreen.X +
+                              _dragAxisScreen.Y * _dragAxisScreen.Y;
             if (lengthSq > 1e-3)
             {
-                var t = (delta.X * _dragAxisScreen.X + delta.Y * _dragAxisScreen.Y) /
+                var t = (dx * _dragAxisScreen.X + dy * _dragAxisScreen.Y) /
                         lengthSq * GizmoLength;
-                EngineInterop.sky_editor_set_position(_context, SelectedId,
-                    _dragStartPosition[0] + AxisDirs[_dragAxis].X * (float)t,
-                    _dragStartPosition[1] + AxisDirs[_dragAxis].Y * (float)t,
-                    _dragStartPosition[2] + AxisDirs[_dragAxis].Z * (float)t);
+                EngineInterop.sky_editor_set_world_position(_context, SelectedId,
+                    _dragStartWorld[0] + _dragAxisWorld.X * (float)t,
+                    _dragStartWorld[1] + _dragAxisWorld.Y * (float)t,
+                    _dragStartWorld[2] + _dragAxisWorld.Z * (float)t);
             }
             return;
         }
 
         if (!_orbiting && !_panning)
             return;
-        var dx = (float)(position.X - _lastPointer.X);
-        var dy = (float)(position.Y - _lastPointer.Y);
-        if (Math.Abs(dx) + Math.Abs(dy) > 2)
+        var dragX = (float)(position.X - _lastPointer.X);
+        var dragY = (float)(position.Y - _lastPointer.Y);
+        if (Math.Abs(dragX) + Math.Abs(dragY) > 2)
             _moved = true;
         if (_orbiting)
-            EngineInterop.sky_editor_viewport_orbit(_context, -dx * 0.3f, -dy * 0.3f);
+            EngineInterop.sky_editor_viewport_orbit(_context, -dragX * 0.3f, -dragY * 0.3f);
         else if (_panning)
-            EngineInterop.sky_editor_viewport_pan(_context, dx, dy);
+            EngineInterop.sky_editor_viewport_pan(_context, dragX, dragY);
         _lastPointer = position;
     }
 

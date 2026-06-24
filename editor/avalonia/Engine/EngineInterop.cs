@@ -85,6 +85,12 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_project(IntPtr ctx, float worldX, float worldY, float worldZ, uint width, uint height, out float outX, out float outY);
     [DllImport(Lib)] public static extern void sky_editor_world_position(IntPtr ctx, ulong obj, float[] outXyz);
 
+    // --- Transforms across spaces (world / self / parent) ---
+    [DllImport(Lib)] public static extern void sky_editor_get_world_transform(IntPtr ctx, ulong obj, float[] outPosition, float[] outRotation, float[] outScale);
+    [DllImport(Lib)] public static extern void sky_editor_set_world_position(IntPtr ctx, ulong obj, float x, float y, float z);
+    [DllImport(Lib)] public static extern void sky_editor_translate_self(IntPtr ctx, ulong obj, float dx, float dy, float dz);
+    [DllImport(Lib)] public static extern void sky_editor_set_local_euler(IntPtr ctx, ulong obj, float xDegrees, float yDegrees, float zDegrees);
+
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)
     {

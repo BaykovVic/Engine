@@ -375,6 +375,65 @@ void sky_editor_world_position(SkyEditorContext* ctx, SkyObjectId object,
     out_xyz[2] = transform.position.z;
 }
 
+// --- Transforms across spaces: world, relative-to-self, relative-to-parent --
+
+void sky_editor_get_world_transform(SkyEditorContext* ctx, SkyObjectId object,
+                                    float* out_position, float* out_rotation,
+                                    float* out_scale) {
+    const auto t = ec(ctx).objects->worldTransform(handle(object));
+    if (out_position != nullptr) {
+        out_position[0] = t.position.x;
+        out_position[1] = t.position.y;
+        out_position[2] = t.position.z;
+    }
+    if (out_rotation != nullptr) {
+        out_rotation[0] = t.rotation.x;
+        out_rotation[1] = t.rotation.y;
+        out_rotation[2] = t.rotation.z;
+        out_rotation[3] = t.rotation.w;
+    }
+    if (out_scale != nullptr) {
+        out_scale[0] = t.scale.x;
+        out_scale[1] = t.scale.y;
+        out_scale[2] = t.scale.z;
+    }
+}
+
+/// World space: place the object at an absolute world position (written back
+/// through the local-only model, correct for nested objects).
+void sky_editor_set_world_position(SkyEditorContext* ctx, SkyObjectId object,
+                                   float x, float y, float z) {
+    auto& objects = *ec(ctx).objects;
+    auto world = objects.worldTransform(handle(object));
+    world.position = {x, y, z};
+    sky::object::setWorldTransform(objects, handle(object), world);
+}
+
+/// Relative to self: translate along the object's own (rotated) axes.
+void sky_editor_translate_self(SkyEditorContext* ctx, SkyObjectId object, float dx,
+                               float dy, float dz) {
+    auto& objects = *ec(ctx).objects;
+    auto world = objects.worldTransform(handle(object));
+    world.position = world.position + sky::core::rotate(world.rotation, {dx, dy, dz});
+    sky::object::setWorldTransform(objects, handle(object), world);
+}
+
+/// Relative to parent: set the local rotation from Euler angles (degrees,
+/// applied yaw(Y) then pitch(X) then roll(Z)).
+void sky_editor_set_local_euler(SkyEditorContext* ctx, SkyObjectId object,
+                                float x_degrees, float y_degrees, float z_degrees) {
+    const auto axisAngle = [](float degrees, float ax, float ay, float az) {
+        const float radians = degrees * 3.14159265358979f / 180.0f;
+        const float s = std::sin(radians / 2.0f);
+        const float c = std::cos(radians / 2.0f);
+        return sky::core::Quat{ax * s, ay * s, az * s, c};
+    };
+    auto local = ec(ctx).objects->localTransform(handle(object));
+    local.rotation = axisAngle(y_degrees, 0, 1, 0) * axisAngle(x_degrees, 1, 0, 0) *
+                     axisAngle(z_degrees, 0, 0, 1);
+    ec(ctx).objects->setLocalTransform(handle(object), local);
+}
+
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {
 #ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);

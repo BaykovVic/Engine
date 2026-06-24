@@ -139,6 +139,40 @@ void testBridgePicking()
     sky_editor_destroy(ctx);
 }
 
+// Transforms across spaces: world placement, and a self-relative translate
+// that, after a 90-degree yaw, moves the object along a different world axis.
+void testBridgeTransformSpaces()
+{
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+    const SkyObjectId object =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Spaces");
+
+    // World space: absolute placement reads back through world_position.
+    sky_editor_set_world_position(ctx, object, 4.0f, 5.0f, 6.0f);
+    float position[3] = {0, 0, 0};
+    sky_editor_world_position(ctx, object, position);
+    CHECK(std::fabs(position[0] - 4.0f) < 1e-3f);
+    CHECK(std::fabs(position[1] - 5.0f) < 1e-3f);
+    CHECK(std::fabs(position[2] - 6.0f) < 1e-3f);
+
+    // Yaw 90 about Y, then translate along the object's own +Z. A +90 yaw maps
+    // local +Z to world +X, so the world position gains +2 on X only.
+    sky_editor_set_local_euler(ctx, object, 0.0f, 90.0f, 0.0f);
+    sky_editor_translate_self(ctx, object, 0.0f, 0.0f, 2.0f);
+    sky_editor_world_position(ctx, object, position);
+    CHECK(std::fabs(position[0] - 6.0f) < 1e-2f);
+    CHECK(std::fabs(position[1] - 5.0f) < 1e-2f);
+    CHECK(std::fabs(position[2] - 6.0f) < 1e-2f);
+
+    // The world rotation reads back as the 90-degree yaw (w = cos 45).
+    float rotation[4] = {0, 0, 0, 0};
+    sky_editor_get_world_transform(ctx, object, nullptr, rotation, nullptr);
+    CHECK(std::fabs(rotation[3] - 0.7071f) < 1e-2f);
+
+    sky_editor_destroy(ctx);
+}
+
 // Drives the viewport ABI exactly as the Avalonia editor does: hand the
 // bridge a native window XID (and let it open its own X11 display, as it does
 // for Avalonia's embedded surface), render the scene, and confirm the frame
@@ -207,6 +241,7 @@ int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
     testBridgePicking();
+    testBridgeTransformSpaces();
     testBridgeViewport();
     return sky::test::summary("editor_bridge_tests");
 }

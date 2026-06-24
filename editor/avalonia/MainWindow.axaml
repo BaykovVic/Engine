@@ -98,9 +98,14 @@
               <TextBlock Text="Scene" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
               <TextBlock Text="Game" Classes="secondary" VerticalAlignment="Center"/>
             </StackPanel>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0">
-              <ToggleButton Classes="viewMode" IsChecked="True" Content="3D" CornerRadius="6,0,0,6"/>
-              <ToggleButton Classes="viewMode" Content="2D" CornerRadius="0,6,6,0"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
+              <ToggleButton Classes="viewMode" Name="spaceToggle" Content="Local"
+                            CornerRadius="6" Click="OnSpaceToggle"
+                            ToolTip.Tip="Gizmo space: off = World, on = Local"/>
+              <StackPanel Orientation="Horizontal" Spacing="0">
+                <ToggleButton Classes="viewMode" IsChecked="True" Content="3D" CornerRadius="6,0,0,6"/>
+                <ToggleButton Classes="viewMode" Content="2D" CornerRadius="0,6,6,0"/>
+              </StackPanel>
             </StackPanel>
           </Grid>
         </Border>

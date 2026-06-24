@@ -1,3 +1,4 @@
+#include <cmath>
 #include <typeindex>
 
 #include "sky/component/component_world.hpp"
@@ -6,6 +7,37 @@
 #include "sky_test.hpp"
 
 namespace {
+
+void testWorldTransformWriteback() {
+    const auto world = sky::object::createObjectWorld();
+    const auto parent = world->createObject("parent");
+    const auto child = world->createObject("child");
+    world->setParent(child, parent);
+
+    // Parent is translated, rotated 90 deg about Y and scaled 2x — exercises
+    // every term of the world->local conversion.
+    const float s = std::sin(3.14159265f / 4.0f);
+    world->setLocalTransform(
+        parent, {{5.0f, 1.0f, -2.0f}, {0.0f, s, 0.0f, s}, {2.0f, 2.0f, 2.0f}});
+
+    // Place the child at a known world transform and read it back.
+    const sky::core::Transform desired{{1.0f, 2.0f, 3.0f},
+                                       {0.0f, 0.0f, 0.0f, 1.0f},
+                                       {1.0f, 1.0f, 1.0f}};
+    sky::object::setWorldTransform(*world, child, desired);
+
+    const auto got = world->worldTransform(child);
+    CHECK(std::fabs(got.position.x - 1.0f) < 1e-3f);
+    CHECK(std::fabs(got.position.y - 2.0f) < 1e-3f);
+    CHECK(std::fabs(got.position.z - 3.0f) < 1e-3f);
+    CHECK(std::fabs(got.scale.x - 1.0f) < 1e-3f);
+
+    // A root takes the world transform directly as its local.
+    const auto root = world->createObject("root");
+    sky::object::setWorldTransform(*world, root,
+                                   {{7.0f, 8.0f, 9.0f}, {}, {1.0f, 1.0f, 1.0f}});
+    CHECK(world->worldTransform(root).position.x == 7.0f);
+}
 
 void testObjectHierarchy() {
     const auto world = sky::object::createObjectWorld();
@@ -123,6 +155,7 @@ void testEcsWorld() {
 
 int main() {
     testObjectHierarchy();
+    testWorldTransformWriteback();
     testComponentWorld();
     testEcsWorld();
     return sky::test::summary("world_tests");

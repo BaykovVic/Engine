@@ -40,6 +40,10 @@ constexpr Vec3 operator+(const Vec3& a, const Vec3& b) {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
 
+constexpr Vec3 operator-(const Vec3& a, const Vec3& b) {
+    return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+
 constexpr Vec3 operator*(const Vec3& a, float s) {
     return {a.x * s, a.y * s, a.z * s};
 }
@@ -79,6 +83,26 @@ constexpr Transform compose(const Transform& parent, const Transform& child) {
         parent.position + rotate(parent.rotation, child.position * parent.scale),
         parent.rotation * child.rotation,
         parent.scale * child.scale,
+    };
+}
+
+/// Conjugate (inverse for unit quaternions).
+constexpr Quat conjugate(const Quat& q) { return {-q.x, -q.y, -q.z, q.w}; }
+
+/// Component-wise division (used to undo hierarchical scale).
+constexpr Vec3 divide(const Vec3& a, const Vec3& b) {
+    return {a.x / b.x, a.y / b.y, a.z / b.z};
+}
+
+/// Inverse of compose(): given a parent's world transform and a desired child
+/// world transform, returns the child local transform that yields it. Lets a
+/// world-space edit be written back through the local-only object model.
+constexpr Transform invCompose(const Transform& parent, const Transform& world) {
+    const Quat inverse = conjugate(parent.rotation);
+    return {
+        divide(rotate(inverse, world.position - parent.position), parent.scale),
+        inverse * world.rotation,
+        divide(world.scale, parent.scale),
     };
 }
 

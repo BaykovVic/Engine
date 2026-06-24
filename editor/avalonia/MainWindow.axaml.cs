@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -9,26 +10,33 @@ namespace SkyEditor;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
+    private VulkanViewport? _viewport;
 
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
         DataContext = _vm;
 
-        var viewport = this.FindControl<VulkanViewport>("Viewport");
-        if (viewport != null)
+        _viewport = this.FindControl<VulkanViewport>("Viewport");
+        if (_viewport != null)
         {
-            viewport.SetContext(_vm.NativeContext);
-            viewport.ObjectPicked += _vm.SelectById;
-            viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
+            _viewport.SetContext(_vm.NativeContext);
+            _viewport.ObjectPicked += _vm.SelectById;
+            _viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
             _vm.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(MainViewModel.SelectedObject))
-                    viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
+                    _viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
             };
         }
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+    }
+
+    private void OnSpaceToggle(object? sender, RoutedEventArgs e)
+    {
+        if (_viewport != null && sender is ToggleButton toggle)
+            _viewport.LocalSpace = toggle.IsChecked == true;
     }
 
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();

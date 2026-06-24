@@ -125,6 +125,27 @@ SKY_BRIDGE_API int32_t sky_editor_project(SkyEditorContext* ctx, float world_x,
 SKY_BRIDGE_API void sky_editor_world_position(SkyEditorContext* ctx,
                                               SkyObjectId object, float* out_xyz);
 
+/* Transforms across spaces. get_world_transform fills float[3] position,
+ * float[4] rotation (quaternion) and float[3] scale (any may be null).
+ * set_world_position places the object at an absolute world position (correct
+ * for nested objects). translate_self moves along the object's own axes.
+ * set_local_euler sets the local (relative-to-parent) rotation from degrees.
+ * get_transform / set_position remain the local (relative-to-parent) pair. */
+SKY_BRIDGE_API void sky_editor_get_world_transform(SkyEditorContext* ctx,
+                                                   SkyObjectId object,
+                                                   float* out_position,
+                                                   float* out_rotation,
+                                                   float* out_scale);
+SKY_BRIDGE_API void sky_editor_set_world_position(SkyEditorContext* ctx,
+                                                  SkyObjectId object, float x,
+                                                  float y, float z);
+SKY_BRIDGE_API void sky_editor_translate_self(SkyEditorContext* ctx,
+                                              SkyObjectId object, float dx,
+                                              float dy, float dz);
+SKY_BRIDGE_API void sky_editor_set_local_euler(SkyEditorContext* ctx,
+                                               SkyObjectId object, float x_degrees,
+                                               float y_degrees, float z_degrees);
+
 #ifdef __cplusplus
 }
 #endif

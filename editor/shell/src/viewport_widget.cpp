@@ -21,8 +21,6 @@ const QColor kAxisY(0x6f, 0xc0, 0x5a);
 const QColor kAccent(0xf0, 0xd8, 0x5a);
 const QColor kSelection(0x4f, 0x93, 0xd8);
 
-core::Quat conjugate(const core::Quat& q) { return {-q.x, -q.y, -q.z, q.w}; }
-
 core::Quat rotationAroundZ(float radians) {
     return {0.0f, 0.0f, std::sin(radians / 2.0f), std::cos(radians / 2.0f)};
 }
