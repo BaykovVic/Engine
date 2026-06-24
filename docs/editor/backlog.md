@@ -42,17 +42,18 @@
 
 ## Панели на живые данные
 
-- **Project** **[оба]** — обзор VFS (`list`/навигация по папкам), иконки
-  folder/file/image, метка пути. ABI для листинга VFS.
+- **Project** **[оба]** — ✅ обзор VFS (сетка файлов, крошки, иконки).
 - **Console** **[оба]** — поток лога движка (`ILogger`) с уровнями
-  info/warn/error. ABI-сток логов в managed.
-- **Materials** **[оба]** — список материалов + редактор: baseColor,
-  roughness/metallic, emissive и **PBR-слоты** (Normal/Roughness/Metallic/
-  Occlusion/Height + UV tiling + parallax) — движок их уже поддерживает,
-  осталось вывести в UI. ABI для перечисления/правки материалов.
-- **Terrain** **[оба]** — кисти Raise/Lower/Smooth, Radius/Strength, Map
-  Generation (Seed/Generate). ABI поверх `ITerrainService`/mapgen.
-- **Packages** **[оба]** — таблица пакетов, Activate/Deactivate/Refresh.
+  info/warn/error. ABI-сток логов в managed (ещё placeholder).
+- **Materials** **[оба]** — ✅ двухпанельный редактор: список материалов со
+  свотчами + поля (baseColor/roughness/metallic/emissive + PBR-слоты
+  albedo/normal/roughness/metallic/occlusion/height + uvTiling + parallax),
+  всё на живых данных через material-ABI.
+- **Terrain** **[оба]** — ✅ Sculpt (Raise/Lower/Smooth, Radius/Strength) +
+  Map Generation (Seed/Generate, перегенерирует террейн). Осталось: рисование
+  кистью по террейну во вьюпорте.
+- **Packages** **[оба]** — таблица пакетов, Activate/Deactivate/Refresh (ещё
+  placeholder).
 
 ## Операции со сценой
 
@@ -67,11 +68,12 @@
 
 ## Вьюпорт
 
-- **Сетка пола** и оси мира **[UI/движок]**.
+- **Game-вью** **[оба]** — ✅ рендер через Main Camera (`render_game_offscreen`).
+- **Paused/Playing-бейдж** **[UI]** — ✅ по состоянию плеймода.
+- **Мини-ось** (внизу слева) и сетка пола **[UI/движок]** — осталось.
 - **Framing (F)** — навести камеру на выбранный (`frame_object` уже есть).
 - **2D-режим** — переключатель 3D/2D уже в UI, привязать к ортокамере.
-- **Оверлей статистики** — tris/fps (fps есть; tri-count свести из
-  рендер-команд).
+- **Оверлей статистики** — tri-count свести из рендер-команд (fps есть).
 
 ## Раскладка и тема
 
