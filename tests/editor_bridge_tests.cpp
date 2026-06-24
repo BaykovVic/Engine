@@ -139,6 +139,28 @@ void testBridgePicking()
     sky_editor_destroy(ctx);
 }
 
+// Data-driven component fields: read the field names/values and write one back.
+void testBridgeComponentFields()
+{
+    SkyEditorContext* ctx = sky_editor_create();
+    const SkyObjectId cube =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Fields");
+
+    // The cube carries a Mesh Renderer (sky.mesh) with material + mesh fields.
+    CHECK(sky_editor_component_field_count(ctx, cube, 0) >= 2);
+
+    char name[64] = {0};
+    sky_editor_component_field_name(ctx, cube, 0, 0, name, sizeof(name));
+    CHECK(std::string(name) == "material");
+
+    sky_editor_set_component_field(ctx, cube, 0, 0, "Stone");
+    char value[64] = {0};
+    sky_editor_component_field_value(ctx, cube, 0, 0, value, sizeof(value));
+    CHECK(std::string(value) == "Stone");
+
+    sky_editor_destroy(ctx);
+}
+
 // Transforms across spaces: world placement, and a self-relative translate
 // that, after a 90-degree yaw, moves the object along a different world axis.
 void testBridgeTransformSpaces()
@@ -242,6 +264,7 @@ int main() {
     testBridgeAuthoring();
     testBridgePicking();
     testBridgeTransformSpaces();
+    testBridgeComponentFields();
     testBridgeViewport();
     return sky::test::summary("editor_bridge_tests");
 }

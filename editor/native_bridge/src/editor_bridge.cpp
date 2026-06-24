@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
+#include <variant>
 
 #include "editor_camera.hpp"
 #include "editor_context.hpp"
@@ -68,6 +71,39 @@ EditorContext& ec(SkyEditorContext* ctx) { return self(ctx)->context; }
 
 sky::object::ObjectHandle handle(SkyObjectId id) {
     return sky::object::ObjectHandle{id};
+}
+
+sky::component::ComponentHandle componentAt(EditorContext& context, SkyObjectId object,
+                                            int32_t index) {
+    const auto components = context.components->componentsOf(handle(object));
+    if (index < 0 || std::size_t(index) >= components.size()) {
+        return {};
+    }
+    return components[std::size_t(index)];
+}
+
+std::string fieldValueString(const sky::component::FieldValue& value) {
+    return std::visit(
+        [](const auto& x) -> std::string {
+            using T = std::decay_t<decltype(x)>;
+            if constexpr (std::is_same_v<T, float>) {
+                char b[32];
+                std::snprintf(b, sizeof(b), "%g", static_cast<double>(x));
+                return b;
+            } else if constexpr (std::is_same_v<T, std::int64_t>) {
+                return std::to_string(x);
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return x ? "true" : "false";
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return x;
+            } else {
+                char b[64];
+                std::snprintf(b, sizeof(b), "%g, %g, %g", static_cast<double>(x.x),
+                              static_cast<double>(x.y), static_cast<double>(x.z));
+                return b;
+            }
+        },
+        value);
 }
 
 /// Picks the nearest object whose scaled unit-cube AABB the camera ray
@@ -221,6 +257,111 @@ int32_t sky_editor_component_type(SkyEditorContext* ctx, SkyObjectId object,
     const auto& descriptor =
         ec(ctx).components->descriptorOf(components[std::size_t(index)]);
     return copyString(descriptor.typeId, buffer, capacity);
+}
+
+int32_t sky_editor_component_display_name(SkyEditorContext* ctx, SkyObjectId object,
+                                          int32_t component, char* buffer,
+                                          int32_t capacity) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    if (!handle.isValid()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(ec(ctx).components->descriptorOf(handle).displayName, buffer,
+                      capacity);
+}
+
+int32_t sky_editor_component_field_count(SkyEditorContext* ctx, SkyObjectId object,
+                                         int32_t component) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    return handle.isValid()
+               ? int32_t(ec(ctx).components->descriptorOf(handle).fields.size())
+               : 0;
+}
+
+int32_t sky_editor_component_field_name(SkyEditorContext* ctx, SkyObjectId object,
+                                        int32_t component, int32_t field,
+                                        char* buffer, int32_t capacity) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    if (!handle.isValid()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& fields = ec(ctx).components->descriptorOf(handle).fields;
+    if (field < 0 || std::size_t(field) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(fields[std::size_t(field)].name, buffer, capacity);
+}
+
+int32_t sky_editor_component_field_type(SkyEditorContext* ctx, SkyObjectId object,
+                                        int32_t component, int32_t field,
+                                        char* buffer, int32_t capacity) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    if (!handle.isValid()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& fields = ec(ctx).components->descriptorOf(handle).fields;
+    if (field < 0 || std::size_t(field) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(fields[std::size_t(field)].typeName, buffer, capacity);
+}
+
+int32_t sky_editor_component_field_value(SkyEditorContext* ctx, SkyObjectId object,
+                                         int32_t component, int32_t field,
+                                         char* buffer, int32_t capacity) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    if (!handle.isValid()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& fields = ec(ctx).components->descriptorOf(handle).fields;
+    if (field < 0 || std::size_t(field) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto value = ec(ctx).components->field(handle, fields[std::size_t(field)].name);
+    return copyString(value ? fieldValueString(*value) : "", buffer, capacity);
+}
+
+void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object,
+                                    int32_t component, int32_t field,
+                                    const char* value) {
+    const auto handle = componentAt(ec(ctx), object, component);
+    if (!handle.isValid() || value == nullptr) {
+        return;
+    }
+    const auto& fields = ec(ctx).components->descriptorOf(handle).fields;
+    if (field < 0 || std::size_t(field) >= fields.size()) {
+        return;
+    }
+    const auto& descriptor = fields[std::size_t(field)];
+    const std::string text = value;
+    sky::component::FieldValue parsed;
+    if (descriptor.typeName == "float") {
+        parsed = std::strtof(text.c_str(), nullptr);
+    } else if (descriptor.typeName == "int") {
+        parsed = std::int64_t(std::strtoll(text.c_str(), nullptr, 10));
+    } else if (descriptor.typeName == "bool") {
+        parsed = text == "true" || text == "1";
+    } else if (descriptor.typeName == "Vec3") {
+        float x = 0, y = 0, z = 0;
+        std::sscanf(text.c_str(), "%g, %g, %g", &x, &y, &z);
+        parsed = sky::core::Vec3{x, y, z};
+    } else {
+        parsed = text;
+    }
+    ec(ctx).components->setField(handle, descriptor.name, parsed);
+}
+
+int32_t sky_editor_vfs_count(SkyEditorContext* ctx, const char* dir) {
+    return int32_t(ec(ctx).vfs->list(dir != nullptr ? dir : "").size());
+}
+
+int32_t sky_editor_vfs_entry(SkyEditorContext* ctx, const char* dir, int32_t index,
+                             char* buffer, int32_t capacity) {
+    const auto entries = ec(ctx).vfs->list(dir != nullptr ? dir : "");
+    if (index < 0 || std::size_t(index) >= entries.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(entries[std::size_t(index)], buffer, capacity);
 }
 
 SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,

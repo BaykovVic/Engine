@@ -70,6 +70,21 @@ SKY_BRIDGE_API int32_t sky_editor_component_type(SkyEditorContext* ctx,
                                                  SkyObjectId object, int32_t index,
                                                  char* buffer, int32_t capacity);
 
+/* Component fields (data-driven Inspector): display name, the field count and
+ * each field's name / type / value as strings, and a string setter that parses
+ * by the field's type. */
+SKY_BRIDGE_API int32_t sky_editor_component_display_name(SkyEditorContext* ctx, SkyObjectId object, int32_t component, char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_component_field_count(SkyEditorContext* ctx, SkyObjectId object, int32_t component);
+SKY_BRIDGE_API int32_t sky_editor_component_field_name(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_component_field_type(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_component_field_value(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, char* buffer, int32_t capacity);
+SKY_BRIDGE_API void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, const char* value);
+
+/* Virtual file system listing (Project panel). Entries ending in '/' are
+ * directories. dir is a virtual path like "project://" or "assets://textures". */
+SKY_BRIDGE_API int32_t sky_editor_vfs_count(SkyEditorContext* ctx, const char* dir);
+SKY_BRIDGE_API int32_t sky_editor_vfs_entry(SkyEditorContext* ctx, const char* dir, int32_t index, char* buffer, int32_t capacity);
+
 /* Authoring. */
 SKY_BRIDGE_API SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
                                                        SkyPrimitiveKind kind,
