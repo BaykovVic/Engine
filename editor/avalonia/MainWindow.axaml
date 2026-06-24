@@ -41,9 +41,9 @@
           </Border>
           <Border Classes="toolGroup">
             <StackPanel Orientation="Horizontal" Spacing="2">
-              <ToggleButton Classes="tool"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></ToggleButton>
-              <ToggleButton Classes="tool"><Path Classes="iconFilled" Data="{StaticResource IconPause}" Fill="{StaticResource SkyTextSecondaryBrush}"/></ToggleButton>
-              <Button Classes="tool" Background="Transparent" BorderBrush="Transparent"><Path Classes="iconFilled" Data="{StaticResource IconStop}" Fill="{StaticResource SkyTextSecondaryBrush}"/></Button>
+              <Button Classes="tool" Background="Transparent" BorderBrush="Transparent" Click="OnPlay" ToolTip.Tip="Play"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></Button>
+              <Button Classes="tool" Background="Transparent" BorderBrush="Transparent" Click="OnPause" ToolTip.Tip="Pause"><Path Classes="iconFilled" Data="{StaticResource IconPause}" Fill="{StaticResource SkyTextSecondaryBrush}"/></Button>
+              <Button Classes="tool" Background="Transparent" BorderBrush="Transparent" Click="OnStop" ToolTip.Tip="Stop"><Path Classes="iconFilled" Data="{StaticResource IconStop}" Fill="{StaticResource SkyTextSecondaryBrush}"/></Button>
             </StackPanel>
           </Border>
         </StackPanel>

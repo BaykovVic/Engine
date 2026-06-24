@@ -44,9 +44,13 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
-        // Drive a few viewport frames so the offscreen scene is present.
+        // Drive viewport frames so the offscreen scene is present. With --play,
+        // enter play mode and run long enough for the rigidbody crates to fall.
         var viewport = window.FindControl<Controls.VulkanViewport>("Viewport");
-        for (var i = 0; i < 4; ++i)
+        var play = demo && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "--play") >= 0;
+        if (play && window.DataContext is MainViewModel pvm)
+            SkyEditor.Engine.EngineInterop.sky_editor_play(pvm.NativeContext);
+        for (var i = 0; i < (play ? 60 : 4); ++i)
         {
             viewport?.RenderOnce();
             Dispatcher.UIThread.RunJobs();

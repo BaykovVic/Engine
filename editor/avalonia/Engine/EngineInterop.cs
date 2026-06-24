@@ -93,6 +93,12 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern void sky_editor_translate_self(IntPtr ctx, ulong obj, float dx, float dy, float dz);
     [DllImport(Lib)] public static extern void sky_editor_set_local_euler(IntPtr ctx, ulong obj, float xDegrees, float yDegrees, float zDegrees);
 
+    // --- Play mode ---
+    [DllImport(Lib)] public static extern int sky_editor_play(IntPtr ctx);
+    [DllImport(Lib)] public static extern void sky_editor_pause(IntPtr ctx);
+    [DllImport(Lib)] public static extern void sky_editor_stop(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_play_state(IntPtr ctx);
+
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)
     {

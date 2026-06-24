@@ -306,6 +306,10 @@ int32_t sky_editor_render_offscreen(SkyEditorContext* ctx, uint32_t width,
         session->offscreenWidth = width;
         session->offscreenHeight = height;
     }
+    // Advance the simulation while playing (physics, scripts, ECS).
+    if (session->context.playMode->state() == sky::editor::PlayModeState::Playing) {
+        session->context.playMode->tickFrame(1.0 / 60.0);
+    }
     session->offscreenFrame->setCamera(session->camera.pose());
     session->offscreen->submit(session->offscreenFrame->build(width, height));
     session->offscreen->renderFrame();
@@ -432,6 +436,22 @@ void sky_editor_set_local_euler(SkyEditorContext* ctx, SkyObjectId object,
     local.rotation = axisAngle(y_degrees, 0, 1, 0) * axisAngle(x_degrees, 1, 0, 0) *
                      axisAngle(z_degrees, 0, 0, 1);
     ec(ctx).objects->setLocalTransform(handle(object), local);
+}
+
+// --- Play mode -----------------------------------------------------------
+
+int32_t sky_editor_play(SkyEditorContext* ctx) {
+    auto& context = ec(ctx);
+    context.playMode->setScene(context.activeScene);
+    return context.playMode->play() ? 1 : 0;
+}
+
+void sky_editor_pause(SkyEditorContext* ctx) { ec(ctx).playMode->pause(); }
+void sky_editor_stop(SkyEditorContext* ctx) { ec(ctx).playMode->stop(); }
+
+/// 0 = editing, 1 = playing, 2 = paused.
+int32_t sky_editor_play_state(SkyEditorContext* ctx) {
+    return static_cast<int32_t>(ec(ctx).playMode->state());
 }
 
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {

@@ -146,6 +146,14 @@ SKY_BRIDGE_API void sky_editor_set_local_euler(SkyEditorContext* ctx,
                                                SkyObjectId object, float x_degrees,
                                                float y_degrees, float z_degrees);
 
+/* Play mode: enter/pause/stop the running simulation (physics, scripts, ECS).
+ * play_state returns 0 = editing, 1 = playing, 2 = paused. The simulation
+ * advances each frame while a viewport is rendering. */
+SKY_BRIDGE_API int32_t sky_editor_play(SkyEditorContext* ctx);
+SKY_BRIDGE_API void sky_editor_pause(SkyEditorContext* ctx);
+SKY_BRIDGE_API void sky_editor_stop(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_play_state(SkyEditorContext* ctx);
+
 #ifdef __cplusplus
 }
 #endif

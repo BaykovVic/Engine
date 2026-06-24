@@ -39,6 +39,13 @@ public partial class MainWindow : Window
             _viewport.LocalSpace = toggle.IsChecked == true;
     }
 
+    private void OnPlay(object? sender, RoutedEventArgs e) =>
+        SkyEditor.Engine.EngineInterop.sky_editor_play(_vm.NativeContext);
+    private void OnPause(object? sender, RoutedEventArgs e) =>
+        SkyEditor.Engine.EngineInterop.sky_editor_pause(_vm.NativeContext);
+    private void OnStop(object? sender, RoutedEventArgs e) =>
+        SkyEditor.Engine.EngineInterop.sky_editor_stop(_vm.NativeContext);
+
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();
     private void OnDuplicate(object? sender, RoutedEventArgs e) => _vm.DuplicateSelected();
     private void OnDelete(object? sender, RoutedEventArgs e) => _vm.DeleteSelected();
