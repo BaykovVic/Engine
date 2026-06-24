@@ -159,9 +159,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(axis == 0 ? nameof(ScaleX) : axis == 1 ? nameof(ScaleY) : nameof(ScaleZ));
     }
 
-    // --- Play ---
-    public void Play() => EngineInterop.sky_editor_play(NativeContext);
-    public void Pause() => EngineInterop.sky_editor_pause(NativeContext);
+    // --- Play transport (Unity-like toggles) ---
+    // PlayModeState: 0 = Editing, 1 = Playing, 2 = Paused.
+    private int PlayState => EngineInterop.sky_editor_play_state(NativeContext);
+
+    /// Play toggles play mode: enter from Editing, exit (stop) while running.
+    public void Play()
+    {
+        if (PlayState == 0)
+            EngineInterop.sky_editor_play(NativeContext);
+        else
+            EngineInterop.sky_editor_stop(NativeContext);
+    }
+
+    /// Pause toggles between Playing and Paused; ignored while editing.
+    public void Pause()
+    {
+        switch (PlayState)
+        {
+            case 1: EngineInterop.sky_editor_pause(NativeContext); break;
+            case 2: EngineInterop.sky_editor_play(NativeContext); break; // resume
+        }
+    }
+
     public void Stop() => EngineInterop.sky_editor_stop(NativeContext);
 
     // --- Project browser (Unity-like: scoped to Assets and Packages) ---

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using Dock.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Mvvm;
@@ -12,6 +15,7 @@ namespace SkyEditor.Docking;
 public sealed class DockFactory : Factory
 {
     private readonly MainViewModel _main;
+    private IRootDock? _root;
 
     public DockFactory(MainViewModel main) => _main = main;
 
@@ -74,6 +78,27 @@ public sealed class DockFactory : Factory
         root.VisibleDockables = CreateList<IDockable>(workspace);
         root.ActiveDockable = workspace;
         root.DefaultDockable = workspace;
+        _root = root;
         return root;
+    }
+
+    /// Wire up the locators Dock.Avalonia needs for live drag/dock/float.
+    /// Without HostWindowLocator a panel dragged out of its dock cannot
+    /// spawn its own floating window, so tabs feel "stuck".
+    public override void InitLayout(IDockable layout)
+    {
+        ContextLocator = new Dictionary<string, Func<object?>>();
+
+        DockableLocator = new Dictionary<string, Func<IDockable?>>
+        {
+            ["Root"] = () => _root,
+        };
+
+        HostWindowLocator = new Dictionary<string, Func<IHostWindow?>>
+        {
+            [nameof(IDockWindow)] = () => new HostWindow(),
+        };
+
+        base.InitLayout(layout);
     }
 }
