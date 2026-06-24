@@ -19,6 +19,9 @@
     <Panel>
       <controls:VulkanViewport Name="Viewport"/>
       <TextBlock Classes="mono muted" Text="tris 48.2k · 60 fps" Margin="14,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+      <Border Name="PausedBadge" Classes="badge" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12">
+        <TextBlock Name="PausedText" Text="Paused"/>
+      </Border>
     </Panel>
   </DockPanel>
 </UserControl>
