@@ -34,6 +34,7 @@ public:
 struct VulkanPresentTarget {
     void* x11Display = nullptr;
     std::uint64_t x11Window = 0;
+    void* metalLayer = nullptr; // CAMetalLayer* on macOS (MoltenVK)
 };
 
 /// Offscreen renderer (readback verification, headless targets). Returns

@@ -18,7 +18,14 @@ target_link_libraries(sky_editor_bridge PRIVATE
 
 find_package(Vulkan QUIET)
 find_package(X11 QUIET)
-if(Vulkan_FOUND AND X11_FOUND)
-    target_link_libraries(sky_editor_bridge PRIVATE sky::sky_rendering_vulkan X11::X11)
+# Offscreen Vulkan (the editor viewport) needs only Vulkan — it works on macOS
+# via MoltenVK with no windowing. The X11 swapchain path is the extra,
+# Linux-only standalone-window route.
+if(Vulkan_FOUND)
+    target_link_libraries(sky_editor_bridge PRIVATE sky::sky_rendering_vulkan)
     target_compile_definitions(sky_editor_bridge PRIVATE SKY_BRIDGE_VULKAN)
+    if(X11_FOUND)
+        target_link_libraries(sky_editor_bridge PRIVATE X11::X11)
+        target_compile_definitions(sky_editor_bridge PRIVATE SKY_BRIDGE_X11)
+    endif()
 endif()

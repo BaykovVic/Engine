@@ -27,12 +27,21 @@ sky_add_module(sky_platform platform
     platform/src/pak_archive.cpp
     platform/src/x11_window_system.cpp)
 
-# Native windowing: X11 on Linux when available; the headless system always
+# Native windowing: X11 on Linux, Cocoa on macOS; the headless system always
 # remains as the fallback behind the same contracts.
 find_package(X11 QUIET)
 if(X11_FOUND)
     target_compile_definitions(sky_platform PRIVATE SKY_HAS_X11)
     target_link_libraries(sky_platform PRIVATE X11::X11)
+endif()
+
+if(APPLE)
+    target_sources(sky_platform PRIVATE platform/src/cocoa_window_system.mm)
+    set_source_files_properties(platform/src/cocoa_window_system.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    target_compile_definitions(sky_platform PRIVATE SKY_HAS_COCOA)
+    target_link_libraries(sky_platform PRIVATE
+        "-framework Cocoa" "-framework Metal" "-framework QuartzCore")
 endif()
 
 sky_add_module(sky_core core
@@ -148,6 +157,12 @@ if(SKY_BUILD_VULKAN_BACKEND)
         if(X11_FOUND)
             target_compile_definitions(sky_rendering_vulkan PRIVATE SKY_HAS_X11)
             target_link_libraries(sky_rendering_vulkan PRIVATE X11::X11)
+        endif()
+        if(APPLE)
+            # MoltenVK present path: VK_EXT_metal_surface over a CAMetalLayer.
+            target_compile_definitions(sky_rendering_vulkan PRIVATE SKY_HAS_METAL)
+            target_link_libraries(sky_rendering_vulkan PRIVATE
+                "-framework Metal" "-framework QuartzCore" "-framework Foundation")
         endif()
     else()
         message(STATUS "Vulkan SDK not found - vulkan backend stays contract-only")

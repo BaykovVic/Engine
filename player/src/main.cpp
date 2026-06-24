@@ -14,7 +14,11 @@
 
 #include "editor_context.hpp"
 #include "frame_builder.hpp"
+#if defined(__APPLE__)
+#include "sky/platform/cocoa_window_system.hpp"
+#else
 #include "sky/platform/x11_window_system.hpp"
+#endif
 #include "sky/rendering_vulkan/vulkan_backend.hpp"
 
 namespace {
@@ -59,7 +63,11 @@ int runHeadless(EditorContext& context, int frames, const char* screenshotPath) 
 }
 
 int runWindowed(EditorContext& context, int frameLimit) {
+#if defined(__APPLE__)
+    auto windows = sky::platform::createCocoaWindowSystem();
+#else
     auto windows = sky::platform::createX11WindowSystem();
+#endif
     if (windows == nullptr) {
         std::fprintf(stderr, "sky_player: no display; use --headless\n");
         return 1;
@@ -67,9 +75,13 @@ int runWindowed(EditorContext& context, int frameLimit) {
     const auto window = windows->createWindow({"Sky Player", kWidth, kHeight, true});
 
     sky::rendering_vulkan::VulkanPresentTarget target;
+#if defined(__APPLE__)
+    target.metalLayer = windows->metalLayer(window);
+#else
     if (!windows->nativeHandles(window, &target.x11Display, &target.x11Window)) {
         return 1;
     }
+#endif
     const auto renderer = sky::rendering_vulkan::createVulkanRendererForWindow(
         target, kWidth, kHeight);
     if (renderer == nullptr) {

@@ -8,9 +8,13 @@
 #include <cstring>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #ifdef SKY_HAS_X11
 #define VK_USE_PLATFORM_XLIB_KHR
+#endif
+#ifdef SKY_HAS_METAL
+#define VK_USE_PLATFORM_METAL_EXT
 #endif
 #include <vulkan/vulkan.h>
 
@@ -493,15 +497,42 @@ private:
         app.apiVersion = VK_API_VERSION_1_1;
         VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         instanceInfo.pApplicationInfo = &app;
+#if defined(SKY_HAS_METAL)
+        // MoltenVK is a Vulkan-portability driver over Metal: the instance
+        // must opt into enumerating portability devices, and present mode
+        // adds the Metal surface extension.
+        std::vector<const char*> instanceExtensions = {
+            "VK_KHR_portability_enumeration",
+            "VK_KHR_get_physical_device_properties2"};
+        if (presentMode_) {
+            instanceExtensions.push_back("VK_KHR_surface");
+            instanceExtensions.push_back("VK_EXT_metal_surface");
+        }
+        instanceInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        instanceInfo.enabledExtensionCount =
+            static_cast<std::uint32_t>(instanceExtensions.size());
+        instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
+#elif defined(SKY_HAS_X11)
         const char* instanceExtensions[] = {"VK_KHR_surface", "VK_KHR_xlib_surface"};
         if (presentMode_) {
             instanceInfo.enabledExtensionCount = 2;
             instanceInfo.ppEnabledExtensionNames = instanceExtensions;
         }
+#endif
         if (vkCreateInstance(&instanceInfo, nullptr, &instance_) != VK_SUCCESS) {
             return false;
         }
-#ifdef SKY_HAS_X11
+#if defined(SKY_HAS_METAL)
+        if (presentMode_) {
+            VkMetalSurfaceCreateInfoEXT surfaceInfo{
+                VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT};
+            surfaceInfo.pLayer = presentTarget_.metalLayer; // CAMetalLayer*
+            if (vkCreateMetalSurfaceEXT(instance_, &surfaceInfo, nullptr, &surface_) !=
+                VK_SUCCESS) {
+                return false;
+            }
+        }
+#elif defined(SKY_HAS_X11)
         if (presentMode_) {
             VkXlibSurfaceCreateInfoKHR surfaceInfo{
                 VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR};
@@ -514,7 +545,7 @@ private:
         }
 #else
         if (presentMode_) {
-            return false; // built without X11 surface support
+            return false; // built without a window surface backend
         }
 #endif
 
@@ -560,11 +591,22 @@ private:
         VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         deviceInfo.queueCreateInfoCount = 1;
         deviceInfo.pQueueCreateInfos = &queueInfo;
+#if defined(SKY_HAS_METAL)
+        // MoltenVK requires the portability-subset device extension.
+        std::vector<const char*> deviceExtensions = {"VK_KHR_portability_subset"};
+        if (presentMode_) {
+            deviceExtensions.push_back("VK_KHR_swapchain");
+        }
+        deviceInfo.enabledExtensionCount =
+            static_cast<std::uint32_t>(deviceExtensions.size());
+        deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
+#else
         const char* deviceExtensions[] = {"VK_KHR_swapchain"};
         if (presentMode_) {
             deviceInfo.enabledExtensionCount = 1;
             deviceInfo.ppEnabledExtensionNames = deviceExtensions;
         }
+#endif
         if (vkCreateDevice(physical_, &deviceInfo, nullptr, &device_) != VK_SUCCESS) {
             return false;
         }

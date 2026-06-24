@@ -13,6 +13,8 @@
 
 #ifdef SKY_BRIDGE_VULKAN
 #include "sky/rendering_vulkan/vulkan_backend.hpp"
+#endif
+#ifdef SKY_BRIDGE_X11
 #include <X11/Xlib.h>
 #endif
 
@@ -20,30 +22,40 @@ using sky::editor::EditorContext;
 
 namespace {
 
-/// One editor session: the engine assembly plus, once a viewport is attached,
-/// a window-bound renderer and the shared frame builder.
+/// One editor session: the engine assembly plus the orbit camera and, once a
+/// viewport renders, the Vulkan resources. The offscreen path (Vulkan only)
+/// drives the editor on every OS, including macOS via MoltenVK; the swapchain
+/// path (Vulkan + X11) is the Linux standalone-window route.
 struct BridgeSession {
     EditorContext context;
     sky::editor::EditorCamera camera;
 #ifdef SKY_BRIDGE_VULKAN
-    Display* ownDisplay = nullptr; // opened when the caller provides no display
-    std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> renderer;
-    std::unique_ptr<sky::editor::FrameBuilder> frame;
     // Offscreen path: the editor viewport renders to a texture it blits into a
-    // normal UI control (so it receives input and hosts overlays).
+    // normal UI control (so it receives input and hosts overlays). No window
+    // surface — works wherever Vulkan does.
     std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> offscreen;
     std::unique_ptr<sky::editor::FrameBuilder> offscreenFrame;
     std::uint32_t offscreenWidth = 0;
     std::uint32_t offscreenHeight = 0;
-
+#endif
+#ifdef SKY_BRIDGE_X11
+    Display* ownDisplay = nullptr; // opened when the caller provides no display
+    std::unique_ptr<sky::rendering_vulkan::VulkanRenderer> renderer;
+    std::unique_ptr<sky::editor::FrameBuilder> frame;
+#endif
+#ifdef SKY_BRIDGE_VULKAN
     ~BridgeSession() {
+#ifdef SKY_BRIDGE_X11
         frame.reset();
         renderer.reset(); // releases the Vulkan surface before the display closes
+#endif
         offscreenFrame.reset();
         offscreen.reset();
+#ifdef SKY_BRIDGE_X11
         if (ownDisplay != nullptr) {
             XCloseDisplay(ownDisplay);
         }
+#endif
     }
 #endif
 };
@@ -228,7 +240,7 @@ void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object) {
 int32_t sky_editor_attach_viewport(SkyEditorContext* ctx, void* x11Display,
                                    uint64_t x11Window, uint32_t width,
                                    uint32_t height) {
-#ifdef SKY_BRIDGE_VULKAN
+#ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);
     // The UI toolkit (Avalonia) hands us the embedded child window's XID but
     // not its X11 display; a fresh connection presents to that server-side
@@ -260,7 +272,7 @@ int32_t sky_editor_attach_viewport(SkyEditorContext* ctx, void* x11Display,
 
 void sky_editor_render_viewport(SkyEditorContext* ctx, uint32_t width,
                                 uint32_t height) {
-#ifdef SKY_BRIDGE_VULKAN
+#ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);
     if (session->renderer == nullptr || session->frame == nullptr) {
         return;
@@ -340,7 +352,7 @@ void sky_editor_frame_object(SkyEditorContext* ctx, SkyObjectId object) {
 }
 
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {
-#ifdef SKY_BRIDGE_VULKAN
+#ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);
     session->frame.reset();
     session->renderer.reset();
