@@ -61,6 +61,14 @@ public sealed class VulkanViewport : Control
     /// Raised with the picked object's native id (0 = empty space).
     public event Action<ulong>? ObjectPicked;
 
+    public VulkanViewport()
+    {
+        // Keep the rendered scene and the gizmo overlay inside the viewport —
+        // otherwise a gizmo for an object projected off-screen overdraws the
+        // toolbar and window chrome.
+        ClipToBounds = true;
+    }
+
     public void SetContext(IntPtr context) => _context = context;
 
     /// Renders a single frame synchronously (used for headless capture).
