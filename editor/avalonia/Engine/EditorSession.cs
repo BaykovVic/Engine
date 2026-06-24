@@ -94,10 +94,31 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     public string Type { get; }
 
     // Field-type presentation, so the inspector renders like Unity: a plain box
-    // for scalars/strings, X/Y/Z boxes for Vec3, a checkbox for bool.
+    // for scalars/strings, X/Y/Z boxes for Vec3, a checkbox for bool, and a
+    // mesh-reference picker for the Mesh Renderer's "mesh" field.
     public bool IsVec3 => Type == "Vec3";
     public bool IsBool => Type == "bool";
-    public bool IsScalar => !IsVec3 && !IsBool;
+    public bool IsMeshRef => Name == "mesh";
+    public bool IsScalar => !IsVec3 && !IsBool && !IsMeshRef;
+
+    // --- Mesh reference (Unity-style asset picker) ---
+    public System.Collections.Generic.List<MeshOption> MeshOptions =>
+        _session.AvailableMeshes(_value);
+
+    public MeshOption? SelectedMesh
+    {
+        get
+        {
+            foreach (var o in MeshOptions)
+                if (o.Value == _value) return o;
+            return null;
+        }
+        set
+        {
+            if (value != null) Value = value.Value;
+            Raise(nameof(SelectedMesh));
+        }
+    }
 
     public string Value
     {
@@ -142,6 +163,16 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
         new System.ComponentModel.PropertyChangedEventArgs(name));
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+
+/// One entry in the mesh-reference picker: a friendly display name plus the
+/// underlying reference stored in the component ("cube", "assets://...").
+public sealed class MeshOption
+{
+    public MeshOption(string display, string value) { Display = display; Value = value; }
+    public string Display { get; }
+    public string Value { get; }
+    public override string ToString() => Display;
 }
 
 /// A material in the Materials panel, with a colour swatch and PBR fields.
@@ -436,6 +467,45 @@ public sealed class EditorSession : IDisposable
     }
 
     /// Lists a VFS directory; entries ending in '/' are folders.
+    /// Meshes selectable in the Mesh Renderer's reference picker: built-in
+    /// primitives plus imported models under Assets/Models. `current` is kept
+    /// in the list even if it lives elsewhere, so the picker always shows it.
+    public List<MeshOption> AvailableMeshes(string current)
+    {
+        var list = new List<MeshOption>
+        {
+            new MeshOption("None", ""),
+            new MeshOption("Cube", "cube"),
+            new MeshOption("Plane", "plane"),
+            new MeshOption("Sphere", "sphere"),
+        };
+        string[] modelExt = { ".obj", ".fbx", ".gltf", ".glb" };
+        foreach (var e in ListProject("assets://Models"))
+        {
+            if (e.IsDirectory) continue;
+            var lower = e.Name.ToLowerInvariant();
+            if (System.Array.Exists(modelExt, x => lower.EndsWith(x)))
+            {
+                var value = "assets://Models/" + e.Name;
+                list.Add(new MeshOption(MeshDisplayName(value), value));
+            }
+        }
+        if (!string.IsNullOrEmpty(current) && !list.Exists(o => o.Value == current))
+            list.Add(new MeshOption(MeshDisplayName(current), current));
+        return list;
+    }
+
+    public static string MeshDisplayName(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return "None";
+        var name = value;
+        var slash = name.LastIndexOf('/');
+        if (slash >= 0) name = name.Substring(slash + 1);
+        var dot = name.LastIndexOf('.');
+        if (dot > 0) name = name.Substring(0, dot);
+        return name.Length == 0 ? value : char.ToUpperInvariant(name[0]) + name.Substring(1);
+    }
+
     public List<ProjectEntry> ListProject(string dir)
     {
         var entries = new List<ProjectEntry>();

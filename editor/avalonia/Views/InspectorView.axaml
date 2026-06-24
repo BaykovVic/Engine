@@ -58,6 +58,18 @@
                         <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}" IsVisible="{Binding IsScalar}"/>
                         <!-- bool -->
                         <CheckBox Grid.Column="1" IsChecked="{Binding BoolValue, Mode=TwoWay}" IsVisible="{Binding IsBool}"/>
+                        <!-- mesh reference (Unity-style asset picker) -->
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsMeshRef}"
+                                  ItemsSource="{Binding MeshOptions}" SelectedItem="{Binding SelectedMesh, Mode=TwoWay}">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Width="14" Height="14" Stretch="Uniform" Stroke="{StaticResource SkyTextMutedBrush}" StrokeThickness="1.2" Data="{StaticResource IconMesh}"/>
+                                <TextBlock Text="{Binding Display}" VerticalAlignment="Center"/>
+                              </StackPanel>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <!-- Vec3 as X/Y/Z -->
                         <Grid Grid.Column="1" IsVisible="{Binding IsVec3}" ColumnDefinitions="13,*,6,13,*,6,13,*">
                           <TextBlock Classes="axisX" Text="X" VerticalAlignment="Center"/>

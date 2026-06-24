@@ -219,6 +219,11 @@ private:
     }
 
     rendering::RenderResourceHandle uploadedMesh(const std::string& ref) {
+        // Built-in primitives are drawn from the backend's default geometry,
+        // so an empty or named-primitive reference needs no file load.
+        if (ref.empty() || ref == "cube" || ref == "plane" || ref == "sphere") {
+            return {};
+        }
         auto& handle = meshes_[ref];
         if (!handle.isValid()) {
             const auto path = resolveMeshRef(ref);

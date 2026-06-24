@@ -190,6 +190,7 @@ object::ObjectHandle EditorContext::createCrate(const std::string& name,
     objects->setLocalTransform(crate, {position, {}, {1.0f, 1.0f, 1.0f}});
     const auto mesh = components->attach(crate, "sky.mesh");
     components->setField(mesh, "material", std::string("Crate"));
+    components->setField(mesh, "mesh", std::string("cube"));
     const auto collider = components->attach(crate, "sky.collider.box");
     components->setField(collider, "isTrigger", false);
     components->setField(collider, "center", core::Vec3{0.0f, 0.0f, 0.0f});
