@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyEditor.Views.PlaceholderView"
+             x:CompileBindings="False">
+  <Panel Background="{StaticResource SkyPanelBrush}">
+    <TextBlock Classes="muted" Text="{Binding Caption}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+  </Panel>
+</UserControl>

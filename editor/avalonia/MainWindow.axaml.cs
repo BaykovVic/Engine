@@ -1,70 +1,46 @@
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using SkyEditor.Controls;
+using Dock.Avalonia.Controls;
+using SkyEditor.Docking;
 
 namespace SkyEditor;
 
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
-    private VulkanViewport? _viewport;
 
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
         DataContext = _vm;
 
-        _viewport = this.FindControl<VulkanViewport>("Viewport");
-        if (_viewport != null)
+        var factory = new DockFactory(_vm);
+        var layout = factory.CreateLayout();
+        factory.InitLayout(layout);
+        var dock = this.FindControl<DockControl>("DockControl");
+        if (dock != null)
         {
-            _viewport.SetContext(_vm.NativeContext);
-            _viewport.ObjectPicked += _vm.SelectById;
-            _viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
-            _vm.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(MainViewModel.SelectedObject))
-                    _viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
-            };
+            dock.Factory = factory;
+            dock.Layout = layout;
         }
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
     }
 
-    private void OnSpaceToggle(object? sender, RoutedEventArgs e)
-    {
-        if (_viewport != null && sender is ToggleButton toggle)
-            _viewport.LocalSpace = toggle.IsChecked == true;
-    }
-
-    private void OnPlay(object? sender, RoutedEventArgs e) =>
-        SkyEditor.Engine.EngineInterop.sky_editor_play(_vm.NativeContext);
-    private void OnPause(object? sender, RoutedEventArgs e) =>
-        SkyEditor.Engine.EngineInterop.sky_editor_pause(_vm.NativeContext);
-    private void OnStop(object? sender, RoutedEventArgs e) =>
-        SkyEditor.Engine.EngineInterop.sky_editor_stop(_vm.NativeContext);
-
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();
     private void OnDuplicate(object? sender, RoutedEventArgs e) => _vm.DuplicateSelected();
     private void OnDelete(object? sender, RoutedEventArgs e) => _vm.DeleteSelected();
+    private void OnPlay(object? sender, RoutedEventArgs e) => _vm.Play();
+    private void OnPause(object? sender, RoutedEventArgs e) => _vm.Pause();
+    private void OnStop(object? sender, RoutedEventArgs e) => _vm.Stop();
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        // Let text fields keep their own Delete / typing.
         if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox)
             return;
-
-        if (e.Key == Key.Delete)
-        {
-            _vm.DeleteSelected();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.D && e.KeyModifiers.HasFlag(KeyModifiers.Control))
-        {
-            _vm.DuplicateSelected();
-            e.Handled = true;
-        }
+        if (e.Key == Key.Delete) { _vm.DeleteSelected(); e.Handled = true; }
+        else if (e.Key == Key.D && e.KeyModifiers.HasFlag(KeyModifiers.Control)) { _vm.DuplicateSelected(); e.Handled = true; }
     }
 }

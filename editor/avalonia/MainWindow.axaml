@@ -1,15 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="clr-namespace:Dock.Avalonia.Controls;assembly=Dock.Avalonia"
         x:Class="SkyEditor.MainWindow"
-        xmlns:controls="clr-namespace:SkyEditor.Controls"
-        xmlns:conv="clr-namespace:SkyEditor.Converters"
         x:CompileBindings="False"
         Width="1280" Height="800"
         Background="{StaticResource SkyAppBrush}"
         Title="{Binding SceneTitle, StringFormat='{}{0}.skybox — Sky Engine 1.4'}">
   <DockPanel>
 
-    <!-- Menu -->
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="File">
         <MenuItem Header="New Scene"/><MenuItem Header="Open Scene…"/><MenuItem Header="Save"/>
@@ -24,7 +22,6 @@
       <MenuItem Header="Window"/><MenuItem Header="Help"/>
     </Menu>
 
-    <!-- Toolbar -->
     <Border Classes="toolbar" DockPanel.Dock="Top">
       <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
         <StackPanel Orientation="Horizontal" Spacing="12">
@@ -51,204 +48,17 @@
       </Grid>
     </Border>
 
-    <!-- Status bar -->
     <Border Classes="statusbar" DockPanel.Dock="Bottom">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Ellipse Width="7" Height="7" Fill="{StaticResource SkyTextMutedBrush}" VerticalAlignment="Center"/>
-          <TextBlock Text="Ready"/>
-          <TextBlock Text="·"/>
+          <TextBlock Text="Ready"/><TextBlock Text="·"/>
           <TextBlock Text="{Binding SelectedName, StringFormat='1 object selected · {0}'}"/>
         </StackPanel>
         <TextBlock Grid.Column="1" Text="v1.4 · Avalonia + native bridge"/>
       </Grid>
     </Border>
 
-    <!-- Workspace -->
-    <Grid ColumnDefinitions="264,4,*,4,328">
-
-      <!-- HIERARCHY -->
-      <Border Grid.Column="0" Classes="panel">
-        <DockPanel>
-          <Border Classes="panelHeader" DockPanel.Dock="Top">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Path Classes="icon iconSmall" Data="{StaticResource IconHierarchy}"/>
-                <TextBlock Classes="sectionTitle" Text="Hierarchy"/>
-              </StackPanel>
-              <Button Grid.Column="2" Classes="iconButton" Click="OnCreateCube" ToolTip.Tip="Create Cube"><Path Classes="icon iconSmall" Data="{StaticResource IconAdd}"/></Button>
-              <Button Grid.Column="3" Classes="iconButton"><Path Classes="icon iconSmall" Data="{StaticResource IconKebab}"/></Button>
-            </Grid>
-          </Border>
-          <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource SkyPanelBrush}">
-            <Border Background="{StaticResource SkyInsetBrush}" CornerRadius="6" Padding="8,5" BorderBrush="{StaticResource SkyLineBrush}" BorderThickness="1">
-              <StackPanel Orientation="Horizontal" Spacing="7">
-                <Path Classes="icon iconSmall" Data="{StaticResource IconSearch}"/>
-                <TextBlock Classes="muted" Text="Search..." VerticalAlignment="Center"/>
-              </StackPanel>
-            </Border>
-          </Border>
-          <TreeView Name="HierarchyTree" ItemsSource="{Binding Roots}"
-                    SelectedItem="{Binding SelectedObject, Mode=TwoWay}">
-            <TreeView.ItemTemplate>
-              <TreeDataTemplate ItemsSource="{Binding Children}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Path Classes="icon iconSmall" Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}"/>
-                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                </StackPanel>
-              </TreeDataTemplate>
-            </TreeView.ItemTemplate>
-          </TreeView>
-        </DockPanel>
-      </Border>
-
-      <GridSplitter Grid.Column="1"/>
-
-      <!-- CENTER -->
-      <Grid Grid.Column="2" RowDefinitions="40,*,220">
-        <Border Classes="panelHeader" Grid.Row="0">
-          <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal" Spacing="18">
-              <StackPanel Orientation="Horizontal" Spacing="7">
-                <Path Classes="icon iconSmall" Data="{StaticResource IconSceneGrid}"/>
-                <TextBlock Text="Scene" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-              </StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="7">
-                <Path Classes="icon iconSmall" Data="{StaticResource IconGame}"/>
-                <TextBlock Text="Game" Classes="secondary" VerticalAlignment="Center"/>
-              </StackPanel>
-            </StackPanel>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-              <ToggleButton Classes="viewMode" Name="spaceToggle" Content="Local" CornerRadius="6" Click="OnSpaceToggle" ToolTip.Tip="Gizmo space"/>
-              <StackPanel Orientation="Horizontal" Spacing="0">
-                <ToggleButton Classes="viewMode" IsChecked="True" Content="3D" CornerRadius="6,0,0,6"/>
-                <ToggleButton Classes="viewMode" Content="2D" CornerRadius="0,6,6,0"/>
-              </StackPanel>
-              <Button Classes="chip"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Shaded"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel></Button>
-            </StackPanel>
-          </Grid>
-        </Border>
-
-        <Panel Grid.Row="1" Background="#101216">
-          <controls:VulkanViewport Name="Viewport"/>
-          <TextBlock Classes="mono muted" Text="tris 48.2k · 60 fps" Margin="14,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-        </Panel>
-
-        <Border Grid.Row="2" Classes="panel" BorderBrush="{StaticResource SkyLineStrongBrush}" BorderThickness="0,1,0,0">
-          <DockPanel>
-            <Border Classes="panelHeader" DockPanel.Dock="Top">
-              <StackPanel Orientation="Horizontal" Spacing="18" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="7"><Path Classes="icon iconSmall" Data="{StaticResource IconFolder}"/><TextBlock Text="Project" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold"/></StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="7">
-                  <Path Classes="icon iconSmall" Data="{StaticResource IconConsole}"/><TextBlock Text="Console" Classes="secondary"/>
-                  <Border Classes="countBadge"><TextBlock Text="2"/></Border>
-                </StackPanel>
-                <TextBlock Text="Packages" Classes="secondary"/>
-              </StackPanel>
-            </Border>
-            <Border DockPanel.Dock="Top" Padding="14,6" Background="{StaticResource SkyPanelBrush}">
-              <TextBlock Classes="mono muted" Text="{Binding ProjectPath}"/>
-            </Border>
-            <ListBox ItemsSource="{Binding ProjectEntries}">
-              <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <StackPanel Width="78" Margin="4" HorizontalAlignment="Center">
-                    <Path Classes="icon" Width="34" Height="34" HorizontalAlignment="Center"
-                          Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}"/>
-                    <TextBlock Text="{Binding Name}" Classes="muted" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
-                  </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-          </DockPanel>
-        </Border>
-      </Grid>
-
-      <GridSplitter Grid.Column="3"/>
-
-      <!-- INSPECTOR -->
-      <Border Grid.Column="4" Classes="panel">
-        <DockPanel>
-          <Border Classes="panelHeader" DockPanel.Dock="Top">
-            <StackPanel Orientation="Horizontal" Spacing="18" VerticalAlignment="Center">
-              <StackPanel Orientation="Horizontal" Spacing="7"><Path Classes="icon iconSmall" Data="{StaticResource IconInspector}"/><TextBlock Text="Inspector" Foreground="{StaticResource SkyTextPrimaryBrush}" FontWeight="SemiBold"/></StackPanel>
-              <TextBlock Text="Terrain" Classes="secondary"/>
-              <TextBlock Text="Materials" Classes="secondary"/>
-            </StackPanel>
-          </Border>
-          <ScrollViewer>
-            <StackPanel Margin="12" Spacing="10" IsVisible="{Binding HasSelection}">
-              <Grid ColumnDefinitions="Auto,*">
-                <CheckBox IsChecked="True" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding SelectedName}"/>
-              </Grid>
-
-              <Border Classes="card">
-                <StackPanel Spacing="9">
-                  <TextBlock Classes="cardTitle" Text="Transform"/>
-                  <Grid ColumnDefinitions="64,*">
-                    <TextBlock Classes="fieldLabel" Text="Position"/>
-                    <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
-                      <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding PositionX, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding PositionY, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding PositionZ, Mode=TwoWay}"/></Grid>
-                    </Grid>
-                  </Grid>
-                  <Grid ColumnDefinitions="64,*">
-                    <TextBlock Classes="fieldLabel" Text="Rotation"/>
-                    <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
-                      <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding RotationX, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding RotationY, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding RotationZ, Mode=TwoWay}"/></Grid>
-                    </Grid>
-                  </Grid>
-                  <Grid ColumnDefinitions="64,*">
-                    <TextBlock Classes="fieldLabel" Text="Scale"/>
-                    <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
-                      <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding ScaleX, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding ScaleY, Mode=TwoWay}"/></Grid>
-                      <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding ScaleZ, Mode=TwoWay}"/></Grid>
-                    </Grid>
-                  </Grid>
-                </StackPanel>
-              </Border>
-
-              <ItemsControl ItemsSource="{Binding SelectedComponents}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Classes="card">
-                      <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Path Classes="icon iconSmall" Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}"/>
-                          <TextBlock Classes="cardTitle" Text="{Binding DisplayName}"/>
-                        </StackPanel>
-                        <ItemsControl ItemsSource="{Binding Fields}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                              <Grid ColumnDefinitions="120,*" Margin="0,2">
-                                <TextBlock Classes="fieldLabel" Text="{Binding Name}"/>
-                                <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}"/>
-                              </Grid>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-
-              <Button Classes="primary" HorizontalAlignment="Stretch">
-                <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center">
-                  <Path Classes="icon iconSmall" Data="{StaticResource IconAdd}" Stroke="White"/>
-                  <TextBlock Text="Add Component"/>
-                </StackPanel>
-              </Button>
-            </StackPanel>
-          </ScrollViewer>
-        </DockPanel>
-      </Border>
-    </Grid>
+    <dock:DockControl Name="DockControl"/>
   </DockPanel>
 </Window>
