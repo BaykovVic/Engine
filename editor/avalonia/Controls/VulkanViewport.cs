@@ -79,6 +79,10 @@ public sealed class VulkanViewport : Control
     /// Raised with the picked object's native id (0 = empty space).
     public event Action<ulong>? ObjectPicked;
 
+    /// Raised after a gizmo drag mutates the selection's transform, so the
+    /// Inspector can re-read and display the live values.
+    public event Action? TransformChanged;
+
     public VulkanViewport()
     {
         // Keep the rendered scene and the gizmo overlay inside the viewport —
@@ -455,6 +459,7 @@ public sealed class VulkanViewport : Control
             EngineInterop.sky_editor_rotate_world_axis(_context, SelectedId,
                 _rotateAxisWorld.X, _rotateAxisWorld.Y, _rotateAxisWorld.Z,
                 (float)(delta * _rotateSign));
+            TransformChanged?.Invoke();
             return;
         }
 
@@ -482,6 +487,7 @@ public sealed class VulkanViewport : Control
                 ns[_dragAxis] = (float)(_scaleStart[_dragAxis] * f);
                 EngineInterop.sky_editor_set_scale(_context, SelectedId, ns[0], ns[1], ns[2]);
             }
+            TransformChanged?.Invoke();
             return;
         }
 
@@ -499,6 +505,7 @@ public sealed class VulkanViewport : Control
                     _dragStartWorld[0] + _dragAxisWorld.X * (float)t,
                     _dragStartWorld[1] + _dragAxisWorld.Y * (float)t,
                     _dragStartWorld[2] + _dragAxisWorld.Z * (float)t);
+                TransformChanged?.Invoke();
             }
             return;
         }

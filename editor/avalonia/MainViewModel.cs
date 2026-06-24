@@ -116,6 +116,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void SelectById(ulong id) => SelectedObject = id == 0 ? null : Find(Roots, id);
 
+    /// Re-reads the selected object's transform from the engine and refreshes
+    /// the Inspector fields. Called while a viewport gizmo drag mutates the
+    /// transform so the numbers track the handle live.
+    public void ReloadTransform()
+    {
+        if (_selected == null)
+            return;
+        var pos = new float[3];
+        var quat = new float[4];
+        var scale = new float[3];
+        EngineInterop.sky_editor_get_transform(NativeContext, _selected.Id, pos, quat, scale);
+        Array.Copy(pos, _pos, 3);
+        Array.Copy(scale, _scale, 3);
+        var (rx, ry, rz) = QuatToEuler(quat[0], quat[1], quat[2], quat[3]);
+        _rot[0] = rx; _rot[1] = ry; _rot[2] = rz;
+        foreach (var p in new[] { nameof(PositionX), nameof(PositionY), nameof(PositionZ),
+            nameof(RotationX), nameof(RotationY), nameof(RotationZ),
+            nameof(ScaleX), nameof(ScaleY), nameof(ScaleZ) })
+            OnPropertyChanged(p);
+    }
+
     // --- Authoring ---
     public void CreateCube() => SelectById(_session.CreateCube("Cube"));
     public void DuplicateSelected() { if (_selected != null) SelectById(_session.Duplicate(_selected.Id)); }

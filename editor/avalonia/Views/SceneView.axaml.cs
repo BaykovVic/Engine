@@ -52,6 +52,7 @@ public partial class SceneView : UserControl
         _vm = vm;
         _viewport.SetContext(vm.NativeContext);
         _viewport.ObjectPicked += vm.SelectById;
+        _viewport.TransformChanged += vm.ReloadTransform;
         _viewport.SelectedId = vm.SelectedObject?.Id ?? 0;
         _viewport.Tool = vm.Tool;
         vm.PropertyChanged += (_, e) =>
