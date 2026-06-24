@@ -18,14 +18,35 @@ struct EditorCamera {
     float distance = 14.0f;
     core::Vec3 target{0.0f, 1.5f, 0.0f};
     float fovDegrees = 50.0f;
+    /// 2D mode: an orthographic view of the YZ plane (looking along +X, with
+    /// world +Z to the right and +Y up). Orbit is locked; pan/zoom still work.
+    bool twoD = false;
 
     [[nodiscard]] core::Quat rotation() const {
         constexpr float kPi = 3.14159265358979323846f;
+        if (twoD) {
+            // Look toward +X: a -90 degree turn about +Y maps the camera's
+            // local -Z (forward) to world +X and local +X (right) to +Z.
+            return core::Quat{0.0f, std::sin(-kPi / 4.0f), 0.0f,
+                              std::cos(-kPi / 4.0f)};
+        }
         const float yaw = yawDegrees * kPi / 180.0f;
         const float pitch = pitchDegrees * kPi / 180.0f;
         const core::Quat yawQ{0.0f, std::sin(yaw / 2), 0.0f, std::cos(yaw / 2)};
         const core::Quat pitchQ{std::sin(-pitch / 2), 0.0f, 0.0f, std::cos(-pitch / 2)};
         return yawQ * pitchQ;
+    }
+
+    /// Half-height of the orthographic view box in world units, matched to the
+    /// perspective framing at the target so zoom behaves the same in 2D.
+    [[nodiscard]] float orthoHalfHeight() const {
+        constexpr float kPi = 3.14159265358979323846f;
+        return distance * std::tan(fovDegrees * kPi / 360.0f);
+    }
+
+    /// World-space orthographic height for the renderer (0 in perspective).
+    [[nodiscard]] float orthoHeight() const {
+        return twoD ? orthoHalfHeight() * 2.0f : 0.0f;
     }
 
     /// Camera transform: backed off the target along the view's +Z (cameras
@@ -38,9 +59,13 @@ struct EditorCamera {
         return p;
     }
 
-    /// World-space ray direction through a viewport pixel.
+    /// World-space ray direction through a viewport pixel. In 2D the rays are
+    /// parallel, so the direction is the constant view forward.
     [[nodiscard]] core::Vec3 rayThrough(float pixelX, float pixelY, float width,
                                         float height) const {
+        if (twoD) {
+            return core::rotate(rotation(), {0.0f, 0.0f, -1.0f});
+        }
         constexpr float kPi = 3.14159265358979323846f;
         const float aspect = width > 0.0f ? width / height : 1.0f;
         const float tanHalfFov = std::tan(fovDegrees * kPi / 360.0f);
@@ -48,6 +73,24 @@ struct EditorCamera {
         const float ndcY = 1.0f - (2.0f * pixelY / height);
         const core::Vec3 local{ndcX * tanHalfFov * aspect, ndcY * tanHalfFov, -1.0f};
         return core::rotate(rotation(), local);
+    }
+
+    /// Ray origin for a viewport pixel. In perspective every ray starts at the
+    /// camera; in 2D the origin slides across the image plane (parallel rays).
+    [[nodiscard]] core::Vec3 rayOrigin(float pixelX, float pixelY, float width,
+                                       float height) const {
+        const auto camera = pose().position;
+        if (!twoD) {
+            return camera;
+        }
+        const float aspect = width > 0.0f ? width / height : 1.0f;
+        const float ndcX = (2.0f * pixelX / width) - 1.0f;
+        const float ndcY = 1.0f - (2.0f * pixelY / height);
+        const auto rot = rotation();
+        const auto right = core::rotate(rot, {1.0f, 0.0f, 0.0f});
+        const auto up = core::rotate(rot, {0.0f, 1.0f, 0.0f});
+        const float halfH = orthoHalfHeight();
+        return camera + right * (ndcX * halfH * aspect) + up * (ndcY * halfH);
     }
 
     /// Projects a world point to a viewport pixel — the inverse of rayThrough,
@@ -67,6 +110,14 @@ struct EditorCamera {
             return false; // at or behind the camera plane
         }
         const float aspect = width > 0.0f ? width / height : 1.0f;
+        if (twoD) {
+            const float halfH = orthoHalfHeight();
+            const float ndcX2 = local.x / (halfH * aspect);
+            const float ndcY2 = local.y / halfH;
+            outX = (ndcX2 * 0.5f + 0.5f) * width;
+            outY = (1.0f - (ndcY2 * 0.5f + 0.5f)) * height;
+            return true;
+        }
         const float tanHalfFov = std::tan(fovDegrees * kPi / 360.0f);
         const float ndcX = local.x / (-local.z * tanHalfFov * aspect);
         const float ndcY = local.y / (-local.z * tanHalfFov);
@@ -76,6 +127,9 @@ struct EditorCamera {
     }
 
     void orbit(float deltaYawDegrees, float deltaPitchDegrees) {
+        if (twoD) {
+            return; // the 2D plane is locked; orbit is a no-op
+        }
         yawDegrees += deltaYawDegrees;
         pitchDegrees =
             std::clamp(pitchDegrees + deltaPitchDegrees, -89.0f, 89.0f);

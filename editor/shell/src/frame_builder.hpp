@@ -29,8 +29,12 @@ public:
         : context_(context), factory_(factory) {}
 
     /// Overrides the camera (the editor's orbit view). Cleared by passing
-    /// nullopt, which falls back to the scene's Main Camera.
-    void setCamera(std::optional<core::Transform> pose) { cameraOverride_ = pose; }
+    /// nullopt, which falls back to the scene's Main Camera. orthoHeight > 0
+    /// makes the override an orthographic projection (the 2D view).
+    void setCamera(std::optional<core::Transform> pose, float orthoHeight = 0.0f) {
+        cameraOverride_ = pose;
+        cameraOrthoHeight_ = orthoHeight;
+    }
 
     std::vector<rendering::RenderCommand> build(std::uint32_t width,
                                                 std::uint32_t height) {
@@ -51,6 +55,7 @@ public:
         camera.type = rendering::RenderCommandType::SetCamera;
         camera.transform = cameraOverride_ ? *cameraOverride_ : cameraPose();
         camera.fovDegrees = 50.0f;
+        camera.orthoHeight = cameraOverride_ ? cameraOrthoHeight_ : 0.0f;
         commands.push_back(camera);
 
         forEachObject([&](object::ObjectHandle object) {
@@ -227,6 +232,7 @@ private:
     EditorContext& context_;
     rendering::IRenderResourceFactory& factory_;
     std::optional<core::Transform> cameraOverride_;
+    float cameraOrthoHeight_ = 0.0f;
     rendering::RenderResourceHandle terrainMesh_;
     std::uint64_t terrainVersion_ = 0;
     std::unordered_map<std::string, rendering::RenderResourceHandle> meshes_;

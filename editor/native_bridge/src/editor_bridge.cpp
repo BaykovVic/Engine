@@ -121,7 +121,8 @@ sky::object::ObjectHandle pickObject(EditorContext& context,
                                      const sky::editor::EditorCamera& camera,
                                      float pixelX, float pixelY, std::uint32_t width,
                                      std::uint32_t height) {
-    const auto pose = camera.pose();
+    const auto origin =
+        camera.rayOrigin(pixelX, pixelY, float(width), float(height));
     const auto direction =
         camera.rayThrough(pixelX, pixelY, float(width), float(height));
     sky::object::ObjectHandle best;
@@ -132,7 +133,7 @@ sky::object::ObjectHandle pickObject(EditorContext& context,
                 return;
             }
             const auto world = context.objects->worldTransform(object);
-            const float origins[] = {pose.position.x, pose.position.y, pose.position.z};
+            const float origins[] = {origin.x, origin.y, origin.z};
             const float dirs[] = {direction.x, direction.y, direction.z};
             const float centers[] = {world.position.x, world.position.y, world.position.z};
             const float halves[] = {std::max(0.125f, world.scale.x * 0.5f),
@@ -534,7 +535,8 @@ void sky_editor_render_viewport(SkyEditorContext* ctx, uint32_t width,
     if (session->renderer == nullptr || session->frame == nullptr) {
         return;
     }
-    session->frame->setCamera(session->camera.pose()); // the editor orbit view
+    session->frame->setCamera(session->camera.pose(), // the editor orbit view
+                              session->camera.orthoHeight());
     session->renderer->submit(session->frame->build(width, height));
     session->renderer->renderFrame();
 #else
@@ -567,7 +569,8 @@ int32_t sky_editor_render_offscreen(SkyEditorContext* ctx, uint32_t width,
     if (session->context.playMode->state() == sky::editor::PlayModeState::Playing) {
         session->context.playMode->tickFrame(1.0 / 60.0);
     }
-    session->offscreenFrame->setCamera(session->camera.pose());
+    session->offscreenFrame->setCamera(session->camera.pose(),
+                                       session->camera.orthoHeight());
     session->offscreen->submit(session->offscreenFrame->build(width, height));
     session->offscreen->renderFrame();
     const auto pixels = session->offscreen->readbackFrame();
@@ -659,6 +662,14 @@ void sky_editor_camera_position(SkyEditorContext* ctx, float* out_xyz) {
     out_xyz[0] = p.x;
     out_xyz[1] = p.y;
     out_xyz[2] = p.z;
+}
+
+void sky_editor_set_view_2d(SkyEditorContext* ctx, int32_t enabled) {
+    self(ctx)->camera.twoD = enabled != 0;
+}
+
+int32_t sky_editor_view_2d(SkyEditorContext* ctx) {
+    return self(ctx)->camera.twoD ? 1 : 0;
 }
 
 int32_t sky_editor_project(SkyEditorContext* ctx, float world_x, float world_y,

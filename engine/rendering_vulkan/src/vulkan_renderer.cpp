@@ -107,6 +107,20 @@ Mat4 perspective(float fovDegrees, float aspect, float zNear, float zFar) {
     return r;
 }
 
+/// Vulkan clip space: y points down, depth 0..1. Symmetric ortho box sized by
+/// world-space height; width follows the aspect ratio.
+Mat4 orthographic(float height, float aspect, float zNear, float zFar) {
+    const float h = height * 0.5f;
+    const float w = h * aspect;
+    Mat4 r;
+    r.m[0] = 1.0f / w;
+    r.m[5] = -1.0f / h;
+    r.m[10] = 1.0f / (zNear - zFar);
+    r.m[14] = zNear / (zNear - zFar);
+    r.m[15] = 1.0f;
+    return r;
+}
+
 Mat4 viewFromCameraPose(const core::Transform& camera) {
     const core::Quat inv{-camera.rotation.x, -camera.rotation.y, -camera.rotation.z,
                          camera.rotation.w};
@@ -245,9 +259,11 @@ public:
                     }
                     break;
                 case rendering::RenderCommandType::SetCamera: {
-                    viewProjection =
-                        perspective(command.fovDegrees, aspect, 0.1f, 500.0f) *
-                        viewFromCameraPose(command.transform);
+                    const Mat4 proj =
+                        command.orthoHeight > 0.0f
+                            ? orthographic(command.orthoHeight, aspect, 0.1f, 500.0f)
+                            : perspective(command.fovDegrees, aspect, 0.1f, 500.0f);
+                    viewProjection = proj * viewFromCameraPose(command.transform);
                     frame.cameraPos[0] = command.transform.position.x;
                     frame.cameraPos[1] = command.transform.position.y;
                     frame.cameraPos[2] = command.transform.position.z;

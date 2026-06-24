@@ -68,4 +68,16 @@ public partial class SceneView : UserControl
         if (_viewport != null && sender is ToggleButton toggle)
             _viewport.LocalSpace = toggle.IsChecked == true;
     }
+
+    private void OnView3D(object? sender, RoutedEventArgs e) => SetView2D(false);
+    private void OnView2D(object? sender, RoutedEventArgs e) => SetView2D(true);
+
+    /// Switches between the perspective orbit view and the orthographic YZ
+    /// plane, keeping the two toggles mutually exclusive.
+    private void SetView2D(bool enabled)
+    {
+        _vm?.SetView2D(enabled);
+        this.FindControl<ToggleButton>("view3D")!.IsChecked = !enabled;
+        this.FindControl<ToggleButton>("view2D")!.IsChecked = enabled;
+    }
 }

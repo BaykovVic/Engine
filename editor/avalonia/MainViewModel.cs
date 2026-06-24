@@ -188,6 +188,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void Stop() => EngineInterop.sky_editor_stop(NativeContext);
 
+    // --- 2D / 3D view (orthographic YZ plane vs perspective orbit) ---
+    public void SetView2D(bool enabled) =>
+        EngineInterop.sky_editor_set_view_2d(NativeContext, enabled ? 1 : 0);
+
     // --- Active gizmo tool (toolbar <-> viewport) ---
     private GizmoTool _tool = GizmoTool.Move;
     public GizmoTool Tool

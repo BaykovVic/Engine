@@ -156,6 +156,11 @@ SKY_BRIDGE_API void sky_editor_frame_object(SkyEditorContext* ctx,
 SKY_BRIDGE_API void sky_editor_camera_position(SkyEditorContext* ctx,
                                                float* out_xyz);
 
+/* 2D view: an orthographic look at the YZ plane (along +X). Toggles the
+ * editor/scene viewport only; the Game view keeps the Main Camera. */
+SKY_BRIDGE_API void sky_editor_set_view_2d(SkyEditorContext* ctx, int32_t enabled);
+SKY_BRIDGE_API int32_t sky_editor_view_2d(SkyEditorContext* ctx);
+
 /* Projects a world point to a viewport pixel (inverse of the pick ray), so
  * the on-screen transform gizmo lines up with the render. Returns 1 when the
  * point is in front of the camera. world_position fills the object's world

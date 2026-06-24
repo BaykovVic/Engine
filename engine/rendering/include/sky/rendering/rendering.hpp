@@ -58,6 +58,9 @@ struct RenderCommand {
     /// horizon colour.
     core::Vec3 color{1.0f, 1.0f, 1.0f};
     float fovDegrees = 60.0f;
+    /// SetCamera: when > 0 the projection is orthographic with this world-space
+    /// view height (0 keeps the perspective projection driven by fovDegrees).
+    float orthoHeight = 0.0f;
     // DrawMesh material parameters (see MaterialDesc); SetSky reuses
     // `emissive` as the zenith colour.
     core::Vec3 emissive{0.0f, 0.0f, 0.0f};

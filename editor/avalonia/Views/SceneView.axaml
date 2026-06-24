@@ -9,8 +9,8 @@
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
           <ToggleButton Classes="viewMode" Name="spaceToggle" Content="Local" CornerRadius="6" Click="OnSpaceToggle" ToolTip.Tip="Gizmo space"/>
           <StackPanel Orientation="Horizontal" Spacing="0">
-            <ToggleButton Classes="viewMode" IsChecked="True" Content="3D" CornerRadius="6,0,0,6"/>
-            <ToggleButton Classes="viewMode" Content="2D" CornerRadius="0,6,6,0"/>
+            <ToggleButton Classes="viewMode" Name="view3D" IsChecked="True" Content="3D" CornerRadius="6,0,0,6" Click="OnView3D" ToolTip.Tip="Perspective"/>
+            <ToggleButton Classes="viewMode" Name="view2D" Content="2D" CornerRadius="0,6,6,0" Click="OnView2D" ToolTip.Tip="Orthographic YZ plane"/>
           </StackPanel>
           <Button Classes="chip"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Shaded"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel></Button>
         </StackPanel>

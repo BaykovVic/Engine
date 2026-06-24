@@ -753,10 +753,17 @@ public:
                                  : static_cast<float>(command.viewportWidth) /
                                        static_cast<float>(command.viewportHeight);
                     break;
-                case rendering::RenderCommandType::SetCamera:
-                    viewProjection =
-                        perspective(command.fovDegrees, aspect, 0.1f, 500.0f) *
-                        viewFromCameraPose(command.transform);
+                case rendering::RenderCommandType::SetCamera: {
+                    Mat4 proj = perspective(command.fovDegrees, aspect, 0.1f, 500.0f);
+                    if (command.orthoHeight > 0.0f) {
+                        const float h = command.orthoHeight * 0.5f;
+                        proj = Mat4::identity();
+                        proj.m[0] = 1.0f / (h * aspect);
+                        proj.m[5] = 1.0f / h;
+                        proj.m[10] = -2.0f / (500.0f - 0.1f);
+                        proj.m[14] = -(500.0f + 0.1f) / (500.0f - 0.1f);
+                    }
+                    viewProjection = proj * viewFromCameraPose(command.transform);
                     gl_.UniformMatrix4fv(uViewProjection_, 1, 0,
                                          viewProjection.m.data());
                     gl_.Uniform3f(uCameraPos_, command.transform.position.x,
@@ -766,6 +773,7 @@ public:
                     cameraPos_[1] = command.transform.position.y;
                     cameraPos_[2] = command.transform.position.z;
                     break;
+                }
                 case rendering::RenderCommandType::AddLight: {
                     if (lightCount >= kMaxLights) {
                         break;
