@@ -43,7 +43,14 @@
         </StackPanel>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
           <TextBlock Classes="mono muted" Text="project://SampleScene" VerticalAlignment="Center"/>
-          <Button Classes="chip"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Layout"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel></Button>
+          <Button Classes="chip">
+            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Layout"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel>
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Reset Layout" Click="OnResetLayout"/>
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
         </StackPanel>
       </Grid>
     </Border>

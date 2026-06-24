@@ -10,24 +10,33 @@ namespace SkyEditor;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm = new();
+    private DockControl? _dock;
+    private DockFactory? _factory;
 
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
         DataContext = _vm;
 
-        var factory = new DockFactory(_vm);
-        var layout = factory.CreateLayout();
-        factory.InitLayout(layout);
-        var dock = this.FindControl<DockControl>("DockControl");
-        if (dock != null)
-        {
-            dock.Factory = factory;
-            dock.Layout = layout;
-        }
+        _dock = this.FindControl<DockControl>("DockControl");
+        _factory = new DockFactory(_vm);
+        if (_dock != null)
+            _dock.Factory = _factory;
+        ResetLayout();
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
     }
+
+    private void ResetLayout()
+    {
+        if (_dock == null || _factory == null)
+            return;
+        var layout = _factory.CreateLayout();
+        _factory.InitLayout(layout);
+        _dock.Layout = layout;
+    }
+
+    private void OnResetLayout(object? sender, RoutedEventArgs e) => ResetLayout();
 
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();
     private void OnDuplicate(object? sender, RoutedEventArgs e) => _vm.DuplicateSelected();
