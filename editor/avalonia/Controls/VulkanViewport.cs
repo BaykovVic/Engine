@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -32,6 +33,8 @@ public sealed class VulkanViewport : Control
     private bool _orbiting;
     private bool _panning;
     private bool _moved;
+    private bool _rendered;     // a frame was produced at least once
+    private int _failedFrames;  // consecutive render_offscreen failures
 
     private int _dragAxis = -1;
     private Point _dragStartPointer;
@@ -99,7 +102,15 @@ public sealed class VulkanViewport : Control
 
         if (EngineInterop.sky_editor_render_offscreen(
                 _context, (uint)width, (uint)height, _buffer!, _buffer!.Length) != 1)
+        {
+            // The offscreen Vulkan renderer produced nothing (e.g. no Vulkan
+            // device). Surface that instead of a silent black viewport.
+            if (!_rendered && ++_failedFrames >= 3)
+                InvalidateVisual();
             return;
+        }
+        _rendered = true;
+        _failedFrames = 0;
 
         using (var locked = _bitmap.Lock())
         {
@@ -120,8 +131,19 @@ public sealed class VulkanViewport : Control
 
     public override void Render(DrawingContext context)
     {
-        if (_bitmap != null)
+        if (_rendered && _bitmap != null)
+        {
             context.DrawImage(_bitmap, new Rect(Bounds.Size));
+        }
+        else if (_failedFrames >= 3)
+        {
+            var text = new FormattedText(
+                "3D viewport unavailable.\n\nThe Vulkan renderer could not be created.\n" +
+                "Install a Vulkan driver (MoltenVK via the Vulkan SDK on macOS) and rebuild.",
+                CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Typeface.Default,
+                14, new SolidColorBrush(Color.Parse("#9AA1AC")));
+            context.DrawText(text, new Point(24, Math.Max(24, Bounds.Height / 2 - 40)));
+        }
         DrawGizmo(context);
     }
 
