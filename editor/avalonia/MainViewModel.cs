@@ -16,7 +16,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly float[] _rot = new float[3]; // Euler degrees
     private readonly float[] _scale = { 1, 1, 1 };
     private List<ComponentView> _components = new();
-    private string _projectDir = "project://";
 
     private MaterialView? _selectedMaterial;
 
@@ -165,21 +164,54 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void Pause() => EngineInterop.sky_editor_pause(NativeContext);
     public void Stop() => EngineInterop.sky_editor_stop(NativeContext);
 
-    // --- Project browser ---
+    // --- Project browser (Unity-like: scoped to Assets and Packages) ---
+    private readonly List<string> _projectPath = new();
     public ObservableCollection<ProjectEntry> ProjectEntries { get; } = new();
-    public string ProjectPath => _projectDir;
+
+    public string ProjectPath =>
+        _projectPath.Count == 0 ? "project://" : "project:// " + string.Join("  ›  ", _projectPath);
+
+    private string CurrentVfsDir()
+    {
+        if (_projectPath.Count == 0)
+            return "";
+        var alias = _projectPath[0] == "Assets" ? "assets://" : "packages://";
+        return _projectPath.Count > 1
+            ? alias + string.Join("/", _projectPath.GetRange(1, _projectPath.Count - 1))
+            : alias;
+    }
 
     public void RefreshProject()
     {
         ProjectEntries.Clear();
-        foreach (var e in _session.ListProject(_projectDir))
-            ProjectEntries.Add(e);
+        if (_projectPath.Count == 0)
+        {
+            // Roots — the only visible scope, like Unity.
+            ProjectEntries.Add(new ProjectEntry("Assets", true, "IconFolder"));
+            ProjectEntries.Add(new ProjectEntry("Packages", true, "IconFolder"));
+        }
+        else
+        {
+            ProjectEntries.Add(new ProjectEntry("..", true, "IconChevronRight"));
+            foreach (var e in _session.ListProject(CurrentVfsDir()))
+                ProjectEntries.Add(e);
+        }
         OnPropertyChanged(nameof(ProjectPath));
     }
+
     public void OpenProjectEntry(ProjectEntry? entry)
     {
-        if (entry is not { IsDirectory: true }) return;
-        _projectDir = _projectDir.TrimEnd('/') + "/" + entry.Name + "/";
+        if (entry is not { IsDirectory: true })
+            return;
+        if (entry.Name == "..")
+        {
+            if (_projectPath.Count > 0)
+                _projectPath.RemoveAt(_projectPath.Count - 1);
+        }
+        else
+        {
+            _projectPath.Add(entry.Name);
+        }
         RefreshProject();
     }
 

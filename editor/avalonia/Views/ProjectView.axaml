@@ -7,7 +7,7 @@
     <Border DockPanel.Dock="Top" Padding="14,6">
       <TextBlock Classes="mono muted" Text="{Binding Main.ProjectPath}"/>
     </Border>
-    <ListBox ItemsSource="{Binding Main.ProjectEntries}">
+    <ListBox Name="Files" ItemsSource="{Binding Main.ProjectEntries}" DoubleTapped="OnOpen">
       <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
       <ListBox.ItemTemplate>
         <DataTemplate>

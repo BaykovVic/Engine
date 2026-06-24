@@ -187,8 +187,16 @@ public sealed class ProjectEntry
         Name = raw.TrimEnd('/');
         var ext = System.IO.Path.GetExtension(Name).ToLowerInvariant();
         Glyph = IsDirectory ? "IconFolder"
-            : ext is ".png" or ".jpg" or ".jpeg" or ".tga" or ".bmp" ? "IconImage"
+            : ext is ".png" or ".jpg" or ".jpeg" or ".tga" or ".bmp" or ".raw" ? "IconImage"
             : "IconFile";
+    }
+
+    /// Synthetic entry (the Assets/Packages roots and the ".." up entry).
+    public ProjectEntry(string name, bool isDirectory, string glyph)
+    {
+        Name = name;
+        IsDirectory = isDirectory;
+        Glyph = glyph;
     }
 
     public string Name { get; }

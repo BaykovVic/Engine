@@ -2,11 +2,31 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 
 #include "sky/rendering_opengl/opengl_backend.hpp"
 #include "sky/terrain/terrain_integration.hpp"
 
 namespace {
+
+/// Populates a Unity-like demo Assets folder so the Project browser has
+/// realistic content (textures, materials, scenes) under a stable root.
+void populateDemoAssets(const std::filesystem::path& root) {
+    const auto touch = [](const std::filesystem::path& path) {
+        std::error_code ec;
+        std::filesystem::create_directories(path.parent_path(), ec);
+        std::ofstream(path) << "";
+    };
+    touch(root / "Scenes" / "SampleScene.skybox");
+    touch(root / "Textures" / "ground_albedo.png");
+    touch(root / "Textures" / "grass_n.png");
+    touch(root / "Textures" / "cliff_mask.png");
+    touch(root / "Textures" / "heightmap.raw");
+    touch(root / "Materials" / "Grassland.mat");
+    touch(root / "Materials" / "Cliff Rock.mat");
+    touch(root / "Scripts" / "TerrainStreamer.cs");
+}
+
 // The demo terrain: a 48x48 heightfield centred on the world origin.
 constexpr std::uint32_t kTerrainResolution = 48;
 constexpr float kTerrainOriginX = -24.0f;
@@ -45,9 +65,10 @@ EditorContext::EditorContext() {
     // engine's shipped content.
     const auto projectRoot = std::filesystem::current_path();
     vfs->mount("project", platform::createDirectoryMount(*fileSystem, projectRoot), 10);
-    vfs->mount("assets",
-               platform::createDirectoryMount(*fileSystem, projectRoot / "docs", true),
-               0);
+    // Assets root: a stable, writable demo Assets folder (Unity-like).
+    const auto assetsRoot = std::filesystem::temp_directory_path() / "sky_editor_assets";
+    populateDemoAssets(assetsRoot);
+    vfs->mount("assets", platform::createDirectoryMount(*fileSystem, assetsRoot, true), 0);
 
     // Local packages: demo manifests under a writable packages directory,
     // discovered exactly like user packages and mounted into the VFS.
