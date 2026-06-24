@@ -61,6 +61,8 @@ SKY_BRIDGE_API void sky_editor_get_transform(SkyEditorContext* ctx,
 SKY_BRIDGE_API void sky_editor_set_position(SkyEditorContext* ctx,
                                             SkyObjectId object, float x, float y,
                                             float z);
+SKY_BRIDGE_API void sky_editor_set_scale(SkyEditorContext* ctx, SkyObjectId object,
+                                         float x, float y, float z);
 
 /* Components. */
 SKY_BRIDGE_API int32_t sky_editor_component_count(SkyEditorContext* ctx,

@@ -62,10 +62,21 @@ internal static class EngineInterop
     // --- Transform ---
     [DllImport(Lib)] public static extern void sky_editor_get_transform(IntPtr ctx, ulong obj, float[]? position, float[]? rotation, float[]? scale);
     [DllImport(Lib)] public static extern void sky_editor_set_position(IntPtr ctx, ulong obj, float x, float y, float z);
+    [DllImport(Lib)] public static extern void sky_editor_set_scale(IntPtr ctx, ulong obj, float x, float y, float z);
 
     // --- Components ---
     [DllImport(Lib)] public static extern int sky_editor_component_count(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern int sky_editor_component_type(IntPtr ctx, ulong obj, int index, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_component_display_name(IntPtr ctx, ulong obj, int component, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_component_field_count(IntPtr ctx, ulong obj, int component);
+    [DllImport(Lib)] public static extern int sky_editor_component_field_name(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_component_field_type(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_component_field_value(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_set_component_field(IntPtr ctx, ulong obj, int component, int field, string value);
+
+    // --- Project / VFS ---
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_count(IntPtr ctx, string dir);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_entry(IntPtr ctx, string dir, int index, byte[] buffer, int capacity);
 
     // --- Authoring ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_primitive(IntPtr ctx, int kind, string name);

@@ -37,6 +37,94 @@ public sealed class SkyComponent
         ["sky.rigidbody"] = "Physics",
         ["sky.script"] = "Scripting",
     };
+
+    public static string CategoryOf(string typeId) =>
+        Categories.TryGetValue(typeId, out var cat) ? cat : "Other";
+}
+
+/// A component shown in the Inspector with its inspectable fields.
+public sealed class ComponentView
+{
+    public ComponentView(int index, string typeId, string displayName)
+    {
+        Index = index;
+        TypeId = typeId;
+        DisplayName = displayName;
+        Category = SkyComponent.CategoryOf(typeId);
+    }
+
+    public int Index { get; }
+    public string TypeId { get; }
+    public string DisplayName { get; }
+    public string Category { get; }
+    public System.Collections.Generic.List<ComponentField> Fields { get; } = new();
+    public bool HasFields => Fields.Count > 0;
+    public string Glyph => TypeId switch
+    {
+        "sky.camera" => "IconCamera",
+        "sky.light" => "IconLight",
+        "sky.mesh" => "IconMesh",
+        "sky.script" => "IconFile",
+        _ => "IconInspector",
+    };
+}
+
+/// One editable inspectable field; the setter writes straight to the engine.
+public sealed class ComponentField : System.ComponentModel.INotifyPropertyChanged
+{
+    private readonly EditorSession _session;
+    private readonly ulong _object;
+    private readonly int _component;
+    private readonly int _field;
+    private string _value;
+
+    public ComponentField(EditorSession session, ulong obj, int component, int field,
+        string name, string type, string value)
+    {
+        _session = session;
+        _object = obj;
+        _component = component;
+        _field = field;
+        Name = name;
+        Type = type;
+        _value = value;
+    }
+
+    public string Name { get; }
+    public string Type { get; }
+    public string Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value)
+                return;
+            _value = value;
+            _session.SetComponentField(_object, _component, _field, value);
+            PropertyChanged?.Invoke(this,
+                new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+
+/// One Project-panel entry (folder or file) from the VFS listing.
+public sealed class ProjectEntry
+{
+    public ProjectEntry(string raw)
+    {
+        IsDirectory = raw.EndsWith('/');
+        Name = raw.TrimEnd('/');
+        var ext = System.IO.Path.GetExtension(Name).ToLowerInvariant();
+        Glyph = IsDirectory ? "IconFolder"
+            : ext is ".png" or ".jpg" or ".jpeg" or ".tga" or ".bmp" ? "IconImage"
+            : "IconFile";
+    }
+
+    public string Name { get; }
+    public bool IsDirectory { get; }
+    public string Glyph { get; }
 }
 
 /// A scene object mirrored from the native engine for display and editing.
@@ -154,6 +242,63 @@ public sealed class EditorSession : IDisposable
 
     public void SetPosition(ulong id, float x, float y, float z) =>
         EngineInterop.sky_editor_set_position(_ctx, id, x, y, z);
+
+    public void SetLocalEuler(ulong id, float x, float y, float z) =>
+        EngineInterop.sky_editor_set_local_euler(_ctx, id, x, y, z);
+
+    public void SetScale(ulong id, float x, float y, float z) =>
+        EngineInterop.sky_editor_set_scale(_ctx, id, x, y, z);
+
+    /// Reads an object's components and their fields through the ABI.
+    public List<ComponentView> ReadComponents(ulong id)
+    {
+        var result = new List<ComponentView>();
+        var count = EngineInterop.sky_editor_component_count(_ctx, id);
+        for (var c = 0; c < count; ++c)
+        {
+            var index = c;
+            var typeId = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_component_type(_ctx, id, index, b, n));
+            var display = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_component_display_name(_ctx, id, index, b, n));
+            var view = new ComponentView(index, typeId,
+                string.IsNullOrEmpty(display) ? typeId : display);
+
+            var fieldCount = EngineInterop.sky_editor_component_field_count(_ctx, id, c);
+            for (var f = 0; f < fieldCount; ++f)
+            {
+                var fi = f;
+                var fname = EngineInterop.ReadString((b, n) =>
+                    EngineInterop.sky_editor_component_field_name(_ctx, id, index, fi, b, n));
+                var ftype = EngineInterop.ReadString((b, n) =>
+                    EngineInterop.sky_editor_component_field_type(_ctx, id, index, fi, b, n));
+                var fvalue = EngineInterop.ReadString((b, n) =>
+                    EngineInterop.sky_editor_component_field_value(_ctx, id, index, fi, b, n));
+                view.Fields.Add(new ComponentField(this, id, index, fi, fname, ftype, fvalue));
+            }
+            result.Add(view);
+        }
+        return result;
+    }
+
+    public void SetComponentField(ulong id, int component, int field, string value) =>
+        EngineInterop.sky_editor_set_component_field(_ctx, id, component, field, value);
+
+    /// Lists a VFS directory; entries ending in '/' are folders.
+    public List<ProjectEntry> ListProject(string dir)
+    {
+        var entries = new List<ProjectEntry>();
+        var count = EngineInterop.sky_editor_vfs_count(_ctx, dir);
+        for (var i = 0; i < count; ++i)
+        {
+            var index = i;
+            var raw = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_vfs_entry(_ctx, dir, index, b, n));
+            if (!string.IsNullOrEmpty(raw))
+                entries.Add(new ProjectEntry(raw));
+        }
+        return entries;
+    }
 
     public void Dispose()
     {

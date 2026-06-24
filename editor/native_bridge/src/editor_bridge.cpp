@@ -244,6 +244,13 @@ void sky_editor_set_position(SkyEditorContext* ctx, SkyObjectId object, float x,
     ec(ctx).objects->setLocalTransform(handle(object), t);
 }
 
+void sky_editor_set_scale(SkyEditorContext* ctx, SkyObjectId object, float x,
+                          float y, float z) {
+    auto t = ec(ctx).objects->localTransform(handle(object));
+    t.scale = {x, y, z};
+    ec(ctx).objects->setLocalTransform(handle(object), t);
+}
+
 int32_t sky_editor_component_count(SkyEditorContext* ctx, SkyObjectId object) {
     return static_cast<int32_t>(ec(ctx).components->componentsOf(handle(object)).size());
 }
