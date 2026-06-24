@@ -75,10 +75,13 @@
 
 ## Раскладка и тема
 
-- **Полный порт `SkyStyles.axaml`** **[UI]** — разбить мульти-типовые
-  селекторы дизайна под Avalonia (см. `SkyStyles.axaml.reference`).
-- **Докинг + персист раскладки** **[UI]** — Dock.Avalonia, Window-меню
-  (видимость панелей), Reset Layout, сохранение состояния.
+- **Полный порт `SkyStyles.axaml`** **[UI]** — ✅ по сути сделано: тема
+  доведена до дизайна (карточки, табы, шапки, чипы, бейджи, статус-бар) в
+  `SkyTheme.axaml`; dock-chrome стилизован.
+- **Докинг** **[UI]** — ✅ сделано на Dock.Avalonia: панели Hierarchy/Scene/
+  Game/Inspector/Terrain/Materials/Project/Console/Packages — перетаскиваемые,
+  отрываемые, группируемые вкладки; Layout → Reset Layout. Осталось:
+  **персист раскладки на диск** (Dock.Serializer пока несовместимой версии).
 
 ## Платформа
 
