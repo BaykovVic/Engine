@@ -20,6 +20,12 @@ public partial class MainWindow : Window
         {
             viewport.SetContext(_vm.NativeContext);
             viewport.ObjectPicked += _vm.SelectById;
+            viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
+            _vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.SelectedObject))
+                    viewport.SelectedId = _vm.SelectedObject?.Id ?? 0;
+            };
         }
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);

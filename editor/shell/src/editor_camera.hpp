@@ -50,6 +50,31 @@ struct EditorCamera {
         return core::rotate(rotation(), local);
     }
 
+    /// Projects a world point to a viewport pixel — the inverse of rayThrough,
+    /// so on-screen overlays (the transform gizmo) line up with the render and
+    /// with picking. Returns false when the point is behind the camera.
+    [[nodiscard]] bool project(core::Vec3 world, float width, float height,
+                               float& outX, float& outY) const {
+        constexpr float kPi = 3.14159265358979323846f;
+        const auto rot = rotation();
+        const auto camera = pose().position;
+        const core::Vec3 rel{world.x - camera.x, world.y - camera.y,
+                             world.z - camera.z};
+        // Into camera-local space (forward is -Z) via the conjugate rotation.
+        const core::Quat inverse{-rot.x, -rot.y, -rot.z, rot.w};
+        const auto local = core::rotate(inverse, rel);
+        if (local.z >= -1e-4f) {
+            return false; // at or behind the camera plane
+        }
+        const float aspect = width > 0.0f ? width / height : 1.0f;
+        const float tanHalfFov = std::tan(fovDegrees * kPi / 360.0f);
+        const float ndcX = local.x / (-local.z * tanHalfFov * aspect);
+        const float ndcY = local.y / (-local.z * tanHalfFov);
+        outX = (ndcX * 0.5f + 0.5f) * width;
+        outY = (1.0f - (ndcY * 0.5f + 0.5f)) * height;
+        return true;
+    }
+
     void orbit(float deltaYawDegrees, float deltaPitchDegrees) {
         yawDegrees += deltaYawDegrees;
         pitchDegrees =

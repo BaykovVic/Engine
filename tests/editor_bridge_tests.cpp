@@ -1,6 +1,7 @@
 // Drives the engine purely through the C ABI the Avalonia (.NET) editor will
 // P/Invoke — no C++ engine types — proving the marshalling surface round-trips.
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -122,6 +123,18 @@ void testBridgePicking()
     sky_editor_viewport_orbit(ctx, 40.0f, 12.0f);
     const SkyObjectId hit2 = sky_editor_pick(ctx, width / 2.0f, height / 2.0f, width, height);
     CHECK(hit2 == cube);
+
+    // project is the inverse of the pick ray: the framed cube's world origin
+    // lands near the centre of the viewport (the gizmo overlay relies on this).
+    float worldPosition[3] = {0.0f, 0.0f, 0.0f};
+    sky_editor_world_position(ctx, cube, worldPosition);
+    float screenX = 0.0f, screenY = 0.0f;
+    const int visible = sky_editor_project(ctx, worldPosition[0], worldPosition[1],
+                                           worldPosition[2], width, height, &screenX,
+                                           &screenY);
+    CHECK(visible == 1);
+    CHECK(std::fabs(screenX - width / 2.0f) < width * 0.25f);
+    CHECK(std::fabs(screenY - height / 2.0f) < height * 0.25f);
 
     sky_editor_destroy(ctx);
 }

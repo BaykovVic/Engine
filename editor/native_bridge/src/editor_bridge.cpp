@@ -351,6 +351,30 @@ void sky_editor_frame_object(SkyEditorContext* ctx, SkyObjectId object) {
     }
 }
 
+int32_t sky_editor_project(SkyEditorContext* ctx, float world_x, float world_y,
+                           float world_z, uint32_t width, uint32_t height,
+                           float* out_x, float* out_y) {
+    float x = 0.0f, y = 0.0f;
+    if (!self(ctx)->camera.project({world_x, world_y, world_z}, float(width),
+                                   float(height), x, y)) {
+        return 0;
+    }
+    if (out_x != nullptr) *out_x = x;
+    if (out_y != nullptr) *out_y = y;
+    return 1;
+}
+
+void sky_editor_world_position(SkyEditorContext* ctx, SkyObjectId object,
+                               float* out_xyz) {
+    if (out_xyz == nullptr) {
+        return;
+    }
+    const auto transform = ec(ctx).objects->worldTransform(handle(object));
+    out_xyz[0] = transform.position.x;
+    out_xyz[1] = transform.position.y;
+    out_xyz[2] = transform.position.z;
+}
+
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {
 #ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);

@@ -114,6 +114,17 @@ SKY_BRIDGE_API SkyObjectId sky_editor_pick(SkyEditorContext* ctx, float pixel_x,
 SKY_BRIDGE_API void sky_editor_frame_object(SkyEditorContext* ctx,
                                             SkyObjectId object);
 
+/* Projects a world point to a viewport pixel (inverse of the pick ray), so
+ * the on-screen transform gizmo lines up with the render. Returns 1 when the
+ * point is in front of the camera. world_position fills the object's world
+ * position into a float[3]. */
+SKY_BRIDGE_API int32_t sky_editor_project(SkyEditorContext* ctx, float world_x,
+                                          float world_y, float world_z,
+                                          uint32_t width, uint32_t height,
+                                          float* out_x, float* out_y);
+SKY_BRIDGE_API void sky_editor_world_position(SkyEditorContext* ctx,
+                                              SkyObjectId object, float* out_xyz);
+
 #ifdef __cplusplus
 }
 #endif
