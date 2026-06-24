@@ -109,6 +109,75 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }
 
+/// A material in the Materials panel, with a colour swatch and PBR fields.
+public sealed class MaterialView
+{
+    public MaterialView(int index, string name)
+    {
+        Index = index;
+        Name = name;
+    }
+
+    public int Index { get; }
+    public string Name { get; }
+    public System.Collections.Generic.List<MaterialField> Fields { get; } = new();
+    public Avalonia.Media.IBrush Swatch { get; private set; } = Avalonia.Media.Brushes.Gray;
+
+    public void RefreshSwatch()
+    {
+        foreach (var f in Fields)
+        {
+            if (f.Name != "baseColor")
+                continue;
+            var parts = f.Value.Split(',');
+            if (parts.Length == 3 &&
+                float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var r) &&
+                float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var g) &&
+                float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var b))
+            {
+                Swatch = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(
+                    (byte)(System.Math.Clamp(r, 0, 1) * 255),
+                    (byte)(System.Math.Clamp(g, 0, 1) * 255),
+                    (byte)(System.Math.Clamp(b, 0, 1) * 255)));
+            }
+        }
+    }
+}
+
+/// One editable material field; the setter writes straight to the engine.
+public sealed class MaterialField : System.ComponentModel.INotifyPropertyChanged
+{
+    private readonly EditorSession _session;
+    private readonly int _material;
+    private readonly int _field;
+    private string _value;
+
+    public MaterialField(EditorSession session, int material, int field, string name, string value)
+    {
+        _session = session;
+        _material = material;
+        _field = field;
+        Name = name;
+        _value = value;
+    }
+
+    public string Name { get; }
+    public string Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value)
+                return;
+            _value = value;
+            _session.SetMaterialField(_material, _field, value);
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+
 /// One Project-panel entry (folder or file) from the VFS listing.
 public sealed class ProjectEntry
 {
@@ -283,6 +352,36 @@ public sealed class EditorSession : IDisposable
 
     public void SetComponentField(ulong id, int component, int field, string value) =>
         EngineInterop.sky_editor_set_component_field(_ctx, id, component, field, value);
+
+    /// Reads the material library and each material's PBR fields.
+    public List<MaterialView> ReadMaterials()
+    {
+        var result = new List<MaterialView>();
+        var count = EngineInterop.sky_editor_material_count(_ctx);
+        var fieldCount = EngineInterop.sky_editor_material_field_count(_ctx);
+        for (var i = 0; i < count; ++i)
+        {
+            var index = i;
+            var name = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_material_name(_ctx, index, b, n));
+            var view = new MaterialView(index, name);
+            for (var f = 0; f < fieldCount; ++f)
+            {
+                var fi = f;
+                var fname = EngineInterop.ReadString((b, n) =>
+                    EngineInterop.sky_editor_material_field_name(_ctx, fi, b, n));
+                var fvalue = EngineInterop.ReadString((b, n) =>
+                    EngineInterop.sky_editor_material_field_value(_ctx, index, fi, b, n));
+                view.Fields.Add(new MaterialField(this, index, fi, fname, fvalue));
+            }
+            view.RefreshSwatch();
+            result.Add(view);
+        }
+        return result;
+    }
+
+    public void SetMaterialField(int material, int field, string value) =>
+        EngineInterop.sky_editor_set_material_field(_ctx, material, field, value);
 
     /// Lists a VFS directory; entries ending in '/' are folders.
     public List<ProjectEntry> ListProject(string dir)

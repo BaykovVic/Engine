@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyEditor.Views.MaterialsView"
+             x:CompileBindings="False">
+  <Grid ColumnDefinitions="160,1,*" Background="{StaticResource SkyPanelBrush}">
+    <ListBox Grid.Column="0" ItemsSource="{Binding Main.Materials}"
+             SelectedItem="{Binding Main.SelectedMaterial, Mode=TwoWay}"
+             Background="{StaticResource SkyPanelBrush}">
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Border Width="16" Height="16" CornerRadius="4" Background="{Binding Swatch}"
+                    BorderBrush="{StaticResource SkyLineBrush}" BorderThickness="1"/>
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Border Grid.Column="1" Background="{StaticResource SkyLineStrongBrush}"/>
+    <ScrollViewer Grid.Column="2">
+      <StackPanel Margin="14" Spacing="9">
+        <StackPanel Orientation="Horizontal" Spacing="9">
+          <Border Width="22" Height="22" CornerRadius="5"
+                  Background="{Binding Main.SelectedMaterial.Swatch}"
+                  BorderBrush="{StaticResource SkyLineBrush}" BorderThickness="1"/>
+          <TextBlock Classes="cardTitle" Text="{Binding Main.SelectedMaterialName}" VerticalAlignment="Center"/>
+        </StackPanel>
+        <ItemsControl ItemsSource="{Binding Main.SelectedMaterialFields}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="110,*" Margin="0,2">
+                <TextBlock Classes="fieldLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}"/>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

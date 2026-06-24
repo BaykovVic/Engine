@@ -18,12 +18,43 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private List<ComponentView> _components = new();
     private string _projectDir = "project://";
 
+    private MaterialView? _selectedMaterial;
+
     public MainViewModel()
     {
         _session = new EditorSession();
         RefreshProject();
+        RefreshMaterials();
         if (Roots.Count > 0)
             SelectedObject = FirstWithComponents(Roots) ?? Roots[0];
+    }
+
+    // --- Materials ---
+    public ObservableCollection<MaterialView> Materials { get; } = new();
+
+    public MaterialView? SelectedMaterial
+    {
+        get => _selectedMaterial;
+        set
+        {
+            if (ReferenceEquals(_selectedMaterial, value)) return;
+            _selectedMaterial = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedMaterialFields));
+            OnPropertyChanged(nameof(SelectedMaterialName));
+        }
+    }
+
+    public string SelectedMaterialName => _selectedMaterial?.Name ?? string.Empty;
+    public IReadOnlyList<MaterialField> SelectedMaterialFields =>
+        _selectedMaterial?.Fields ?? (IReadOnlyList<MaterialField>)System.Array.Empty<MaterialField>();
+
+    public void RefreshMaterials()
+    {
+        Materials.Clear();
+        foreach (var m in _session.ReadMaterials())
+            Materials.Add(m);
+        SelectedMaterial = Materials.Count > 0 ? Materials[0] : null;
     }
 
     public ObservableCollection<SkyObject> Roots => _session.Roots;

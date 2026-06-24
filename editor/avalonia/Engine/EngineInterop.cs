@@ -74,6 +74,14 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_component_field_value(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_set_component_field(IntPtr ctx, ulong obj, int component, int field, string value);
 
+    // --- Materials ---
+    [DllImport(Lib)] public static extern int sky_editor_material_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_material_name(IntPtr ctx, int index, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_material_field_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_material_field_name(IntPtr ctx, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_material_field_value(IntPtr ctx, int index, int field, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_set_material_field(IntPtr ctx, int index, int field, string value);
+
     // --- Project / VFS ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_count(IntPtr ctx, string dir);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_entry(IntPtr ctx, string dir, int index, byte[] buffer, int capacity);

@@ -367,6 +367,102 @@ void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object,
     ec(ctx).components->setField(handle, descriptor.name, parsed);
 }
 
+namespace {
+
+// The material fields exposed to the Materials panel, in display order.
+const char* const kMaterialFields[] = {
+    "baseColor", "roughness",  "metallic",    "emissive",  "albedo",  "normal",
+    "roughness_map", "metallic_map", "occlusion", "height", "uvTiling", "parallax"};
+constexpr int kMaterialFieldCount = 12;
+
+std::string materialFieldValue(const sky::rendering::MaterialDesc& m, int field) {
+    char b[64];
+    switch (field) {
+        case 0: std::snprintf(b, sizeof(b), "%g, %g, %g", m.baseColor.x, m.baseColor.y, m.baseColor.z); return b;
+        case 1: std::snprintf(b, sizeof(b), "%g", m.roughness); return b;
+        case 2: std::snprintf(b, sizeof(b), "%g", m.metallic); return b;
+        case 3: std::snprintf(b, sizeof(b), "%g, %g, %g", m.emissive.x, m.emissive.y, m.emissive.z); return b;
+        case 4: return m.texturePath;
+        case 5: return m.normalPath;
+        case 6: return m.roughnessPath;
+        case 7: return m.metallicPath;
+        case 8: return m.occlusionPath;
+        case 9: return m.heightPath;
+        case 10: std::snprintf(b, sizeof(b), "%g, %g", m.uvTiling.x, m.uvTiling.y); return b;
+        case 11: std::snprintf(b, sizeof(b), "%g", m.parallaxDepth); return b;
+        default: return "";
+    }
+}
+
+void materialFieldSet(sky::rendering::MaterialDesc& m, int field, const std::string& v) {
+    float x = 0, y = 0, z = 0;
+    switch (field) {
+        case 0: std::sscanf(v.c_str(), "%g, %g, %g", &x, &y, &z); m.baseColor = {x, y, z}; break;
+        case 1: m.roughness = std::strtof(v.c_str(), nullptr); break;
+        case 2: m.metallic = std::strtof(v.c_str(), nullptr); break;
+        case 3: std::sscanf(v.c_str(), "%g, %g, %g", &x, &y, &z); m.emissive = {x, y, z}; break;
+        case 4: m.texturePath = v; break;
+        case 5: m.normalPath = v; break;
+        case 6: m.roughnessPath = v; break;
+        case 7: m.metallicPath = v; break;
+        case 8: m.occlusionPath = v; break;
+        case 9: m.heightPath = v; break;
+        case 10: std::sscanf(v.c_str(), "%g, %g", &x, &y); m.uvTiling = {x, y}; break;
+        case 11: m.parallaxDepth = std::strtof(v.c_str(), nullptr); break;
+        default: break;
+    }
+}
+
+} // namespace
+
+int32_t sky_editor_material_count(SkyEditorContext* ctx) {
+    return int32_t(ec(ctx).materials->allMaterials().size());
+}
+
+int32_t sky_editor_material_name(SkyEditorContext* ctx, int32_t index, char* buffer,
+                                 int32_t capacity) {
+    const auto materials = ec(ctx).materials->allMaterials();
+    if (index < 0 || std::size_t(index) >= materials.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(materials[std::size_t(index)].name, buffer, capacity);
+}
+
+int32_t sky_editor_material_field_count(SkyEditorContext*) { return kMaterialFieldCount; }
+
+int32_t sky_editor_material_field_name(SkyEditorContext*, int32_t field, char* buffer,
+                                       int32_t capacity) {
+    if (field < 0 || field >= kMaterialFieldCount) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(kMaterialFields[field], buffer, capacity);
+}
+
+int32_t sky_editor_material_field_value(SkyEditorContext* ctx, int32_t index,
+                                        int32_t field, char* buffer, int32_t capacity) {
+    const auto materials = ec(ctx).materials->allMaterials();
+    if (index < 0 || std::size_t(index) >= materials.size() || field < 0 ||
+        field >= kMaterialFieldCount) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(materialFieldValue(materials[std::size_t(index)], field), buffer,
+                      capacity);
+}
+
+void sky_editor_set_material_field(SkyEditorContext* ctx, int32_t index, int32_t field,
+                                   const char* value) {
+    const auto materials = ec(ctx).materials->allMaterials();
+    if (index < 0 || std::size_t(index) >= materials.size() || field < 0 ||
+        field >= kMaterialFieldCount || value == nullptr) {
+        return;
+    }
+    auto desc = materials[std::size_t(index)];
+    materialFieldSet(desc, field, value);
+    if (const auto handle = ec(ctx).materials->findMaterial(desc.name)) {
+        ec(ctx).materials->updateMaterial(*handle, desc);
+    }
+}
+
 int32_t sky_editor_vfs_count(SkyEditorContext* ctx, const char* dir) {
     return int32_t(ec(ctx).vfs->list(dir != nullptr ? dir : "").size());
 }

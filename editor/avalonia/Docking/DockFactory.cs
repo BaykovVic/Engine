@@ -24,7 +24,7 @@ public sealed class DockFactory : Factory
 
         var inspector = new InspectorTool { Id = "Inspector", Title = "Inspector", Main = _main };
         var terrain = new PlaceholderTool { Id = "Terrain", Title = "Terrain", Caption = "Terrain tools", Main = _main };
-        var materials = new PlaceholderTool { Id = "Materials", Title = "Materials", Caption = "Material editor", Main = _main };
+        var materials = new MaterialsTool { Id = "Materials", Title = "Materials", Main = _main };
 
         var project = new ProjectTool { Id = "Project", Title = "Project", Main = _main };
         var console = new PlaceholderTool { Id = "Console", Title = "Console", Caption = "Console output", Main = _main };

@@ -82,6 +82,16 @@ SKY_BRIDGE_API int32_t sky_editor_component_field_type(SkyEditorContext* ctx, Sk
 SKY_BRIDGE_API int32_t sky_editor_component_field_value(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, char* buffer, int32_t capacity);
 SKY_BRIDGE_API void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object, int32_t component, int32_t field, const char* value);
 
+/* Materials (Materials panel): the material list and a data-driven field
+ * surface (baseColor, roughness, metallic, emissive, the PBR map paths,
+ * uvTiling, parallax) read/written as strings. */
+SKY_BRIDGE_API int32_t sky_editor_material_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_material_name(SkyEditorContext* ctx, int32_t index, char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_material_field_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_material_field_name(SkyEditorContext* ctx, int32_t field, char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_material_field_value(SkyEditorContext* ctx, int32_t index, int32_t field, char* buffer, int32_t capacity);
+SKY_BRIDGE_API void sky_editor_set_material_field(SkyEditorContext* ctx, int32_t index, int32_t field, const char* value);
+
 /* Virtual file system listing (Project panel). Entries ending in '/' are
  * directories. dir is a virtual path like "project://" or "assets://textures". */
 SKY_BRIDGE_API int32_t sky_editor_vfs_count(SkyEditorContext* ctx, const char* dir);
