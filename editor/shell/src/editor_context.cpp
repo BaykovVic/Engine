@@ -66,7 +66,7 @@ EditorContext::EditorContext() {
     const auto projectRoot = std::filesystem::current_path();
     vfs->mount("project", platform::createDirectoryMount(*fileSystem, projectRoot), 10);
     // Assets root: a stable, writable demo Assets folder (Unity-like).
-    const auto assetsRoot = std::filesystem::temp_directory_path() / "sky_editor_assets";
+    assetsRoot = std::filesystem::temp_directory_path() / "sky_editor_assets";
     populateDemoAssets(assetsRoot);
     vfs->mount("assets", platform::createDirectoryMount(*fileSystem, assetsRoot, true), 0);
 
@@ -106,8 +106,8 @@ EditorContext::EditorContext() {
           {"farPlane", "float"}},
          "Rendering"});
     components->registerComponentType(
-        {"sky.collider.box", "Box Collider", false, "", {{"halfExtents", "Vec3"}},
-         "Physics"});
+        {"sky.collider.box", "Box Collider", false, "",
+         {{"isTrigger", "bool"}, {"center", "Vec3"}, {"size", "Vec3"}}, "Physics"});
     components->registerComponentType(
         {"sky.rigidbody", "Rigidbody", false, "", {{"mass", "float"}}, "Physics"});
     components->registerComponentType(
@@ -191,7 +191,9 @@ object::ObjectHandle EditorContext::createCrate(const std::string& name,
     const auto mesh = components->attach(crate, "sky.mesh");
     components->setField(mesh, "material", std::string("Crate"));
     const auto collider = components->attach(crate, "sky.collider.box");
-    components->setField(collider, "halfExtents", core::Vec3{0.5f, 0.5f, 0.5f});
+    components->setField(collider, "isTrigger", false);
+    components->setField(collider, "center", core::Vec3{0.0f, 0.0f, 0.0f});
+    components->setField(collider, "size", core::Vec3{1.0f, 1.0f, 1.0f});
     const auto rigidbody = components->attach(crate, "sky.rigidbody");
     components->setField(rigidbody, "mass", 1.0f);
     attachCrateBody(crate);
@@ -451,10 +453,10 @@ void EditorContext::buildDemoScene() {
     components->setField(lamp, "intensity", 5.0f);
     components->setField(lamp, "range", 9.0f);
 
-    // An imported OBJ model: written to disk, run through the asset
-    // pipeline and referenced by the mesh component.
-    const auto objPath =
-        std::filesystem::temp_directory_path() / "sky_editor_assets" / "pyramid.obj";
+    // An imported OBJ model: lives under Assets/Models, runs through the asset
+    // pipeline and is referenced by a clean VFS path (resolved at render time),
+    // not a raw filesystem path — Unity-style.
+    const auto objPath = assetsRoot / "Models" / "pyramid.obj";
     const std::string objText =
         "v -1 0 -1\nv 1 0 -1\nv 1 0 1\nv -1 0 1\nv 0 1.8 0\n"
         "f 1 2 5\nf 2 3 5\nf 3 4 5\nf 4 1 5\nf 4 3 2 1\n";
@@ -469,7 +471,7 @@ void EditorContext::buildDemoScene() {
                                    {{4.5f, 0.0f, 2.5f}, {}, {1.4f, 1.4f, 1.4f}});
         const auto mesh = components->attach(pyramid, "sky.mesh");
         components->setField(mesh, "material", std::string("Gold"));
-        components->setField(mesh, "mesh", objPath.generic_string());
+        components->setField(mesh, "mesh", std::string("assets://Models/pyramid.obj"));
     }
 
     const auto camera = createEmpty("Main Camera");

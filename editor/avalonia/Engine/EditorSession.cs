@@ -92,6 +92,13 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
 
     public string Name { get; }
     public string Type { get; }
+
+    // Field-type presentation, so the inspector renders like Unity: a plain box
+    // for scalars/strings, X/Y/Z boxes for Vec3, a checkbox for bool.
+    public bool IsVec3 => Type == "Vec3";
+    public bool IsBool => Type == "bool";
+    public bool IsScalar => !IsVec3 && !IsBool;
+
     public string Value
     {
         get => _value;
@@ -101,10 +108,38 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
                 return;
             _value = value;
             _session.SetComponentField(_object, _component, _field, value);
-            PropertyChanged?.Invoke(this,
-                new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+            Raise(nameof(Value));
         }
     }
+
+    // --- Vec3 (stored as "x, y, z") ---
+    public string X { get => Vec(0); set => SetVec(0, value); }
+    public string Y { get => Vec(1); set => SetVec(1, value); }
+    public string Z { get => Vec(2); set => SetVec(2, value); }
+
+    private string Vec(int axis)
+    {
+        var parts = _value.Split(',');
+        return axis < parts.Length ? parts[axis].Trim() : "0";
+    }
+
+    private void SetVec(int axis, string component)
+    {
+        var v = new[] { Vec(0), Vec(1), Vec(2) };
+        v[axis] = component.Trim();
+        Value = $"{v[0]}, {v[1]}, {v[2]}";
+        Raise(axis == 0 ? nameof(X) : axis == 1 ? nameof(Y) : nameof(Z));
+    }
+
+    // --- bool (stored as "true"/"false") ---
+    public bool BoolValue
+    {
+        get => _value == "true" || _value == "1";
+        set { Value = value ? "true" : "false"; Raise(nameof(BoolValue)); }
+    }
+
+    private void Raise(string name) => PropertyChanged?.Invoke(this,
+        new System.ComponentModel.PropertyChangedEventArgs(name));
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }

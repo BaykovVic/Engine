@@ -100,6 +100,7 @@ public:
     std::unique_ptr<rendering::IRendererRegistry> renderers;
     std::unique_ptr<package::PackageWorld> packages;
     std::filesystem::path packagesRoot;
+    std::filesystem::path assetsRoot;
     std::unique_ptr<serialization::ISerializationBackend> storage;
     std::unique_ptr<object::ObjectWorld> objects;
     std::unique_ptr<component::ComponentWorld> components;

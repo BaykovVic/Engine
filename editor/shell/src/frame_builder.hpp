@@ -201,9 +201,27 @@ private:
         }
     }
 
-    rendering::RenderResourceHandle uploadedMesh(const std::string& path) {
-        auto& handle = meshes_[path];
+    /// Resolves a mesh reference to a host path: VFS aliases (assets://,
+    /// packages://) map onto their mount roots; anything else is taken as-is.
+    [[nodiscard]] std::string resolveMeshRef(const std::string& ref) const {
+        const auto strip = [&](std::string_view alias,
+                               const std::filesystem::path& root)
+            -> std::optional<std::string> {
+            const std::string prefix = std::string(alias) + "://";
+            if (ref.rfind(prefix, 0) == 0) {
+                return (root / ref.substr(prefix.size())).string();
+            }
+            return std::nullopt;
+        };
+        if (auto p = strip("assets", context_.assetsRoot)) return *p;
+        if (auto p = strip("packages", context_.packagesRoot)) return *p;
+        return ref;
+    }
+
+    rendering::RenderResourceHandle uploadedMesh(const std::string& ref) {
+        auto& handle = meshes_[ref];
         if (!handle.isValid()) {
+            const auto path = resolveMeshRef(ref);
             const auto extension = std::filesystem::path(path).extension();
             const auto data =
                 extension == ".fbx"

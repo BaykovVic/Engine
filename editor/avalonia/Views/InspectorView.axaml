@@ -53,8 +53,20 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
                       <Grid ColumnDefinitions="120,*" Margin="0,2">
-                        <TextBlock Classes="fieldLabel" Text="{Binding Name}"/>
-                        <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}"/>
+                        <TextBlock Classes="fieldLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
+                        <!-- scalar / string -->
+                        <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}" IsVisible="{Binding IsScalar}"/>
+                        <!-- bool -->
+                        <CheckBox Grid.Column="1" IsChecked="{Binding BoolValue, Mode=TwoWay}" IsVisible="{Binding IsBool}"/>
+                        <!-- Vec3 as X/Y/Z -->
+                        <Grid Grid.Column="1" IsVisible="{Binding IsVec3}" ColumnDefinitions="13,*,6,13,*,6,13,*">
+                          <TextBlock Classes="axisX" Text="X" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="1" Classes="field" Text="{Binding X, Mode=TwoWay}"/>
+                          <TextBlock Grid.Column="3" Classes="axisY" Text="Y" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="4" Classes="field" Text="{Binding Y, Mode=TwoWay}"/>
+                          <TextBlock Grid.Column="6" Classes="axisZ" Text="Z" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="7" Classes="field" Text="{Binding Z, Mode=TwoWay}"/>
+                        </Grid>
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
