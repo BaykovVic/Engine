@@ -55,6 +55,12 @@ class EditorContext {
 public:
     EditorContext();
 
+    /// Snapshots every object's local transform so play mode can be entered
+    /// non-destructively; endPlay restores them and re-seats the physics
+    /// bodies (zero velocity), so leaving play returns the scene to how it was.
+    void beginPlay();
+    void endPlay();
+
     /// Applies the active brush at a world-space point on the terrain.
     void applyTerrainBrush(core::Vec3 worldPoint);
     /// Terrain height (world Y) under world-space (x, z).
@@ -132,6 +138,7 @@ private:
 
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
+    std::unordered_map<std::uint64_t, core::Transform> playSnapshot_;
     physics::RigidBodyHandle terrainBody_;
     physics::ColliderHandle terrainCollider_;
     std::uint64_t terrainVersion_ = 0;

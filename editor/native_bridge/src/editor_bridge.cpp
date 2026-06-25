@@ -792,12 +792,28 @@ void sky_editor_set_local_euler(SkyEditorContext* ctx, SkyObjectId object,
 
 int32_t sky_editor_play(SkyEditorContext* ctx) {
     auto& context = ec(ctx);
+    // Snapshot the scene only when entering play from editing (not on resume
+    // from pause), so leaving play can restore the original state.
+    const bool entering =
+        context.playMode->state() == sky::editor::PlayModeState::Editing;
     context.playMode->setScene(context.activeScene);
-    return context.playMode->play() ? 1 : 0;
+    const bool ok = context.playMode->play();
+    if (ok && entering) {
+        context.beginPlay();
+    }
+    return ok ? 1 : 0;
 }
 
 void sky_editor_pause(SkyEditorContext* ctx) { ec(ctx).playMode->pause(); }
-void sky_editor_stop(SkyEditorContext* ctx) { ec(ctx).playMode->stop(); }
+void sky_editor_stop(SkyEditorContext* ctx) {
+    auto& context = ec(ctx);
+    const bool wasRunning =
+        context.playMode->state() != sky::editor::PlayModeState::Editing;
+    context.playMode->stop();
+    if (wasRunning) {
+        context.endPlay();
+    }
+}
 
 /// 0 = editing, 1 = playing, 2 = paused.
 int32_t sky_editor_play_state(SkyEditorContext* ctx) {

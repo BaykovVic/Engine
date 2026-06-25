@@ -221,6 +221,39 @@ void EditorContext::destroyObject(object::ObjectHandle object) {
     std::erase(roots_, object);
 }
 
+void EditorContext::beginPlay() {
+    // Capture every object's local transform so leaving play can restore it.
+    playSnapshot_.clear();
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        playSnapshot_[object.value] = objects->localTransform(object);
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+    }
+}
+
+void EditorContext::endPlay() {
+    for (const auto& [id, transform] : playSnapshot_) {
+        const object::ObjectHandle object{id};
+        if (objects->exists(object)) {
+            objects->setLocalTransform(object, transform);
+        }
+    }
+    // Re-seat the simulation: bodies back to the restored pose, no residual
+    // velocity, so the next play session starts from the original state.
+    for (const auto& [id, body] : bodies_) {
+        const object::ObjectHandle object{id};
+        if (objects->exists(object)) {
+            physics->setBodyTransform(body, objects->worldTransform(object));
+            physics->setBodyVelocity(body, {0.0f, 0.0f, 0.0f});
+        }
+    }
+    playSnapshot_.clear();
+}
+
 object::ObjectHandle EditorContext::duplicateObject(object::ObjectHandle object) {
     if (!objects->exists(object)) {
         return object::ObjectHandle::invalid();
