@@ -5,6 +5,7 @@
 // Shared by the standalone player and the editor's native viewport bridge so
 // both present the identical scene. Header-only: the methods are inline.
 
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -219,13 +220,17 @@ private:
     }
 
     rendering::RenderResourceHandle uploadedMesh(const std::string& ref) {
-        // Built-in primitives are drawn from the backend's default geometry,
-        // so an empty or named-primitive reference needs no file load.
-        if (ref.empty() || ref == "cube" || ref == "plane" || ref == "sphere") {
+        // The cube (and an empty reference) is the backend's default geometry.
+        if (ref.empty() || ref == "cube") {
             return {};
         }
         auto& handle = meshes_[ref];
         if (!handle.isValid()) {
+            if (ref == "plane" || ref == "sphere") {
+                const auto data = buildPrimitive(ref);
+                handle = factory_.createMeshFromData(data);
+                return handle;
+            }
             const auto path = resolveMeshRef(ref);
             const auto extension = std::filesystem::path(path).extension();
             const auto data =
@@ -239,6 +244,53 @@ private:
             }
         }
         return handle;
+    }
+
+    /// Procedural geometry for the built-in primitives, in the engine vertex
+    /// format (interleaved position(3) + normal(3) + uv(2), triangle list).
+    /// Unit-sized to match the cube, so the object transform scales it.
+    static std::vector<float> buildPrimitive(const std::string& kind) {
+        std::vector<float> v;
+        const auto push = [&](float px, float py, float pz, float nx, float ny,
+                              float nz, float u, float w) {
+            v.insert(v.end(), {px, py, pz, nx, ny, nz, u, w});
+        };
+        if (kind == "plane") {
+            // 1x1 quad on the XZ plane, facing +Y (double-sided for visibility).
+            const float c[4][3] = {{-0.5f, 0, -0.5f}, {0.5f, 0, -0.5f},
+                                   {0.5f, 0, 0.5f},   {-0.5f, 0, 0.5f}};
+            const int top[6] = {0, 2, 1, 0, 3, 2};
+            const int bot[6] = {0, 1, 2, 0, 2, 3};
+            for (int i : top)
+                push(c[i][0], c[i][1], c[i][2], 0, 1, 0, c[i][0] + 0.5f, c[i][2] + 0.5f);
+            for (int i : bot)
+                push(c[i][0], c[i][1], c[i][2], 0, -1, 0, c[i][0] + 0.5f, c[i][2] + 0.5f);
+            return v;
+        }
+        // UV sphere of radius 0.5.
+        constexpr int kStacks = 16, kSlices = 24;
+        constexpr float kPi = 3.14159265358979323846f;
+        const auto vert = [&](int i, int j, float out[8]) {
+            const float theta = kPi * static_cast<float>(i) / kStacks;     // 0..pi
+            const float phi = 2.0f * kPi * static_cast<float>(j) / kSlices; // 0..2pi
+            const float nx = std::sin(theta) * std::cos(phi);
+            const float ny = std::cos(theta);
+            const float nz = std::sin(theta) * std::sin(phi);
+            out[0] = nx * 0.5f; out[1] = ny * 0.5f; out[2] = nz * 0.5f;
+            out[3] = nx; out[4] = ny; out[5] = nz;
+            out[6] = static_cast<float>(j) / kSlices;
+            out[7] = static_cast<float>(i) / kStacks;
+        };
+        for (int i = 0; i < kStacks; ++i) {
+            for (int j = 0; j < kSlices; ++j) {
+                float a[8], b[8], c[8], d[8];
+                vert(i, j, a); vert(i + 1, j, b);
+                vert(i + 1, j + 1, c); vert(i, j + 1, d);
+                for (const float* p : {a, b, c, a, c, d})
+                    v.insert(v.end(), p, p + 8);
+            }
+        }
+        return v;
     }
 
     rendering::RenderResourceHandle uploadedTexture(const std::string& path) {
