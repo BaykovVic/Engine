@@ -190,5 +190,14 @@
   <Style Selector="DocumentTabStripItem"><Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/><Setter Property="Foreground" Value="{StaticResource SkyTextSecondaryBrush}"/><Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="14,0"/><Setter Property="BorderThickness" Value="0,0,0,2"/><Setter Property="BorderBrush" Value="Transparent"/></Style>
   <Style Selector="DocumentTabStripItem:pointerover"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
   <Style Selector="DocumentTabStripItem:selected"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
-  <Style Selector="DockTarget Path"><Setter Property="Fill" Value="{StaticResource SkyAccentTintBrush}"/></Style>
+  <!-- Dock drag visuals: tint the whole target region and enlarge the zone
+       icons so it is clear where a dragged panel will land. DockTarget exists
+       only during a drag, so these only show while dragging. -->
+  <Style Selector="DockTarget /template/ Grid#PART_IndicatorGrid">
+    <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+  </Style>
+  <Style Selector="DockTarget /template/ Image">
+    <Setter Property="Width" Value="46"/>
+    <Setter Property="Height" Value="46"/>
+  </Style>
 </Styles>

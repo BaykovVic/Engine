@@ -64,6 +64,15 @@
     <SolidColorBrush x:Key="SkyAccentPressedBrush" Color="{StaticResource SkyAccentPressed}"/>
     <SolidColorBrush x:Key="SkyAccentTintBrush"    Color="{StaticResource SkyAccentTint}"/>
 
+    <!-- Dock.Avalonia drag indicators, recoloured onto our accent so dock
+         zones read clearly during a drag (defaults are a different blue that
+         can be hard to see on this dark theme). -->
+    <SolidColorBrush x:Key="DockApplicationAccentBrushIndicator" Color="{StaticResource SkyAccent}" Opacity="0.55"/>
+    <SolidColorBrush x:Key="DockApplicationAccentBrushLow"  Color="{StaticResource SkyAccent}"/>
+    <SolidColorBrush x:Key="DockApplicationAccentBrushMed"  Color="{StaticResource SkyAccentHover}"/>
+    <SolidColorBrush x:Key="DockApplicationAccentBrushHigh" Color="{StaticResource SkyAccentHover}"/>
+    <SolidColorBrush x:Key="DockThemeAccentBrush"           Color="{StaticResource SkyAccent}"/>
+
     <SolidColorBrush x:Key="SkyInfoBrush"  Color="{StaticResource SkyInfo}"/>
     <SolidColorBrush x:Key="SkyWarnBrush"  Color="{StaticResource SkyWarn}"/>
     <SolidColorBrush x:Key="SkyErrorBrush" Color="{StaticResource SkyError}"/>
