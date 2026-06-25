@@ -256,6 +256,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ProjectPath));
     }
 
+    // --- Drag a model from Project into the scene/Hierarchy ---
+    private static readonly string[] ModelExts = { ".obj", ".fbx", ".gltf", ".glb" };
+
+    public bool IsModelAsset(ProjectEntry? e) =>
+        e is { IsDirectory: false } &&
+        Array.Exists(ModelExts, x => e.Name.ToLowerInvariant().EndsWith(x));
+
+    /// The VFS reference for a Project entry in the current folder, e.g.
+    /// "assets://Models/ship.fbx".
+    public string AssetRefFor(ProjectEntry e)
+    {
+        var dir = CurrentVfsDir();
+        if (string.IsNullOrEmpty(dir)) return e.Name;
+        return dir.EndsWith("://") ? dir + e.Name : dir + "/" + e.Name;
+    }
+
+    /// Instantiates a model asset as a new scene object and selects it.
+    public void CreateModelFromAsset(string assetRef)
+    {
+        if (string.IsNullOrEmpty(assetRef)) return;
+        var name = EditorSession.MeshDisplayName(assetRef);
+        SelectById(_session.CreateModel(name, assetRef));
+    }
+
     public void OpenProjectEntry(ProjectEntry? entry)
     {
         if (entry is not { IsDirectory: true })

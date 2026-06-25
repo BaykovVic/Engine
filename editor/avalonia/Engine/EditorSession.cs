@@ -370,6 +370,13 @@ public sealed class EditorSession : IDisposable
         return id;
     }
 
+    public ulong CreateModel(string name, string meshRef)
+    {
+        var id = EngineInterop.sky_editor_create_mesh_object(_ctx, name, meshRef);
+        Reload();
+        return id;
+    }
+
     public ulong Duplicate(ulong id)
     {
         var copy = EngineInterop.sky_editor_duplicate(_ctx, id);

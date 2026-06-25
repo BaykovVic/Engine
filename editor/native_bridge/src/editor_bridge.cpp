@@ -487,6 +487,14 @@ SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
     return ec(ctx).createPrimitive(primitive, name != nullptr ? name : "Object").value;
 }
 
+SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx, const char* name,
+                                          const char* mesh_ref) {
+    return ec(ctx)
+        .createModelObject(name != nullptr ? name : "Model",
+                           mesh_ref != nullptr ? mesh_ref : "")
+        .value;
+}
+
 SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx, SkyObjectId object) {
     return ec(ctx).duplicateObject(handle(object)).value;
 }

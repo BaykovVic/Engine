@@ -221,6 +221,15 @@ void EditorContext::destroyObject(object::ObjectHandle object) {
     std::erase(roots_, object);
 }
 
+object::ObjectHandle EditorContext::createModelObject(const std::string& name,
+                                                      const std::string& meshRef) {
+    const auto object = createEmpty(name);
+    const auto mesh = components->attach(object, "sky.mesh");
+    components->setField(mesh, "material", std::string("Default"));
+    components->setField(mesh, "mesh", meshRef);
+    return object;
+}
+
 void EditorContext::beginPlay() {
     // Capture every object's local transform so leaving play can restore it.
     playSnapshot_.clear();

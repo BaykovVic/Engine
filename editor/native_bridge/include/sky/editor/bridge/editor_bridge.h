@@ -105,6 +105,11 @@ SKY_BRIDGE_API int32_t sky_editor_vfs_entry(SkyEditorContext* ctx, const char* d
 SKY_BRIDGE_API SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
                                                        SkyPrimitiveKind kind,
                                                        const char* name);
+/* Creates a scene-root object with a Mesh Renderer referencing mesh_ref
+ * (e.g. "assets://Models/ship.fbx"); used by Project -> Hierarchy drag-drop. */
+SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
+                                                         const char* name,
+                                                         const char* mesh_ref);
 SKY_BRIDGE_API SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx,
                                                 SkyObjectId object);
 SKY_BRIDGE_API void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object);

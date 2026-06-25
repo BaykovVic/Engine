@@ -78,6 +78,10 @@ public:
                                          const std::string& name);
     /// A cube with a dynamic rigid body and box collider, Unity-style.
     object::ObjectHandle createCrate(const std::string& name, core::Vec3 position);
+    /// A scene-root object carrying a Mesh Renderer that references an existing
+    /// mesh asset — used when a model is dragged from Project into the scene.
+    object::ObjectHandle createModelObject(const std::string& name,
+                                           const std::string& meshRef);
     void destroyObject(object::ObjectHandle object);
 
     /// Deep-copies an object with its components, physics binding and
