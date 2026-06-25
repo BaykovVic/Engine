@@ -112,6 +112,8 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern void sky_editor_camera_position(IntPtr ctx, float[] outXyz);
     [DllImport(Lib)] public static extern void sky_editor_set_view_2d(IntPtr ctx, int enabled);
     [DllImport(Lib)] public static extern int sky_editor_view_2d(IntPtr ctx);
+    [DllImport(Lib)] public static extern void sky_editor_look_along_axis(IntPtr ctx, int axis);
+    [DllImport(Lib)] public static extern void sky_editor_camera_basis(IntPtr ctx, float[] outRight, float[] outUp, float[] outForward);
 
     // --- Transforms across spaces (world / self / parent) ---
     [DllImport(Lib)] public static extern void sky_editor_get_world_transform(IntPtr ctx, ulong obj, float[] outPosition, float[] outRotation, float[] outScale);

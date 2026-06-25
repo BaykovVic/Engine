@@ -83,6 +83,10 @@ public sealed class VulkanViewport : Control
     /// Inspector can re-read and display the live values.
     public event Action? TransformChanged;
 
+    /// Raised when the corner scene gizmo toggles the projection, so the
+    /// header 3D/2D buttons can stay in sync.
+    public event Action? ProjectionToggled;
+
     public VulkanViewport()
     {
         // Keep the rendered scene and the gizmo overlay inside the viewport —
@@ -177,7 +181,129 @@ public sealed class VulkanViewport : Control
             context.DrawText(text, new Point(24, Math.Max(24, Bounds.Height / 2 - 40)));
         }
         if (!GameView)
+        {
             DrawGizmo(context);
+            DrawSceneGizmo(context);
+        }
+    }
+
+    // --- Scene gizmo: orientation cube + projection toggle, top-right corner ---
+
+    private const double SceneGizmoRadius = 26;
+    private const double SceneGizmoMargin = 44;
+
+    // World axes for the six cones: +X, -X, +Y, -Y, +Z, -Z (lookAlong indices).
+    private static readonly (float X, float Y, float Z)[] SceneAxes =
+    {
+        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+    };
+
+    /// Projects the six axis cones into widget space using the camera basis.
+    private bool SceneGizmoGeometry(out Point center, out Point[] tips, out double[] depth)
+    {
+        center = new Point(Bounds.Width - SceneGizmoMargin, SceneGizmoMargin);
+        tips = new Point[6];
+        depth = new double[6];
+        if (_context == IntPtr.Zero || Bounds.Width < SceneGizmoMargin * 2)
+            return false;
+        var right = new float[3];
+        var up = new float[3];
+        var fwd = new float[3];
+        EngineInterop.sky_editor_camera_basis(_context, right, up, fwd);
+        for (var i = 0; i < 6; ++i)
+        {
+            var e = SceneAxes[i];
+            double sx = e.X * right[0] + e.Y * right[1] + e.Z * right[2];
+            double sy = e.X * up[0] + e.Y * up[1] + e.Z * up[2];
+            double sz = e.X * fwd[0] + e.Y * fwd[1] + e.Z * fwd[2];
+            tips[i] = new Point(center.X + sx * SceneGizmoRadius,
+                                center.Y - sy * SceneGizmoRadius);
+            depth[i] = sz; // <0 points toward the viewer (drawn on top)
+        }
+        return true;
+    }
+
+    private void DrawSceneGizmo(DrawingContext context)
+    {
+        if (!SceneGizmoGeometry(out var center, out var tips, out var depth))
+            return;
+
+        // Backing disc.
+        context.DrawEllipse(new SolidColorBrush(Color.FromArgb(140, 20, 22, 27)), null,
+            center, SceneGizmoRadius + 11, SceneGizmoRadius + 11);
+
+        // Far cones first so near ones overlap them.
+        var order = new[] { 0, 1, 2, 3, 4, 5 };
+        Array.Sort(order, (a, b) => depth[b].CompareTo(depth[a]));
+        foreach (var i in order)
+        {
+            var brush = new SolidColorBrush(AxisColors[i / 2]);
+            if (i % 2 == 0) // positive axis: line + filled cone + label
+            {
+                context.DrawLine(new Pen(brush, 2), center, tips[i]);
+                context.DrawEllipse(brush, null, tips[i], 8, 8);
+                var label = i < 2 ? "X" : i < 4 ? "Y" : "Z";
+                var ft = new FormattedText(label, CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, Typeface.Default, 10,
+                    new SolidColorBrush(Color.Parse("#0E1013")));
+                context.DrawText(ft, new Point(tips[i].X - ft.Width / 2,
+                                               tips[i].Y - ft.Height / 2));
+            }
+            else // negative axis: hollow cone
+            {
+                context.DrawEllipse(new SolidColorBrush(Color.FromArgb(60, 20, 22, 27)),
+                    new Pen(brush, 1.5), tips[i], 6, 6);
+            }
+        }
+
+        // Projection label under the widget.
+        var persp = EngineInterop.sky_editor_view_2d(_context) == 0;
+        var txt = new FormattedText(persp ? "Persp" : "Iso", CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight, Typeface.Default, 11,
+            new SolidColorBrush(Color.Parse("#C7CCD4")));
+        context.DrawText(txt, new Point(center.X - txt.Width / 2,
+                                        center.Y + SceneGizmoRadius + 6));
+    }
+
+    /// Handles a click on the corner scene gizmo: an axis cone snaps the view,
+    /// the label toggles projection. Returns true when the click was consumed.
+    private bool SceneGizmoClick(Point p)
+    {
+        if (!SceneGizmoGeometry(out var center, out var tips, out var depth))
+            return false;
+
+        // Projection label.
+        var labelRect = new Rect(center.X - 26, center.Y + SceneGizmoRadius + 4, 52, 16);
+        if (labelRect.Contains(p))
+        {
+            var ortho = EngineInterop.sky_editor_view_2d(_context) != 0;
+            EngineInterop.sky_editor_set_view_2d(_context, ortho ? 0 : 1);
+            ProjectionToggled?.Invoke();
+            return true;
+        }
+
+        // Nearest cone within the hit radius; prefer the front one on overlap.
+        var best = -1;
+        var bestDist = 11.0;
+        var bestDepth = double.MaxValue;
+        for (var i = 0; i < 6; ++i)
+        {
+            var d = Math.Sqrt(Math.Pow(p.X - tips[i].X, 2) + Math.Pow(p.Y - tips[i].Y, 2));
+            if (d <= bestDist && depth[i] < bestDepth)
+            {
+                bestDepth = depth[i];
+                best = i;
+            }
+        }
+        if (best >= 0)
+        {
+            EngineInterop.sky_editor_look_along_axis(_context, best);
+            return true;
+        }
+
+        // Swallow clicks anywhere on the disc so they don't orbit the camera.
+        return Math.Sqrt(Math.Pow(p.X - center.X, 2) + Math.Pow(p.Y - center.Y, 2))
+            < SceneGizmoRadius + 11;
     }
 
     private void DrawGizmo(DrawingContext context)
@@ -428,6 +554,14 @@ public sealed class VulkanViewport : Control
             return; // the Game view has no editor camera/gizmo interaction
         var position = e.GetPosition(this);
         var point = e.GetCurrentPoint(this).Properties;
+
+        // The corner scene gizmo sits on top of everything and grabs clicks
+        // before camera orbit or object picking.
+        if (point.IsLeftButtonPressed && _context != IntPtr.Zero && SceneGizmoClick(position))
+        {
+            e.Handled = true;
+            return;
+        }
 
         if (point.IsLeftButtonPressed && _context != IntPtr.Zero &&
             Tool != GizmoTool.Hand && BeginGizmoDrag(position))

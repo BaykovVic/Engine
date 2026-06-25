@@ -665,11 +665,26 @@ void sky_editor_camera_position(SkyEditorContext* ctx, float* out_xyz) {
 }
 
 void sky_editor_set_view_2d(SkyEditorContext* ctx, int32_t enabled) {
-    self(ctx)->camera.twoD = enabled != 0;
+    self(ctx)->camera.orthographic = enabled != 0;
 }
 
 int32_t sky_editor_view_2d(SkyEditorContext* ctx) {
-    return self(ctx)->camera.twoD ? 1 : 0;
+    return self(ctx)->camera.orthographic ? 1 : 0;
+}
+
+void sky_editor_look_along_axis(SkyEditorContext* ctx, int32_t axis) {
+    self(ctx)->camera.lookAlong(axis);
+}
+
+void sky_editor_camera_basis(SkyEditorContext* ctx, float* out_right,
+                             float* out_up, float* out_forward) {
+    const auto rot = self(ctx)->camera.rotation();
+    const auto fill = [](float* out, sky::core::Vec3 v) {
+        if (out != nullptr) { out[0] = v.x; out[1] = v.y; out[2] = v.z; }
+    };
+    fill(out_right, sky::core::rotate(rot, {1.0f, 0.0f, 0.0f}));
+    fill(out_up, sky::core::rotate(rot, {0.0f, 1.0f, 0.0f}));
+    fill(out_forward, sky::core::rotate(rot, {0.0f, 0.0f, -1.0f}));
 }
 
 int32_t sky_editor_project(SkyEditorContext* ctx, float world_x, float world_y,

@@ -18,18 +18,12 @@ struct EditorCamera {
     float distance = 14.0f;
     core::Vec3 target{0.0f, 1.5f, 0.0f};
     float fovDegrees = 50.0f;
-    /// 2D mode: an orthographic view of the YZ plane (looking along +X, with
-    /// world +Z to the right and +Y up). Orbit is locked; pan/zoom still work.
-    bool twoD = false;
+    /// Orthographic projection (Unity's "Iso"). Independent of orientation:
+    /// orbit/pan/zoom all keep working, only the projection changes.
+    bool orthographic = false;
 
     [[nodiscard]] core::Quat rotation() const {
         constexpr float kPi = 3.14159265358979323846f;
-        if (twoD) {
-            // Look toward +X: a -90 degree turn about +Y maps the camera's
-            // local -Z (forward) to world +X and local +X (right) to +Z.
-            return core::Quat{0.0f, std::sin(-kPi / 4.0f), 0.0f,
-                              std::cos(-kPi / 4.0f)};
-        }
         const float yaw = yawDegrees * kPi / 180.0f;
         const float pitch = pitchDegrees * kPi / 180.0f;
         const core::Quat yawQ{0.0f, std::sin(yaw / 2), 0.0f, std::cos(yaw / 2)};
@@ -38,7 +32,7 @@ struct EditorCamera {
     }
 
     /// Half-height of the orthographic view box in world units, matched to the
-    /// perspective framing at the target so zoom behaves the same in 2D.
+    /// perspective framing at the target so zoom behaves the same in ortho.
     [[nodiscard]] float orthoHalfHeight() const {
         constexpr float kPi = 3.14159265358979323846f;
         return distance * std::tan(fovDegrees * kPi / 360.0f);
@@ -46,7 +40,22 @@ struct EditorCamera {
 
     /// World-space orthographic height for the renderer (0 in perspective).
     [[nodiscard]] float orthoHeight() const {
-        return twoD ? orthoHalfHeight() * 2.0f : 0.0f;
+        return orthographic ? orthoHalfHeight() * 2.0f : 0.0f;
+    }
+
+    /// Snaps the orbit to an axis-aligned view. axis: 0=+X,1=-X,2=+Y,3=-Y,
+    /// 4=+Z,5=-Z — the world axis the camera is positioned on, looking at the
+    /// target (like clicking a cone on Unity's scene gizmo).
+    void lookAlong(int axis) {
+        switch (axis) {
+            case 0: yawDegrees = 90.0f;  pitchDegrees = 0.0f;   break; // from +X
+            case 1: yawDegrees = -90.0f; pitchDegrees = 0.0f;   break; // from -X
+            case 2: yawDegrees = 0.0f;   pitchDegrees = 89.0f;  break; // top (+Y)
+            case 3: yawDegrees = 0.0f;   pitchDegrees = -89.0f; break; // bottom (-Y)
+            case 4: yawDegrees = 0.0f;   pitchDegrees = 0.0f;   break; // from +Z (front)
+            case 5: yawDegrees = 180.0f; pitchDegrees = 0.0f;   break; // from -Z (back)
+            default: break;
+        }
     }
 
     /// Camera transform: backed off the target along the view's +Z (cameras
@@ -59,11 +68,11 @@ struct EditorCamera {
         return p;
     }
 
-    /// World-space ray direction through a viewport pixel. In 2D the rays are
-    /// parallel, so the direction is the constant view forward.
+    /// World-space ray direction through a viewport pixel. In ortho the rays
+    /// are parallel, so the direction is the constant view forward.
     [[nodiscard]] core::Vec3 rayThrough(float pixelX, float pixelY, float width,
                                         float height) const {
-        if (twoD) {
+        if (orthographic) {
             return core::rotate(rotation(), {0.0f, 0.0f, -1.0f});
         }
         constexpr float kPi = 3.14159265358979323846f;
@@ -76,11 +85,11 @@ struct EditorCamera {
     }
 
     /// Ray origin for a viewport pixel. In perspective every ray starts at the
-    /// camera; in 2D the origin slides across the image plane (parallel rays).
+    /// camera; in ortho the origin slides across the image plane (parallel rays).
     [[nodiscard]] core::Vec3 rayOrigin(float pixelX, float pixelY, float width,
                                        float height) const {
         const auto camera = pose().position;
-        if (!twoD) {
+        if (!orthographic) {
             return camera;
         }
         const float aspect = width > 0.0f ? width / height : 1.0f;
@@ -110,7 +119,7 @@ struct EditorCamera {
             return false; // at or behind the camera plane
         }
         const float aspect = width > 0.0f ? width / height : 1.0f;
-        if (twoD) {
+        if (orthographic) {
             const float halfH = orthoHalfHeight();
             const float ndcX2 = local.x / (halfH * aspect);
             const float ndcY2 = local.y / halfH;
@@ -127,9 +136,6 @@ struct EditorCamera {
     }
 
     void orbit(float deltaYawDegrees, float deltaPitchDegrees) {
-        if (twoD) {
-            return; // the 2D plane is locked; orbit is a no-op
-        }
         yawDegrees += deltaYawDegrees;
         pitchDegrees =
             std::clamp(pitchDegrees + deltaPitchDegrees, -89.0f, 89.0f);

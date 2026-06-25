@@ -53,6 +53,7 @@ public partial class SceneView : UserControl
         _viewport.SetContext(vm.NativeContext);
         _viewport.ObjectPicked += vm.SelectById;
         _viewport.TransformChanged += vm.ReloadTransform;
+        _viewport.ProjectionToggled += SyncViewToggles;
         _viewport.SelectedId = vm.SelectedObject?.Id ?? 0;
         _viewport.Tool = vm.Tool;
         vm.PropertyChanged += (_, e) =>
@@ -80,5 +81,15 @@ public partial class SceneView : UserControl
         _vm?.SetView2D(enabled);
         this.FindControl<ToggleButton>("view3D")!.IsChecked = !enabled;
         this.FindControl<ToggleButton>("view2D")!.IsChecked = enabled;
+    }
+
+    /// Reflects the engine's current projection into the header toggles (used
+    /// when the corner scene gizmo flips it).
+    private void SyncViewToggles()
+    {
+        if (_vm == null) return;
+        var ortho = EngineInterop.sky_editor_view_2d(_vm.NativeContext) != 0;
+        this.FindControl<ToggleButton>("view3D")!.IsChecked = !ortho;
+        this.FindControl<ToggleButton>("view2D")!.IsChecked = ortho;
     }
 }

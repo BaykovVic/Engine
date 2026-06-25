@@ -160,6 +160,13 @@ SKY_BRIDGE_API void sky_editor_camera_position(SkyEditorContext* ctx,
  * editor/scene viewport only; the Game view keeps the Main Camera. */
 SKY_BRIDGE_API void sky_editor_set_view_2d(SkyEditorContext* ctx, int32_t enabled);
 SKY_BRIDGE_API int32_t sky_editor_view_2d(SkyEditorContext* ctx);
+/* Snaps the orbit to an axis-aligned view (scene-gizmo cone click). axis:
+ * 0=+X 1=-X 2=+Y 3=-Y 4=+Z 5=-Z. */
+SKY_BRIDGE_API void sky_editor_look_along_axis(SkyEditorContext* ctx, int32_t axis);
+/* Fills the camera's world-space basis vectors (each float[3]) so the corner
+ * scene gizmo can orient its axes. Any pointer may be null. */
+SKY_BRIDGE_API void sky_editor_camera_basis(SkyEditorContext* ctx, float* out_right,
+                                            float* out_up, float* out_forward);
 
 /* Projects a world point to a viewport pixel (inverse of the pick ray), so
  * the on-screen transform gizmo lines up with the render. Returns 1 when the
