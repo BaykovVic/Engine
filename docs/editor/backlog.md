@@ -41,9 +41,13 @@
 - **Редактирование полей компонентов** **[оба]** — все типы (`float`/`int`/
   `bool`/`string`/`Vec3`) через ABI (`get_field`/`set_field`), а не только
   трансформ.
-- **Add/Remove Component** **[UI]** — кнопка Add Component открывает попап со
-  списком типов (из `availableTypes`) с категориями (Rendering/Physics/…,
-  поле `category` уже есть) и поиском; крестик на карточке — detach.
+- **Add/Remove Component** **[оба]** — ✅ кнопка Add Component открывает флаут
+  со списком зарегистрированных типов (`availableTypes`, с категориями); ✕ на
+  карточке detach'ит. ABI `available_type_*`/`add_component`/`remove_component`,
+  обе операции undo'абельны (attach/remove-команды с восстановлением полей).
+  Осталось: поиск в списке + иконки категорий.
+- **Rename объекта** **[оба]** — ✅ поле имени в инспекторе редактируемо,
+  `sky_editor_rename_object` (undo через RenameCommand), иерархия обновляется.
 
 ## Панели на живые данные
 

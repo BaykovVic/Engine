@@ -211,6 +211,50 @@ private:
     component::FieldValue after_;
 };
 
+class AddComponentCommand final : public IEditorCommand {
+public:
+    AddComponentCommand(object::ObjectHandle object, std::string typeId,
+                        component::ComponentHandle created)
+        : object_(object), typeId_(std::move(typeId)), component_(created) {}
+
+    std::string label() const override { return "Add " + typeId_; }
+
+    void undo(EditorContext& context) override { context.components->detach(component_); }
+    void redo(EditorContext& context) override {
+        component_ = context.components->attach(object_, typeId_);
+    }
+
+private:
+    object::ObjectHandle object_;
+    std::string typeId_;
+    component::ComponentHandle component_;
+};
+
+class RemoveComponentCommand final : public IEditorCommand {
+public:
+    RemoveComponentCommand(object::ObjectHandle object, std::string typeId,
+                           std::map<std::string, component::FieldValue> fields,
+                           component::ComponentHandle component)
+        : object_(object), typeId_(std::move(typeId)), fields_(std::move(fields)),
+          component_(component) {}
+
+    std::string label() const override { return "Remove " + typeId_; }
+
+    void undo(EditorContext& context) override {
+        component_ = context.components->attach(object_, typeId_);
+        for (const auto& [name, value] : fields_) {
+            context.components->setField(component_, name, value);
+        }
+    }
+    void redo(EditorContext& context) override { context.components->detach(component_); }
+
+private:
+    object::ObjectHandle object_;
+    std::string typeId_;
+    std::map<std::string, component::FieldValue> fields_;
+    component::ComponentHandle component_;
+};
+
 class MaterialEditCommand final : public IEditorCommand {
 public:
     MaterialEditCommand(rendering::MaterialHandle material,
@@ -303,6 +347,20 @@ std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle comp
                                                  component::FieldValue after) {
     return std::make_unique<FieldCommand>(component, std::move(fieldName),
                                           std::move(before), std::move(after));
+}
+
+std::unique_ptr<IEditorCommand> makeAddComponentCommand(
+    object::ObjectHandle object, std::string typeId,
+    component::ComponentHandle created) {
+    return std::make_unique<AddComponentCommand>(object, std::move(typeId), created);
+}
+
+std::unique_ptr<IEditorCommand> makeRemoveComponentCommand(
+    EditorContext& context, component::ComponentHandle component) {
+    return std::make_unique<RemoveComponentCommand>(
+        context.components->ownerOf(component),
+        context.components->descriptorOf(component).typeId,
+        context.components->fields(component), component);
 }
 
 std::unique_ptr<IEditorCommand> makeMaterialEditCommand(

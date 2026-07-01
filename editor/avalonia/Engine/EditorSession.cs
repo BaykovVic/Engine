@@ -175,6 +175,21 @@ public sealed class MeshOption
     public override string ToString() => Display;
 }
 
+/// A registered component type offered in the Inspector's Add Component list.
+public sealed class ComponentType
+{
+    public ComponentType(string typeId, string displayName, string category)
+    {
+        TypeId = typeId;
+        DisplayName = displayName;
+        Category = string.IsNullOrEmpty(category) ? "Other" : category;
+    }
+    public string TypeId { get; }
+    public string DisplayName { get; }
+    public string Category { get; }
+    public override string ToString() => DisplayName;
+}
+
 /// A material in the Materials panel, with a colour swatch and PBR fields.
 public sealed class MaterialView
 {
@@ -376,6 +391,34 @@ public sealed class EditorSession : IDisposable
         Reload();
         return id;
     }
+
+    public void RenameObject(ulong id, string name)
+    {
+        EngineInterop.sky_editor_rename_object(_ctx, id, name);
+        Reload();
+    }
+
+    public List<ComponentType> AvailableTypes()
+    {
+        var list = new List<ComponentType>();
+        var count = EngineInterop.sky_editor_available_type_count(_ctx);
+        for (var i = 0; i < count; ++i)
+        {
+            var idx = i;
+            var id = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_available_type_id(_ctx, idx, b, n));
+            var name = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_available_type_name(_ctx, idx, b, n));
+            var cat = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_available_type_category(_ctx, idx, b, n));
+            if (!string.IsNullOrEmpty(id))
+                list.Add(new ComponentType(id, name, cat));
+        }
+        return list;
+    }
+
+    public void AddComponent(ulong id, string typeId) =>
+        EngineInterop.sky_editor_add_component(_ctx, id, typeId);
+
+    public void RemoveComponent(ulong id, int component) =>
+        EngineInterop.sky_editor_remove_component(_ctx, id, component);
 
     public void NewScene()
     {

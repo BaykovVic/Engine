@@ -114,6 +114,27 @@ SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
 /* Scene document lifecycle. new_scene clears to an empty scene; save_scene
  * writes the object graph to a .skybox (SKYB); open_scene replaces the scene
  * from a file. save/open return 1 on success, 0 on failure. */
+/* Renames an object (undoable). */
+SKY_BRIDGE_API void sky_editor_rename_object(SkyEditorContext* ctx,
+                                             SkyObjectId object, const char* name);
+
+/* Registered component types, for the Inspector's Add Component list. */
+SKY_BRIDGE_API int32_t sky_editor_available_type_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_available_type_id(SkyEditorContext* ctx,
+                                                    int32_t index, char* buffer,
+                                                    int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_available_type_name(SkyEditorContext* ctx,
+                                                      int32_t index, char* buffer,
+                                                      int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_available_type_category(SkyEditorContext* ctx,
+                                                          int32_t index, char* buffer,
+                                                          int32_t capacity);
+/* Attach a component type / detach the component at an index (both undoable). */
+SKY_BRIDGE_API void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
+                                             const char* type_id);
+SKY_BRIDGE_API void sky_editor_remove_component(SkyEditorContext* ctx,
+                                                SkyObjectId object, int32_t component);
+
 SKY_BRIDGE_API void sky_editor_new_scene(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path);
 SKY_BRIDGE_API int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path);

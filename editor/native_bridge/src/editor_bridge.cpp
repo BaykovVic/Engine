@@ -269,6 +269,79 @@ int32_t sky_editor_object_name(SkyEditorContext* ctx, SkyObjectId object,
     return copyString(ec(ctx).objects->nameOf(handle(object)), buffer, capacity);
 }
 
+void sky_editor_rename_object(SkyEditorContext* ctx, SkyObjectId object,
+                              const char* name) {
+    if (name == nullptr) {
+        return;
+    }
+    commitTransform(self(ctx));
+    auto& objects = *ec(ctx).objects;
+    std::string before = objects.nameOf(handle(object));
+    std::string after = name;
+    if (before == after) {
+        return;
+    }
+    objects.renameObject(handle(object), after);
+    self(ctx)->undo->push(
+        sky::editor::makeRenameCommand(handle(object), std::move(before), std::move(after)));
+}
+
+// --- Component types + attach/detach ------------------------------------
+
+int32_t sky_editor_available_type_count(SkyEditorContext* ctx) {
+    return static_cast<int32_t>(ec(ctx).components->availableTypes().size());
+}
+
+int32_t sky_editor_available_type_id(SkyEditorContext* ctx, int32_t index,
+                                     char* buffer, int32_t capacity) {
+    const auto types = ec(ctx).components->availableTypes();
+    if (index < 0 || std::size_t(index) >= types.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(types[std::size_t(index)].typeId, buffer, capacity);
+}
+
+int32_t sky_editor_available_type_name(SkyEditorContext* ctx, int32_t index,
+                                       char* buffer, int32_t capacity) {
+    const auto types = ec(ctx).components->availableTypes();
+    if (index < 0 || std::size_t(index) >= types.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(types[std::size_t(index)].displayName, buffer, capacity);
+}
+
+int32_t sky_editor_available_type_category(SkyEditorContext* ctx, int32_t index,
+                                           char* buffer, int32_t capacity) {
+    const auto types = ec(ctx).components->availableTypes();
+    if (index < 0 || std::size_t(index) >= types.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(types[std::size_t(index)].category, buffer, capacity);
+}
+
+void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
+                              const char* type_id) {
+    if (type_id == nullptr) {
+        return;
+    }
+    commitTransform(self(ctx));
+    const auto created = ec(ctx).components->attach(handle(object), type_id);
+    self(ctx)->undo->push(
+        sky::editor::makeAddComponentCommand(handle(object), type_id, created));
+}
+
+void sky_editor_remove_component(SkyEditorContext* ctx, SkyObjectId object,
+                                 int32_t component) {
+    const auto comp = componentAt(ec(ctx), object, component);
+    if (!comp.isValid()) {
+        return;
+    }
+    commitTransform(self(ctx));
+    auto command = sky::editor::makeRemoveComponentCommand(ec(ctx), comp);
+    ec(ctx).components->detach(comp);
+    self(ctx)->undo->push(std::move(command));
+}
+
 int32_t sky_editor_object_exists(SkyEditorContext* ctx, SkyObjectId object) {
     return ec(ctx).objects->exists(handle(object)) ? 1 : 0;
 }

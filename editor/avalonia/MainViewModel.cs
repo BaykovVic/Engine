@@ -178,8 +178,44 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasSelection => _selected != null;
-    public string SelectedName => _selected?.Name ?? string.Empty;
+    public string SelectedName
+    {
+        get => _selected?.Name ?? string.Empty;
+        set
+        {
+            if (_selected == null || string.IsNullOrWhiteSpace(value) || value == _selected.Name)
+                return;
+            var id = _selected.Id;
+            _session.RenameObject(id, value); // rebuilds Roots; object keeps its id
+            _selected = null;
+            SelectedObject = Find(Roots, id);
+        }
+    }
     public IReadOnlyList<ComponentView> SelectedComponents => _components;
+
+    // --- Add / Remove Component ---
+    public IReadOnlyList<ComponentType> AvailableComponentTypes => _session.AvailableTypes();
+
+    public void AddComponent(string typeId)
+    {
+        if (_selected == null) return;
+        _session.AddComponent(_selected.Id, typeId);
+        RefreshComponents();
+    }
+
+    public void RemoveComponent(int componentIndex)
+    {
+        if (_selected == null) return;
+        _session.RemoveComponent(_selected.Id, componentIndex);
+        RefreshComponents();
+    }
+
+    private void RefreshComponents()
+    {
+        if (_selected == null) return;
+        _components = _session.ReadComponents(_selected.Id);
+        OnPropertyChanged(nameof(SelectedComponents));
+    }
 
     // --- Transform (Position / Rotation / Scale) ---
     public string PositionX { get => Fmt(_pos[0]); set => SetPos(0, value); }

@@ -97,6 +97,14 @@ std::unique_ptr<IEditorCommand> makeFieldCommand(component::ComponentHandle comp
                                                  std::string fieldName,
                                                  component::FieldValue before,
                                                  component::FieldValue after);
+/// Attach undo: undo detaches the component, redo re-attaches it.
+std::unique_ptr<IEditorCommand> makeAddComponentCommand(
+    object::ObjectHandle object, std::string typeId,
+    component::ComponentHandle created);
+/// Detach undo: captures the component's fields first; undo re-attaches and
+/// restores them, redo detaches again. Call before detaching.
+std::unique_ptr<IEditorCommand> makeRemoveComponentCommand(
+    EditorContext& context, component::ComponentHandle component);
 std::unique_ptr<IEditorCommand> makeMaterialEditCommand(
     rendering::MaterialHandle material, rendering::MaterialDesc before,
     rendering::MaterialDesc after);

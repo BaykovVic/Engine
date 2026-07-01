@@ -92,6 +92,13 @@ internal static class EngineInterop
     // --- Authoring ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_primitive(IntPtr ctx, int kind, string name);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_mesh_object(IntPtr ctx, string name, string meshRef);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_rename_object(IntPtr ctx, ulong obj, string name);
+    [DllImport(Lib)] public static extern int sky_editor_available_type_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_available_type_id(IntPtr ctx, int index, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_available_type_name(IntPtr ctx, int index, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_available_type_category(IntPtr ctx, int index, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_add_component(IntPtr ctx, ulong obj, string typeId);
+    [DllImport(Lib)] public static extern void sky_editor_remove_component(IntPtr ctx, ulong obj, int component);
     [DllImport(Lib)] public static extern void sky_editor_new_scene(IntPtr ctx);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_save_scene(IntPtr ctx, string path);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_open_scene(IntPtr ctx, string path);

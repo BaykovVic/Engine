@@ -7,7 +7,7 @@
     <StackPanel Margin="12" Spacing="10" IsVisible="{Binding Main.HasSelection}">
       <Grid ColumnDefinitions="Auto,*">
         <CheckBox IsChecked="True" VerticalAlignment="Center"/>
-        <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Main.SelectedName}"/>
+        <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Main.SelectedName, Mode=TwoWay}"/>
       </Grid>
 
       <Border Classes="card">
@@ -45,10 +45,13 @@
           <DataTemplate>
             <Border Classes="card">
               <StackPanel Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Path Classes="icon iconSmall" Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}"/>
-                  <TextBlock Classes="cardTitle" Text="{Binding DisplayName}"/>
-                </StackPanel>
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <Path Classes="icon iconSmall" Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Classes="cardTitle" Text="{Binding DisplayName}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  <Button Grid.Column="2" Classes="iconButton" Click="OnRemoveComponent" ToolTip.Tip="Remove Component">
+                    <TextBlock Classes="muted" Text="✕" FontSize="13"/>
+                  </Button>
+                </Grid>
                 <ItemsControl ItemsSource="{Binding Fields}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -89,11 +92,27 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <Button Classes="primary" HorizontalAlignment="Stretch">
+      <Button Name="AddComponentButton" Classes="primary" HorizontalAlignment="Stretch">
         <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center">
           <Path Classes="icon iconSmall" Data="{StaticResource IconAdd}" Stroke="White"/>
           <TextBlock Text="Add Component"/>
         </StackPanel>
+        <Button.Flyout>
+          <Flyout Placement="Bottom">
+            <ListBox Name="AddComponentList" ItemsSource="{Binding Main.AvailableComponentTypes}"
+                     SelectionChanged="OnAddComponentSelected" MaxHeight="300" MinWidth="210"
+                     Background="Transparent">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="2">
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="muted" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Flyout>
+        </Button.Flyout>
       </Button>
     </StackPanel>
   </ScrollViewer>
