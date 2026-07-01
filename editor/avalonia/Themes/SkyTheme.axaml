@@ -293,6 +293,27 @@
     <Setter Property="Padding" Value="4"/>
   </Style>
 
+  <!-- Table header (Packages panel) -->
+  <Style Selector="Border.table-header">
+    <Setter Property="Background" Value="{StaticResource SkyPanelBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyCardBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Setter Property="Height" Value="30"/>
+    <Setter Property="Padding" Value="14,0"/>
+  </Style>
+  <Style Selector="Border.table-header TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Border.table-row">
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Setter Property="Padding" Value="14,0"/>
+    <Setter Property="MinHeight" Value="40"/>
+  </Style>
+
   <!-- ToolTip -->
   <Style Selector="ToolTip">
     <Setter Property="Background" Value="#0C0D10"/>
