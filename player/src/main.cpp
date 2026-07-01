@@ -129,6 +129,7 @@ int runWindowed(EditorContext& context, int frameLimit) {
 int main(int argc, char** argv) {
     int frames = 0;
     const char* headlessScreenshot = nullptr;
+    const char* scenePath = nullptr;
     bool headless = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
@@ -136,10 +137,24 @@ int main(int argc, char** argv) {
         } else if (std::strcmp(argv[i], "--headless") == 0 && i + 1 < argc) {
             headless = true;
             headlessScreenshot = argv[++i];
+        } else if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
+            scenePath = argv[++i];
+        } else if (argv[i][0] != '-') {
+            scenePath = argv[i]; // positional: a .skybox scene to run
         }
     }
 
-    EditorContext context; // the demo world: terrain, crates, lights, scripts
+    // Without a scene the player runs the built-in demo world; with one it loads
+    // the authored scene (the editor's Save -> ship -> run loop).
+    EditorContext context;
+    if (scenePath != nullptr) {
+        if (context.openScene(scenePath)) {
+            std::printf("sky_player: loaded scene %s\n", scenePath);
+        } else {
+            std::fprintf(stderr, "sky_player: failed to load scene %s\n", scenePath);
+            return 1;
+        }
+    }
     return headless ? runHeadless(context, frames > 0 ? frames : 120,
                                   headlessScreenshot)
                     : runWindowed(context, frames);
