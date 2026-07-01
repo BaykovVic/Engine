@@ -41,9 +41,9 @@
           </Border>
           <Border Classes="toolGroup">
             <StackPanel Orientation="Horizontal" Spacing="2">
-              <Button Classes="tool" Click="OnPlay" ToolTip.Tip="Play"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></Button>
-              <Button Classes="tool" Click="OnPause" ToolTip.Tip="Pause"><Path Classes="iconFilled" Data="{StaticResource IconPause}"/></Button>
-              <Button Classes="tool" Click="OnStop" ToolTip.Tip="Stop"><Path Classes="iconFilled" Data="{StaticResource IconStop}"/></Button>
+              <Button Name="playButton" Classes="tool" Click="OnPlay" ToolTip.Tip="Play"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></Button>
+              <Button Name="pauseButton" Classes="tool" Click="OnPause" ToolTip.Tip="Pause"><Path Classes="iconFilled" Data="{StaticResource IconPause}"/></Button>
+              <Button Name="stopButton" Classes="tool" Click="OnStop" ToolTip.Tip="Stop"><Path Classes="iconFilled" Data="{StaticResource IconStop}"/></Button>
             </StackPanel>
           </Border>
         </StackPanel>

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -5,8 +6,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Dock.Avalonia.Controls;
 using SkyEditor.Docking;
+using SkyEditor.Engine;
 
 namespace SkyEditor;
 
@@ -28,6 +31,26 @@ public partial class MainWindow : Window
         ResetLayout();
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+
+        // Reflect the live play state on the transport buttons: play lit while
+        // playing, pause lit while paused.
+        var transport = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        transport.Tick += (_, _) => UpdateTransport();
+        transport.Start();
+    }
+
+    private void UpdateTransport()
+    {
+        var state = EngineInterop.sky_editor_play_state(_vm.NativeContext); // 0=edit,1=play,2=pause
+        SetClass(this.FindControl<Button>("playButton"), state == 1);
+        SetClass(this.FindControl<Button>("pauseButton"), state == 2);
+    }
+
+    private static void SetClass(Button? button, bool on)
+    {
+        if (button == null) return;
+        if (on && !button.Classes.Contains("on")) button.Classes.Add("on");
+        else if (!on && button.Classes.Contains("on")) button.Classes.Remove("on");
     }
 
     private void ResetLayout()

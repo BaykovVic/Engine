@@ -60,6 +60,17 @@
   </Style>
   <Style Selector="ToggleButton.tool:checked Path.icon"><Setter Property="Stroke" Value="{StaticResource SkyAccentHoverBrush}"/></Style>
 
+  <!-- Transport buttons reflect play state: play lit green while playing,
+       pause lit amber while paused (driven by the .on class from MainWindow). -->
+  <Style Selector="Button#playButton.on /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#293FB950"/><Setter Property="BorderBrush" Value="{StaticResource SkyPlayBrush}"/>
+  </Style>
+  <Style Selector="Button#pauseButton.on /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#29E0A53B"/><Setter Property="BorderBrush" Value="{StaticResource SkyWarnBrush}"/>
+  </Style>
+  <Style Selector="Button#pauseButton.on Path.iconFilled"><Setter Property="Fill" Value="{StaticResource SkyWarnBrush}"/></Style>
+  <Style Selector="Button#stopButton:pointerover Path.iconFilled"><Setter Property="Fill" Value="{StaticResource SkyErrorBrush}"/></Style>
+
   <Style Selector="Button.chip">
     <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
     <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/><Setter Property="BorderThickness" Value="1"/>
