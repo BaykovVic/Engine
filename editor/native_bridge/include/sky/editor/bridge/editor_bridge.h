@@ -117,6 +117,20 @@ SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
 SKY_BRIDGE_API void sky_editor_new_scene(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path);
 SKY_BRIDGE_API int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path);
+
+/* Undo/redo. Edits (transform, field, create, duplicate, delete) are recorded
+ * automatically; commit_edit ends a coalesced transform edit (call at the end
+ * of a gizmo drag or after an inspector field commit). undo/redo return 1 when
+ * they changed something; the *_label calls fill a human-readable action name. */
+SKY_BRIDGE_API void sky_editor_commit_edit(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_undo(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_redo(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_can_undo(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_can_redo(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_undo_label(SkyEditorContext* ctx, char* buffer,
+                                             int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_redo_label(SkyEditorContext* ctx, char* buffer,
+                                             int32_t capacity);
 SKY_BRIDGE_API SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx,
                                                 SkyObjectId object);
 SKY_BRIDGE_API void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object);

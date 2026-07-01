@@ -399,7 +399,8 @@ ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const 
     snapshot.local = objects->localTransform(object);
     snapshot.hasPhysicsBody = hasPhysicsBody(object);
     for (const auto component : components->componentsOf(object)) {
-        snapshot.componentTypes.push_back(components->descriptorOf(component).typeId);
+        snapshot.components.push_back(
+            {components->descriptorOf(component).typeId, components->fields(component)});
     }
     for (const auto child : objects->childrenOf(object)) {
         snapshot.children.push_back(snapshotObject(child));
@@ -417,8 +418,11 @@ object::ObjectHandle EditorContext::restoreObject(const ObjectSnapshot& snapshot
         roots_.push_back(object);
     }
     objects->setLocalTransform(object, snapshot.local);
-    for (const auto& typeId : snapshot.componentTypes) {
-        components->attach(object, typeId);
+    for (const auto& comp : snapshot.components) {
+        const auto handle = components->attach(object, comp.typeId);
+        for (const auto& [name, value] : comp.fields) {
+            components->setField(handle, name, value);
+        }
     }
     if (snapshot.hasPhysicsBody) {
         attachCrateBody(object);

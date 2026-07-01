@@ -16,7 +16,10 @@
         <MenuItem Header="Save Scene As…" Click="OnSaveSceneAs"/>
         <Separator/><MenuItem Header="Quit" Click="OnQuit"/>
       </MenuItem>
-      <MenuItem Header="Edit"/>
+      <MenuItem Header="Edit">
+        <MenuItem Header="Undo" Click="OnUndo" InputGesture="Ctrl+Z"/>
+        <MenuItem Header="Redo" Click="OnRedo" InputGesture="Ctrl+Y"/>
+      </MenuItem>
       <MenuItem Header="GameObject">
         <MenuItem Header="Create Cube" Click="OnCreateCube"/>
         <MenuItem Header="Duplicate" Click="OnDuplicate" InputGesture="Ctrl+D"/>

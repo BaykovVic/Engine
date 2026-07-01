@@ -32,11 +32,17 @@ namespace sky::editor {
 
 /// A serializable description of an object subtree: enough to delete an
 /// object and bring it back identically (undo of delete).
+/// A component and its authored field values, for a lossless object snapshot.
+struct ComponentSnapshot {
+    std::string typeId;
+    std::map<std::string, component::FieldValue> fields;
+};
+
 struct ObjectSnapshot {
     std::string name;
     core::Transform local;
     bool hasPhysicsBody = false;
-    std::vector<std::string> componentTypes;
+    std::vector<ComponentSnapshot> components;
     std::vector<ObjectSnapshot> children;
 };
 

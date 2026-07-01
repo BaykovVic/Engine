@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "editor_camera.hpp"
+#include "editor_commands.hpp"
 #include "editor_context.hpp"
 #include "frame_builder.hpp"
 
@@ -32,6 +33,15 @@ namespace {
 struct BridgeSession {
     EditorContext context;
     sky::editor::EditorCamera camera;
+    // Undo/redo history over the editor context.
+    std::unique_ptr<sky::editor::UndoStack> undo =
+        std::make_unique<sky::editor::UndoStack>(context);
+    // Coalesces a stream of transform edits (e.g. a gizmo drag) into a single
+    // undo entry: `pendingBefore` is the local transform captured before the
+    // first mutation, committed via sky_editor_commit_edit.
+    bool pendingEdit = false;
+    sky::object::ObjectHandle pendingObj;
+    sky::core::Transform pendingBefore;
 #ifdef SKY_BRIDGE_VULKAN
     // Offscreen path: the editor viewport renders to a texture it blits into a
     // normal UI control (so it receives input and hosts overlays). No window
@@ -77,6 +87,43 @@ BridgeSession* self(SkyEditorContext* ctx) {
 }
 
 EditorContext& ec(SkyEditorContext* ctx) { return self(ctx)->context; }
+
+/// Commits a coalesced transform edit into the undo stack (no-op if the
+/// transform did not actually change).
+void commitTransform(BridgeSession* session) {
+    if (!session->pendingEdit) {
+        return;
+    }
+    session->pendingEdit = false;
+    if (!session->context.objects->exists(session->pendingObj)) {
+        return;
+    }
+    const auto after = session->context.objects->localTransform(session->pendingObj);
+    const auto& before = session->pendingBefore;
+    const bool changed = before.position.x != after.position.x ||
+        before.position.y != after.position.y || before.position.z != after.position.z ||
+        before.rotation.x != after.rotation.x || before.rotation.y != after.rotation.y ||
+        before.rotation.z != after.rotation.z || before.rotation.w != after.rotation.w ||
+        before.scale.x != after.scale.x || before.scale.y != after.scale.y ||
+        before.scale.z != after.scale.z;
+    if (changed) {
+        session->undo->push(sky::editor::makeTransformCommand(session->pendingObj,
+                                                              before, after));
+    }
+}
+
+/// Marks the start of a transform edit on `object`, capturing its local
+/// transform so a later commit can record the net change.
+void beginTransformEdit(BridgeSession* session, sky::object::ObjectHandle object) {
+    if (session->pendingEdit && session->pendingObj.value != object.value) {
+        commitTransform(session);
+    }
+    if (!session->pendingEdit) {
+        session->pendingObj = object;
+        session->pendingBefore = session->context.objects->localTransform(object);
+        session->pendingEdit = true;
+    }
+}
 
 sky::object::ObjectHandle handle(SkyObjectId id) {
     return sky::object::ObjectHandle{id};
@@ -249,6 +296,7 @@ void sky_editor_get_transform(SkyEditorContext* ctx, SkyObjectId object,
 
 void sky_editor_set_position(SkyEditorContext* ctx, SkyObjectId object, float x,
                              float y, float z) {
+    beginTransformEdit(self(ctx), handle(object));
     auto t = ec(ctx).objects->localTransform(handle(object));
     t.position = {x, y, z};
     ec(ctx).objects->setLocalTransform(handle(object), t);
@@ -256,6 +304,7 @@ void sky_editor_set_position(SkyEditorContext* ctx, SkyObjectId object, float x,
 
 void sky_editor_set_scale(SkyEditorContext* ctx, SkyObjectId object, float x,
                           float y, float z) {
+    beginTransformEdit(self(ctx), handle(object));
     auto t = ec(ctx).objects->localTransform(handle(object));
     t.scale = {x, y, z};
     ec(ctx).objects->setLocalTransform(handle(object), t);
@@ -365,7 +414,13 @@ void sky_editor_set_component_field(SkyEditorContext* ctx, SkyObjectId object,
     } else {
         parsed = text;
     }
+    commitTransform(self(ctx));
+    const auto before = ec(ctx).components->field(handle, descriptor.name);
     ec(ctx).components->setField(handle, descriptor.name, parsed);
+    if (before) {
+        self(ctx)->undo->push(
+            sky::editor::makeFieldCommand(handle, descriptor.name, *before, parsed));
+    }
 }
 
 namespace {
@@ -483,19 +538,28 @@ int32_t sky_editor_vfs_entry(SkyEditorContext* ctx, const char* dir, int32_t ind
 
 SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
                                         SkyPrimitiveKind kind, const char* name) {
+    commitTransform(self(ctx));
     const auto primitive = static_cast<sky::scene::PrimitiveKind>(kind);
-    return ec(ctx).createPrimitive(primitive, name != nullptr ? name : "Object").value;
+    const auto object =
+        ec(ctx).createPrimitive(primitive, name != nullptr ? name : "Object");
+    self(ctx)->undo->push(sky::editor::makeCreateSnapshotCommand(ec(ctx), object));
+    return object.value;
 }
 
 SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx, const char* name,
                                           const char* mesh_ref) {
-    return ec(ctx)
-        .createModelObject(name != nullptr ? name : "Model",
-                           mesh_ref != nullptr ? mesh_ref : "")
-        .value;
+    commitTransform(self(ctx));
+    const auto object = ec(ctx).createModelObject(
+        name != nullptr ? name : "Model", mesh_ref != nullptr ? mesh_ref : "");
+    self(ctx)->undo->push(sky::editor::makeCreateSnapshotCommand(ec(ctx), object));
+    return object.value;
 }
 
-void sky_editor_new_scene(SkyEditorContext* ctx) { ec(ctx).newScene(); }
+void sky_editor_new_scene(SkyEditorContext* ctx) {
+    ec(ctx).newScene();
+    self(ctx)->pendingEdit = false;
+    self(ctx)->undo->clear();
+}
 
 int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path) {
     if (path == nullptr) {
@@ -508,15 +572,54 @@ int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path) {
     if (path == nullptr) {
         return 0;
     }
-    return ec(ctx).openScene(path) ? 1 : 0;
+    const bool ok = ec(ctx).openScene(path);
+    self(ctx)->pendingEdit = false;
+    self(ctx)->undo->clear();
+    return ok ? 1 : 0;
 }
 
 SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx, SkyObjectId object) {
-    return ec(ctx).duplicateObject(handle(object)).value;
+    commitTransform(self(ctx));
+    const auto copy = ec(ctx).duplicateObject(handle(object));
+    self(ctx)->undo->push(sky::editor::makeDuplicateCommand(handle(object), copy));
+    return copy.value;
 }
 
 void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object) {
+    commitTransform(self(ctx));
+    auto command = sky::editor::makeDeleteCommand(ec(ctx), handle(object));
     ec(ctx).destroyObject(handle(object));
+    self(ctx)->undo->push(std::move(command));
+}
+
+// --- Undo / Redo --------------------------------------------------------
+
+void sky_editor_commit_edit(SkyEditorContext* ctx) { commitTransform(self(ctx)); }
+
+int32_t sky_editor_undo(SkyEditorContext* ctx) {
+    commitTransform(self(ctx));
+    return self(ctx)->undo->undo() ? 1 : 0;
+}
+
+int32_t sky_editor_redo(SkyEditorContext* ctx) {
+    commitTransform(self(ctx));
+    return self(ctx)->undo->redo() ? 1 : 0;
+}
+
+int32_t sky_editor_can_undo(SkyEditorContext* ctx) {
+    return self(ctx)->undo->canUndo() ? 1 : 0;
+}
+
+int32_t sky_editor_can_redo(SkyEditorContext* ctx) {
+    return self(ctx)->undo->canRedo() ? 1 : 0;
+}
+
+int32_t sky_editor_undo_label(SkyEditorContext* ctx, char* buffer, int32_t capacity) {
+    return copyString(self(ctx)->undo->undoLabel(), buffer, capacity);
+}
+
+int32_t sky_editor_redo_label(SkyEditorContext* ctx, char* buffer, int32_t capacity) {
+    return copyString(self(ctx)->undo->redoLabel(), buffer, capacity);
 }
 
 int32_t sky_editor_attach_viewport(SkyEditorContext* ctx, void* x11Display,
@@ -763,6 +866,7 @@ void sky_editor_get_world_transform(SkyEditorContext* ctx, SkyObjectId object,
 /// through the local-only model, correct for nested objects).
 void sky_editor_set_world_position(SkyEditorContext* ctx, SkyObjectId object,
                                    float x, float y, float z) {
+    beginTransformEdit(self(ctx), handle(object));
     auto& objects = *ec(ctx).objects;
     auto world = objects.worldTransform(handle(object));
     world.position = {x, y, z};
@@ -772,6 +876,7 @@ void sky_editor_set_world_position(SkyEditorContext* ctx, SkyObjectId object,
 /// Relative to self: translate along the object's own (rotated) axes.
 void sky_editor_translate_self(SkyEditorContext* ctx, SkyObjectId object, float dx,
                                float dy, float dz) {
+    beginTransformEdit(self(ctx), handle(object));
     auto& objects = *ec(ctx).objects;
     auto world = objects.worldTransform(handle(object));
     world.position = world.position + sky::core::rotate(world.rotation, {dx, dy, dz});
@@ -790,6 +895,7 @@ void sky_editor_rotate_world_axis(SkyEditorContext* ctx, SkyObjectId object,
     const float s = std::sin(radians / 2.0f) / length;
     const float c = std::cos(radians / 2.0f);
     const sky::core::Quat delta{axis_x * s, axis_y * s, axis_z * s, c};
+    beginTransformEdit(self(ctx), handle(object));
     auto& objects = *ec(ctx).objects;
     auto world = objects.worldTransform(handle(object));
     world.rotation = delta * world.rotation;
@@ -806,6 +912,7 @@ void sky_editor_set_local_euler(SkyEditorContext* ctx, SkyObjectId object,
         const float c = std::cos(radians / 2.0f);
         return sky::core::Quat{ax * s, ay * s, az * s, c};
     };
+    beginTransformEdit(self(ctx), handle(object));
     auto local = ec(ctx).objects->localTransform(handle(object));
     local.rotation = axisAngle(y_degrees, 0, 1, 0) * axisAngle(x_degrees, 1, 0, 0) *
                      axisAngle(z_degrees, 0, 0, 1);

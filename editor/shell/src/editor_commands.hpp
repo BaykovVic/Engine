@@ -34,6 +34,14 @@ public:
     bool undo();
     bool redo();
 
+    /// Drops the whole history (e.g. after loading a new scene, whose object
+    /// handles make earlier commands meaningless).
+    void clear() {
+        undoList_.clear();
+        redoList_.clear();
+        notify();
+    }
+
     [[nodiscard]] bool canUndo() const { return !undoList_.empty(); }
     [[nodiscard]] bool canRedo() const { return !redoList_.empty(); }
     [[nodiscard]] std::string undoLabel() const {
@@ -75,6 +83,10 @@ std::unique_ptr<IEditorCommand> makeCreateCommand(object::ObjectHandle created,
                                                   bool isCrate);
 std::unique_ptr<IEditorCommand> makeDuplicateCommand(object::ObjectHandle source,
                                                      object::ObjectHandle copy);
+/// Undo of a just-created object: undo destroys it, redo restores it from a
+/// snapshot — works regardless of how it was created.
+std::unique_ptr<IEditorCommand> makeCreateSnapshotCommand(EditorContext& context,
+                                                          object::ObjectHandle created);
 std::unique_ptr<IEditorCommand> makeDeleteCommand(EditorContext& context,
                                                   object::ObjectHandle object);
 std::unique_ptr<IEditorCommand> makeReparentCommand(object::ObjectHandle object,

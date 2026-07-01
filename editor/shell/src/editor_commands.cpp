@@ -121,6 +121,28 @@ private:
     object::ObjectHandle copy_;
 };
 
+/// Create, captured as a snapshot so redo restores the exact object regardless
+/// of how it was originally created (primitive, model, drag-drop).
+class CreateSnapshotCommand final : public IEditorCommand {
+public:
+    CreateSnapshotCommand(ObjectSnapshot snapshot, object::ObjectHandle parent,
+                          object::ObjectHandle object)
+        : snapshot_(std::move(snapshot)), parent_(parent), object_(object) {}
+
+    std::string label() const override { return "Create " + snapshot_.name; }
+
+    void undo(EditorContext& context) override { context.destroyObject(object_); }
+
+    void redo(EditorContext& context) override {
+        object_ = context.restoreObject(snapshot_, parent_);
+    }
+
+private:
+    ObjectSnapshot snapshot_;
+    object::ObjectHandle parent_;
+    object::ObjectHandle object_;
+};
+
 class DeleteCommand final : public IEditorCommand {
 public:
     DeleteCommand(ObjectSnapshot snapshot, object::ObjectHandle parent,
@@ -254,6 +276,12 @@ std::unique_ptr<IEditorCommand> makeCreateCommand(object::ObjectHandle created,
 std::unique_ptr<IEditorCommand> makeDuplicateCommand(object::ObjectHandle source,
                                                      object::ObjectHandle copy) {
     return std::make_unique<DuplicateCommand>(source, copy);
+}
+
+std::unique_ptr<IEditorCommand> makeCreateSnapshotCommand(EditorContext& context,
+                                                          object::ObjectHandle created) {
+    return std::make_unique<CreateSnapshotCommand>(
+        context.snapshotObject(created), context.objects->parentOf(created), created);
 }
 
 std::unique_ptr<IEditorCommand> makeDeleteCommand(EditorContext& context,

@@ -86,6 +86,9 @@ public partial class MainWindow : Window
 
     private void OnQuit(object? sender, RoutedEventArgs e) => Close();
 
+    private void OnUndo(object? sender, RoutedEventArgs e) => _vm.Undo();
+    private void OnRedo(object? sender, RoutedEventArgs e) => _vm.Redo();
+
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();
     private void OnDuplicate(object? sender, RoutedEventArgs e) => _vm.DuplicateSelected();
     private void OnDelete(object? sender, RoutedEventArgs e) => _vm.DeleteSelected();
@@ -118,6 +121,8 @@ public partial class MainWindow : Window
         else if (e.Key == Key.N && ctrl) { _vm.NewScene(); e.Handled = true; }
         else if (e.Key == Key.O && ctrl) { OnOpenScene(this, e); e.Handled = true; }
         else if (e.Key == Key.S && ctrl) { OnSaveScene(this, e); e.Handled = true; }
+        else if (e.Key == Key.Z && ctrl) { _vm.Undo(); e.Handled = true; }
+        else if (e.Key == Key.Y && ctrl) { _vm.Redo(); e.Handled = true; }
         else if (e.Key == Key.Q) { SelectTool(GizmoTool.Hand); e.Handled = true; }
         else if (e.Key == Key.W) { SelectTool(GizmoTool.Move); e.Handled = true; }
         else if (e.Key == Key.E) { SelectTool(GizmoTool.Rotate); e.Handled = true; }

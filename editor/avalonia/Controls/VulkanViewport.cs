@@ -664,6 +664,8 @@ public sealed class VulkanViewport : Control
         {
             _dragAxis = -1;
             _rotateAxis = -1;
+            if (_context != IntPtr.Zero)
+                EngineInterop.sky_editor_commit_edit(_context); // one undo entry per drag
             e.Pointer.Capture(null);
             return;
         }

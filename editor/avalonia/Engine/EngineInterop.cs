@@ -95,6 +95,13 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern void sky_editor_new_scene(IntPtr ctx);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_save_scene(IntPtr ctx, string path);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_open_scene(IntPtr ctx, string path);
+    [DllImport(Lib)] public static extern void sky_editor_commit_edit(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_undo(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_redo(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_can_undo(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_can_redo(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_undo_label(IntPtr ctx, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_redo_label(IntPtr ctx, byte[] buffer, int capacity);
     [DllImport(Lib)] public static extern ulong sky_editor_duplicate(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern void sky_editor_delete(IntPtr ctx, ulong obj);
 

@@ -392,6 +392,25 @@ public sealed class EditorSession : IDisposable
         return ok;
     }
 
+    // --- Undo / Redo ---
+    public void CommitEdit() => EngineInterop.sky_editor_commit_edit(_ctx);
+    public bool CanUndo => EngineInterop.sky_editor_can_undo(_ctx) == 1;
+    public bool CanRedo => EngineInterop.sky_editor_can_redo(_ctx) == 1;
+
+    public bool Undo()
+    {
+        var changed = EngineInterop.sky_editor_undo(_ctx) == 1;
+        if (changed) Reload();
+        return changed;
+    }
+
+    public bool Redo()
+    {
+        var changed = EngineInterop.sky_editor_redo(_ctx) == 1;
+        if (changed) Reload();
+        return changed;
+    }
+
     public ulong Duplicate(ulong id)
     {
         var copy = EngineInterop.sky_editor_duplicate(_ctx, id);

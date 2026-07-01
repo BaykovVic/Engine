@@ -4,7 +4,8 @@
 
 add_library(sky_editor_bridge SHARED
     src/editor_bridge.cpp
-    ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_context.cpp)
+    ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_context.cpp
+    ${CMAKE_SOURCE_DIR}/editor/shell/src/editor_commands.cpp)
 add_library(sky::editor_bridge ALIAS sky_editor_bridge)
 
 target_include_directories(sky_editor_bridge

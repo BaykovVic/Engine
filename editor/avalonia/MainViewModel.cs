@@ -197,6 +197,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (_selected == null || !TryParse(text, out var v)) return;
         _pos[axis] = v;
         _session.SetPosition(_selected.Id, _pos[0], _pos[1], _pos[2]);
+        _session.CommitEdit(); // one undo entry per inspector field edit
         OnPropertyChanged(axis == 0 ? nameof(PositionX) : axis == 1 ? nameof(PositionY) : nameof(PositionZ));
     }
     private void SetRot(int axis, string text)
@@ -204,6 +205,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (_selected == null || !TryParse(text, out var v)) return;
         _rot[axis] = v;
         _session.SetLocalEuler(_selected.Id, _rot[0], _rot[1], _rot[2]);
+        _session.CommitEdit();
         OnPropertyChanged(axis == 0 ? nameof(RotationX) : axis == 1 ? nameof(RotationY) : nameof(RotationZ));
     }
     private void SetScale(int axis, string text)
@@ -211,7 +213,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (_selected == null || !TryParse(text, out var v)) return;
         _scale[axis] = v;
         _session.SetScale(_selected.Id, _scale[0], _scale[1], _scale[2]);
+        _session.CommitEdit();
         OnPropertyChanged(axis == 0 ? nameof(ScaleX) : axis == 1 ? nameof(ScaleY) : nameof(ScaleZ));
+    }
+
+    // --- Undo / Redo ---
+    public void CommitEdit() => _session.CommitEdit();
+    public bool CanUndo => _session.CanUndo;
+    public bool CanRedo => _session.CanRedo;
+
+    public void Undo() { if (_session.Undo()) ReselectAfterHistory(); }
+    public void Redo() { if (_session.Redo()) ReselectAfterHistory(); }
+
+    private void ReselectAfterHistory()
+    {
+        var prevId = _selected?.Id ?? 0;
+        var found = prevId != 0 ? Find(Roots, prevId) : null;
+        _selected = null; // force the setter to re-fire even for the same id
+        SelectedObject = found ?? (Roots.Count > 0 ? FirstWithComponents(Roots) ?? Roots[0] : null);
     }
 
     // --- Play transport (Unity-like toggles) ---

@@ -62,8 +62,11 @@
 
 ## Операции со сценой
 
-- **Undo/Redo** **[оба]** — командный стек уже есть в движке (`UndoStack`);
-  вывести через ABI и в Edit-меню (Ctrl+Z/Ctrl+Y).
+- **Undo/Redo** **[оба]** — ✅ `UndoStack` подключён к бриджу; правки
+  (трансформ/поле/create/duplicate/delete) пишутся автоматически, драг
+  коалесится в одну запись через `commit_edit`. ABI `undo/redo/can_*/label`,
+  Edit-меню + Ctrl+Z/Y. `ObjectSnapshot` расширен значениями полей, поэтому
+  undo delete / redo create восстанавливают материалы/mesh-ref. Проверено.
 - **Play/Pause/Stop** **[оба]** — `PlayModeController` существует; связать
   транспорт-кнопки тулбара через ABI (тик плеймода в кадровом цикле).
 - **New/Open/Save Scene** **[оба]** — ✅ через `ISceneRepository` (SKYB,
