@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "sky/asset/asset_database.hpp"
@@ -114,6 +115,19 @@ public:
         return bodies_.contains(object.value);
     }
 
+    /// Enabled/disabled (like Unity's active checkbox): a disabled object is
+    /// not rendered and its lights do not contribute. Physics still runs.
+    void setObjectEnabled(object::ObjectHandle object, bool enabled) {
+        if (enabled) {
+            disabled_.erase(object.value);
+        } else {
+            disabled_.insert(object.value);
+        }
+    }
+    [[nodiscard]] bool objectEnabled(object::ObjectHandle object) const {
+        return !disabled_.contains(object.value);
+    }
+
     [[nodiscard]] std::vector<object::ObjectHandle> rootObjects() const {
         return roots_;
     }
@@ -160,6 +174,7 @@ private:
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
     std::unordered_map<std::uint64_t, core::Transform> playSnapshot_;
+    std::unordered_set<std::uint64_t> disabled_;
     physics::RigidBodyHandle terrainBody_;
     physics::ColliderHandle terrainCollider_;
     std::uint64_t terrainVersion_ = 0;

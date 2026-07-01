@@ -292,6 +292,18 @@ int32_t sky_editor_object_name(SkyEditorContext* ctx, SkyObjectId object,
     return copyString(ec(ctx).objects->nameOf(handle(object)), buffer, capacity);
 }
 
+void sky_editor_set_object_enabled(SkyEditorContext* ctx, SkyObjectId object,
+                                   int32_t enabled) {
+    ec(ctx).setObjectEnabled(handle(object), enabled != 0);
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene",
+           (enabled != 0 ? "Enabled " : "Disabled ") +
+               ec(ctx).objects->nameOf(handle(object)));
+}
+
+int32_t sky_editor_object_enabled(SkyEditorContext* ctx, SkyObjectId object) {
+    return ec(ctx).objectEnabled(handle(object)) ? 1 : 0;
+}
+
 void sky_editor_rename_object(SkyEditorContext* ctx, SkyObjectId object,
                               const char* name) {
     if (name == nullptr) {

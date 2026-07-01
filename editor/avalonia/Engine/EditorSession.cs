@@ -421,6 +421,10 @@ public sealed class EditorSession : IDisposable
         return id;
     }
 
+    public bool ObjectEnabled(ulong id) => EngineInterop.sky_editor_object_enabled(_ctx, id) == 1;
+    public void SetObjectEnabled(ulong id, bool enabled) =>
+        EngineInterop.sky_editor_set_object_enabled(_ctx, id, enabled ? 1 : 0);
+
     public void RenameObject(ulong id, string name)
     {
         EngineInterop.sky_editor_rename_object(_ctx, id, name);

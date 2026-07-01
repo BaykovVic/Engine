@@ -510,6 +510,7 @@ void EditorContext::resetScene() {
     activeScene = scene::SceneHandle::invalid();
     roots_.clear();
     generatedObjects_.clear();
+    disabled_.clear();
     terrainObject = object::ObjectHandle::invalid();
 }
 

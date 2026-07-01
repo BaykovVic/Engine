@@ -150,6 +150,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(SelectedName));
+            OnPropertyChanged(nameof(SelectedEnabled));
             OnPropertyChanged(nameof(SelectedComponents));
             foreach (var p in new[] { nameof(PositionX), nameof(PositionY), nameof(PositionZ),
                 nameof(RotationX), nameof(RotationY), nameof(RotationZ),
@@ -207,6 +208,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasSelection => _selected != null;
+
+    /// The selected object's enabled state (Unity's active checkbox).
+    public bool SelectedEnabled
+    {
+        get => _selected != null && _session.ObjectEnabled(_selected.Id);
+        set
+        {
+            if (_selected == null) return;
+            _session.SetObjectEnabled(_selected.Id, value);
+            OnPropertyChanged();
+        }
+    }
+
     public string SelectedName
     {
         get => _selected?.Name ?? string.Empty;

@@ -6,7 +6,7 @@
   <ScrollViewer Background="{StaticResource SkyPanelBrush}">
     <StackPanel Margin="12" Spacing="10" IsVisible="{Binding Main.HasSelection}">
       <Grid ColumnDefinitions="Auto,*">
-        <CheckBox IsChecked="True" VerticalAlignment="Center"/>
+        <CheckBox IsChecked="{Binding Main.SelectedEnabled, Mode=TwoWay}" VerticalAlignment="Center" ToolTip.Tip="Enabled"/>
         <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Main.SelectedName, Mode=TwoWay}"/>
       </Grid>
 

@@ -60,6 +60,9 @@ public:
         commands.push_back(camera);
 
         forEachObject([&](object::ObjectHandle object) {
+            if (!context_.objectEnabled(object)) {
+                return;
+            }
             if (const auto light = componentOfType(object, "sky.light");
                 light.isValid()) {
                 rendering::RenderCommand add;
@@ -104,7 +107,7 @@ public:
         }
 
         forEachObject([&](object::ObjectHandle object) {
-            if (object == context_.terrainObject) {
+            if (object == context_.terrainObject || !context_.objectEnabled(object)) {
                 return;
             }
             const auto mesh = componentOfType(object, "sky.mesh");

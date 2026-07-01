@@ -118,6 +118,13 @@ SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
 SKY_BRIDGE_API void sky_editor_rename_object(SkyEditorContext* ctx,
                                              SkyObjectId object, const char* name);
 
+/* Enable/disable an object (Unity's active checkbox): a disabled object is not
+ * rendered and its lights do not contribute. */
+SKY_BRIDGE_API void sky_editor_set_object_enabled(SkyEditorContext* ctx,
+                                                  SkyObjectId object, int32_t enabled);
+SKY_BRIDGE_API int32_t sky_editor_object_enabled(SkyEditorContext* ctx,
+                                                 SkyObjectId object);
+
 /* Registered component types, for the Inspector's Add Component list. */
 SKY_BRIDGE_API int32_t sky_editor_available_type_count(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_available_type_id(SkyEditorContext* ctx,
