@@ -92,6 +92,15 @@ internal static class EngineInterop
     // --- Authoring ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_primitive(IntPtr ctx, int kind, string name);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_mesh_object(IntPtr ctx, string name, string meshRef);
+    [DllImport(Lib)] public static extern int sky_editor_log_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_log_level(IntPtr ctx, int index);
+    [DllImport(Lib)] public static extern int sky_editor_log_text(IntPtr ctx, int index, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern void sky_editor_log_clear(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_package_count(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_package_info(IntPtr ctx, int index, int which, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_package_active(IntPtr ctx, int index);
+    [DllImport(Lib)] public static extern void sky_editor_package_set_active(IntPtr ctx, int index, int active);
+    [DllImport(Lib)] public static extern int sky_editor_package_refresh(IntPtr ctx);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_rename_object(IntPtr ctx, ulong obj, string name);
     [DllImport(Lib)] public static extern int sky_editor_available_type_count(IntPtr ctx);
     [DllImport(Lib)] public static extern int sky_editor_available_type_id(IntPtr ctx, int index, byte[] buffer, int capacity);

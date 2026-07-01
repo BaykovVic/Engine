@@ -30,12 +30,23 @@ namespace {
 /// viewport renders, the Vulkan resources. The offscreen path (Vulkan only)
 /// drives the editor on every OS, including macOS via MoltenVK; the swapchain
 /// path (Vulkan + X11) is the Linux standalone-window route.
+/// One captured log line for the editor's Console panel.
+struct LogEntry {
+    int32_t level = 0; // sky::core::LogLevel
+    std::string category;
+    std::string message;
+};
+
 struct BridgeSession {
     EditorContext context;
     sky::editor::EditorCamera camera;
     // Undo/redo history over the editor context.
     std::unique_ptr<sky::editor::UndoStack> undo =
         std::make_unique<sky::editor::UndoStack>(context);
+    // Ring buffer of log lines shown in the Console panel.
+    std::vector<LogEntry> logs;
+    // Active package ids (managed via the Packages panel).
+    std::vector<std::string> activePackageIds;
     // Coalesces a stream of transform edits (e.g. a gizmo drag) into a single
     // undo entry: `pendingBefore` is the local transform captured before the
     // first mutation, committed via sky_editor_commit_edit.
@@ -87,6 +98,16 @@ BridgeSession* self(SkyEditorContext* ctx) {
 }
 
 EditorContext& ec(SkyEditorContext* ctx) { return self(ctx)->context; }
+
+/// Appends a line to the Console log buffer (kept bounded).
+void logMsg(BridgeSession* session, sky::core::LogLevel level, const char* category,
+            const std::string& message) {
+    constexpr std::size_t kMaxLogs = 1000;
+    session->logs.push_back({static_cast<int32_t>(level), category, message});
+    if (session->logs.size() > kMaxLogs) {
+        session->logs.erase(session->logs.begin());
+    }
+}
 
 /// Commits a coalesced transform edit into the undo stack (no-op if the
 /// transform did not actually change).
@@ -234,7 +255,9 @@ int32_t copyString(const std::string& value, char* buffer, int32_t capacity) {
 extern "C" {
 
 SkyEditorContext* sky_editor_create(void) {
-    return reinterpret_cast<SkyEditorContext*>(new BridgeSession());
+    auto* session = new BridgeSession();
+    logMsg(session, sky::core::LogLevel::Info, "Editor", "Sky Engine editor ready");
+    return reinterpret_cast<SkyEditorContext*>(session);
 }
 
 void sky_editor_destroy(SkyEditorContext* ctx) { delete self(ctx); }
@@ -328,6 +351,9 @@ void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
     const auto created = ec(ctx).components->attach(handle(object), type_id);
     self(ctx)->undo->push(
         sky::editor::makeAddComponentCommand(handle(object), type_id, created));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Inspector",
+           std::string("Added ") + type_id + " to " +
+               ec(ctx).objects->nameOf(handle(object)));
 }
 
 void sky_editor_remove_component(SkyEditorContext* ctx, SkyObjectId object,
@@ -337,9 +363,12 @@ void sky_editor_remove_component(SkyEditorContext* ctx, SkyObjectId object,
         return;
     }
     commitTransform(self(ctx));
+    const auto typeId = ec(ctx).components->descriptorOf(comp).typeId;
     auto command = sky::editor::makeRemoveComponentCommand(ec(ctx), comp);
     ec(ctx).components->detach(comp);
     self(ctx)->undo->push(std::move(command));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Inspector",
+           "Removed " + typeId + " from " + ec(ctx).objects->nameOf(handle(object)));
 }
 
 int32_t sky_editor_object_exists(SkyEditorContext* ctx, SkyObjectId object) {
@@ -616,6 +645,8 @@ SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
     const auto object =
         ec(ctx).createPrimitive(primitive, name != nullptr ? name : "Object");
     self(ctx)->undo->push(sky::editor::makeCreateSnapshotCommand(ec(ctx), object));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene",
+           "Created " + ec(ctx).objects->nameOf(object));
     return object.value;
 }
 
@@ -625,6 +656,8 @@ SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx, const char* nam
     const auto object = ec(ctx).createModelObject(
         name != nullptr ? name : "Model", mesh_ref != nullptr ? mesh_ref : "");
     self(ctx)->undo->push(sky::editor::makeCreateSnapshotCommand(ec(ctx), object));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene",
+           "Created " + ec(ctx).objects->nameOf(object));
     return object.value;
 }
 
@@ -632,13 +665,18 @@ void sky_editor_new_scene(SkyEditorContext* ctx) {
     ec(ctx).newScene();
     self(ctx)->pendingEdit = false;
     self(ctx)->undo->clear();
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene", "New scene");
 }
 
 int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path) {
     if (path == nullptr) {
         return 0;
     }
-    return ec(ctx).saveScene(path) ? 1 : 0;
+    const bool ok = ec(ctx).saveScene(path);
+    logMsg(self(ctx), ok ? sky::core::LogLevel::Info : sky::core::LogLevel::Error,
+           "Scene", ok ? std::string("Saved scene to ") + path
+                       : std::string("Failed to save scene to ") + path);
+    return ok ? 1 : 0;
 }
 
 int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path) {
@@ -648,6 +686,9 @@ int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path) {
     const bool ok = ec(ctx).openScene(path);
     self(ctx)->pendingEdit = false;
     self(ctx)->undo->clear();
+    logMsg(self(ctx), ok ? sky::core::LogLevel::Info : sky::core::LogLevel::Error,
+           "Scene", ok ? std::string("Opened ") + path
+                       : std::string("Failed to open ") + path);
     return ok ? 1 : 0;
 }
 
@@ -655,14 +696,18 @@ SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx, SkyObjectId object) {
     commitTransform(self(ctx));
     const auto copy = ec(ctx).duplicateObject(handle(object));
     self(ctx)->undo->push(sky::editor::makeDuplicateCommand(handle(object), copy));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene",
+           "Duplicated " + ec(ctx).objects->nameOf(copy));
     return copy.value;
 }
 
 void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object) {
     commitTransform(self(ctx));
+    const auto name = ec(ctx).objects->nameOf(handle(object));
     auto command = sky::editor::makeDeleteCommand(ec(ctx), handle(object));
     ec(ctx).destroyObject(handle(object));
     self(ctx)->undo->push(std::move(command));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Scene", "Deleted " + name);
 }
 
 // --- Undo / Redo --------------------------------------------------------
@@ -693,6 +738,95 @@ int32_t sky_editor_undo_label(SkyEditorContext* ctx, char* buffer, int32_t capac
 
 int32_t sky_editor_redo_label(SkyEditorContext* ctx, char* buffer, int32_t capacity) {
     return copyString(self(ctx)->undo->redoLabel(), buffer, capacity);
+}
+
+// --- Console log --------------------------------------------------------
+
+int32_t sky_editor_log_count(SkyEditorContext* ctx) {
+    return static_cast<int32_t>(self(ctx)->logs.size());
+}
+
+int32_t sky_editor_log_level(SkyEditorContext* ctx, int32_t index) {
+    const auto& logs = self(ctx)->logs;
+    if (index < 0 || std::size_t(index) >= logs.size()) {
+        return 0;
+    }
+    return logs[std::size_t(index)].level;
+}
+
+int32_t sky_editor_log_text(SkyEditorContext* ctx, int32_t index, char* buffer,
+                            int32_t capacity) {
+    const auto& logs = self(ctx)->logs;
+    if (index < 0 || std::size_t(index) >= logs.size()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& entry = logs[std::size_t(index)];
+    const auto line = entry.category.empty()
+                          ? entry.message
+                          : entry.category + ": " + entry.message;
+    return copyString(line, buffer, capacity);
+}
+
+void sky_editor_log_clear(SkyEditorContext* ctx) { self(ctx)->logs.clear(); }
+
+// --- Packages -----------------------------------------------------------
+
+int32_t sky_editor_package_count(SkyEditorContext* ctx) {
+    return static_cast<int32_t>(ec(ctx).packages->discoveredPackages().size());
+}
+
+int32_t sky_editor_package_info(SkyEditorContext* ctx, int32_t index, int32_t which,
+                                char* buffer, int32_t capacity) {
+    const auto packages = ec(ctx).packages->discoveredPackages();
+    if (index < 0 || std::size_t(index) >= packages.size()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& p = packages[std::size_t(index)];
+    const std::string& value = which == 0 ? p.packageId
+                             : which == 1 ? p.displayName
+                                          : p.version;
+    return copyString(value, buffer, capacity);
+}
+
+int32_t sky_editor_package_active(SkyEditorContext* ctx, int32_t index) {
+    const auto packages = ec(ctx).packages->discoveredPackages();
+    if (index < 0 || std::size_t(index) >= packages.size()) {
+        return 0;
+    }
+    const auto& id = packages[std::size_t(index)].packageId;
+    const auto& active = self(ctx)->activePackageIds;
+    return std::find(active.begin(), active.end(), id) != active.end() ? 1 : 0;
+}
+
+void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
+                                   int32_t active) {
+    const auto packages = ec(ctx).packages->discoveredPackages();
+    if (index < 0 || std::size_t(index) >= packages.size()) {
+        return;
+    }
+    const auto& manifest = packages[std::size_t(index)];
+    auto& ids = self(ctx)->activePackageIds;
+    const auto handle = ec(ctx).packages->registerPackage(manifest);
+    if (active != 0) {
+        if (ec(ctx).packages->activate(handle) &&
+            std::find(ids.begin(), ids.end(), manifest.packageId) == ids.end()) {
+            ids.push_back(manifest.packageId);
+            logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
+                   "Activated " + manifest.displayName);
+        }
+    } else {
+        ec(ctx).packages->deactivate(handle);
+        std::erase(ids, manifest.packageId);
+        logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
+               "Deactivated " + manifest.displayName);
+    }
+}
+
+int32_t sky_editor_package_refresh(SkyEditorContext* ctx) {
+    const auto count = ec(ctx).packages->discoverPackages(ec(ctx).packagesRoot);
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
+           "Refreshed: " + std::to_string(count) + " package(s)");
+    return static_cast<int32_t>(count);
 }
 
 int32_t sky_editor_attach_viewport(SkyEditorContext* ctx, void* x11Display,
@@ -1004,6 +1138,7 @@ int32_t sky_editor_play(SkyEditorContext* ctx) {
     const bool ok = context.playMode->play();
     if (ok && entering) {
         context.beginPlay();
+        logMsg(self(ctx), sky::core::LogLevel::Info, "Play", "Entered play mode");
     }
     return ok ? 1 : 0;
 }
@@ -1016,6 +1151,7 @@ void sky_editor_stop(SkyEditorContext* ctx) {
     context.playMode->stop();
     if (wasRunning) {
         context.endPlay();
+        logMsg(self(ctx), sky::core::LogLevel::Info, "Play", "Exited play mode");
     }
 }
 

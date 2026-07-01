@@ -28,6 +28,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _session = new EditorSession();
         RefreshProject();
         RefreshMaterials();
+        RefreshPackages();
         if (Roots.Count > 0)
             SelectedObject = FirstWithComponents(Roots) ?? Roots[0];
     }
@@ -74,6 +75,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _session.GenerateTerrain(seed);
         SelectedObject = Roots.Count > 0 ? Roots[0] : null;
     }
+
+    // --- Console log (polled by ConsoleView) ---
+    public ObservableCollection<LogLine> ConsoleLog { get; } = new();
+    private int _lastLogCount = -1;
+    public void RefreshConsole()
+    {
+        var count = _session.LogCount;
+        if (count == _lastLogCount) return;
+        _lastLogCount = count;
+        ConsoleLog.Clear();
+        foreach (var l in _session.ReadLogs()) ConsoleLog.Add(l);
+    }
+    public void ClearConsole() { _session.ClearLogs(); _lastLogCount = -1; RefreshConsole(); }
+
+    // --- Packages ---
+    public ObservableCollection<PackageInfo> Packages { get; } = new();
+    public void RefreshPackages()
+    {
+        Packages.Clear();
+        foreach (var p in _session.ReadPackages()) Packages.Add(p);
+    }
+    public void TogglePackage(PackageInfo? p)
+    {
+        if (p == null) return;
+        _session.SetPackageActive(p.Index, !p.Active);
+        RefreshPackages();
+    }
+    public void RediscoverPackages() { _session.RefreshPackages(); RefreshPackages(); }
 
     public ObservableCollection<SkyObject> Roots => _session.Roots;
     public IntPtr NativeContext => _session.Native;

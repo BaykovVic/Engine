@@ -12,6 +12,8 @@
     <DataTemplate DataType="docking:SceneDocument"><views:SceneView/></DataTemplate>
     <DataTemplate DataType="docking:GameDocument"><views:GameView/></DataTemplate>
     <DataTemplate DataType="docking:ProjectTool"><views:ProjectView/></DataTemplate>
+    <DataTemplate DataType="docking:ConsoleTool"><views:ConsoleView/></DataTemplate>
+    <DataTemplate DataType="docking:PackagesTool"><views:PackagesView/></DataTemplate>
     <DataTemplate DataType="docking:PlaceholderTool"><views:PlaceholderView/></DataTemplate>
   </Application.DataTemplates>
   <Application.Resources>

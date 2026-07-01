@@ -175,6 +175,35 @@ public sealed class MeshOption
     public override string ToString() => Display;
 }
 
+/// One Console log line. Level: 0 Trace,1 Debug,2 Info,3 Warning,4 Error,5 Critical.
+public sealed class LogLine
+{
+    public LogLine(int level, string text) { Level = level; Text = text; }
+    public int Level { get; }
+    public string Text { get; }
+    public string Color => Level >= 4 ? "#F0626E" : Level == 3 ? "#E0B44A" : "#9AA1AC";
+}
+
+/// A discovered package shown in the Packages panel.
+public sealed class PackageInfo
+{
+    public PackageInfo(int index, string id, string name, string version, bool active)
+    {
+        Index = index;
+        Id = id;
+        Name = string.IsNullOrEmpty(name) ? id : name;
+        Version = version;
+        Active = active;
+    }
+    public int Index { get; }
+    public string Id { get; }
+    public string Name { get; }
+    public string Version { get; }
+    public bool Active { get; }
+    public string StatusText => Active ? "Active" : "Inactive";
+    public string ToggleLabel => Active ? "Deactivate" : "Activate";
+}
+
 /// A registered component type offered in the Inspector's Add Component list.
 public sealed class ComponentType
 {
@@ -419,6 +448,43 @@ public sealed class EditorSession : IDisposable
 
     public void RemoveComponent(ulong id, int component) =>
         EngineInterop.sky_editor_remove_component(_ctx, id, component);
+
+    // --- Console log ---
+    public int LogCount => EngineInterop.sky_editor_log_count(_ctx);
+    public void ClearLogs() => EngineInterop.sky_editor_log_clear(_ctx);
+    public List<LogLine> ReadLogs()
+    {
+        var list = new List<LogLine>();
+        var count = EngineInterop.sky_editor_log_count(_ctx);
+        for (var i = 0; i < count; ++i)
+        {
+            var idx = i;
+            var level = EngineInterop.sky_editor_log_level(_ctx, idx);
+            var text = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_log_text(_ctx, idx, b, n));
+            list.Add(new LogLine(level, text));
+        }
+        return list;
+    }
+
+    // --- Packages ---
+    public List<PackageInfo> ReadPackages()
+    {
+        var list = new List<PackageInfo>();
+        var count = EngineInterop.sky_editor_package_count(_ctx);
+        for (var i = 0; i < count; ++i)
+        {
+            var idx = i;
+            var id = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_package_info(_ctx, idx, 0, b, n));
+            var name = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_package_info(_ctx, idx, 1, b, n));
+            var ver = EngineInterop.ReadString((b, n) => EngineInterop.sky_editor_package_info(_ctx, idx, 2, b, n));
+            var active = EngineInterop.sky_editor_package_active(_ctx, idx) == 1;
+            list.Add(new PackageInfo(idx, id, name, ver, active));
+        }
+        return list;
+    }
+    public void SetPackageActive(int index, bool active) =>
+        EngineInterop.sky_editor_package_set_active(_ctx, index, active ? 1 : 0);
+    public void RefreshPackages() => EngineInterop.sky_editor_package_refresh(_ctx);
 
     public void NewScene()
     {

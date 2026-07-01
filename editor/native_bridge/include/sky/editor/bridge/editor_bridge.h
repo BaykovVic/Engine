@@ -135,6 +135,24 @@ SKY_BRIDGE_API void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId 
 SKY_BRIDGE_API void sky_editor_remove_component(SkyEditorContext* ctx,
                                                 SkyObjectId object, int32_t component);
 
+/* Console log buffer. text combines "category: message"; level is a
+ * sky::core::LogLevel (0=Trace..5=Critical). */
+SKY_BRIDGE_API int32_t sky_editor_log_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_log_level(SkyEditorContext* ctx, int32_t index);
+SKY_BRIDGE_API int32_t sky_editor_log_text(SkyEditorContext* ctx, int32_t index,
+                                           char* buffer, int32_t capacity);
+SKY_BRIDGE_API void sky_editor_log_clear(SkyEditorContext* ctx);
+
+/* Packages panel. package_info which: 0=id, 1=displayName, 2=version. */
+SKY_BRIDGE_API int32_t sky_editor_package_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_package_info(SkyEditorContext* ctx, int32_t index,
+                                               int32_t which, char* buffer,
+                                               int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_package_active(SkyEditorContext* ctx, int32_t index);
+SKY_BRIDGE_API void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
+                                                  int32_t active);
+SKY_BRIDGE_API int32_t sky_editor_package_refresh(SkyEditorContext* ctx);
+
 SKY_BRIDGE_API void sky_editor_new_scene(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path);
 SKY_BRIDGE_API int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path);

@@ -52,8 +52,10 @@
 ## Панели на живые данные
 
 - **Project** **[оба]** — ✅ обзор VFS (сетка файлов, крошки, иконки).
-- **Console** **[оба]** — поток лога движка (`ILogger`) с уровнями
-  info/warn/error. ABI-сток логов в managed (ещё placeholder).
+- **Console** **[оба]** — ✅ живой лог: бридж пишет события редактора
+  (create/delete/scene/play/компоненты) в буфер с уровнями (LogLevel), ABI
+  `log_count/level/text/clear`, панель ConsoleView (цвет по уровню, автоскролл,
+  Clear). Осталось: пробросить и логи самих движковых подсистем.
 - **Materials** **[оба]** — ✅ двухпанельный редактор: список материалов со
   свотчами + поля (baseColor/roughness/metallic/emissive + PBR-слоты
   albedo/normal/roughness/metallic/occlusion/height + uvTiling + parallax),
@@ -61,8 +63,10 @@
 - **Terrain** **[оба]** — ✅ Sculpt (Raise/Lower/Smooth, Radius/Strength) +
   Map Generation (Seed/Generate, перегенерирует террейн). Осталось: рисование
   кистью по террейну во вьюпорте.
-- **Packages** **[оба]** — таблица пакетов, Activate/Deactivate/Refresh (ещё
-  placeholder).
+- **Packages** **[оба]** — ✅ список обнаруженных пакетов (имя/версия/статус) на
+  живых данных (`PackageWorld.discoveredPackages`), Activate/Deactivate через
+  `IPackageActivationService`, Refresh (rediscover). ABI `package_count/info/
+  active/set_active/refresh`, панель PackagesView.
 
 ## Операции со сценой
 

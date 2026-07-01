@@ -31,8 +31,8 @@ public sealed class DockFactory : Factory
         var materials = new MaterialsTool { Id = "Materials", Title = "Materials", Main = _main };
 
         var project = new ProjectTool { Id = "Project", Title = "Project", Main = _main };
-        var console = new PlaceholderTool { Id = "Console", Title = "Console", Caption = "Console output", Main = _main };
-        var packages = new PlaceholderTool { Id = "Packages", Title = "Packages", Caption = "Packages", Main = _main };
+        var console = new ConsoleTool { Id = "Console", Title = "Console", Main = _main };
+        var packages = new PackagesTool { Id = "Packages", Title = "Packages", Main = _main };
 
         var leftDock = new ToolDock
         {

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyEditor.Views.PackagesView"
+             x:CompileBindings="False">
+  <DockPanel Background="{StaticResource SkyPanelBrush}">
+    <Border DockPanel.Dock="Top" Classes="panelHeader">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="sectionTitle" Text="Packages" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="chip" Content="Refresh" Click="OnRefresh"/>
+      </Grid>
+    </Border>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Main.Packages}" Margin="10,6">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Classes="card" Margin="0,3" Padding="12,9">
+              <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Name}"/>
+                  <TextBlock Classes="muted" Text="{Binding Version, StringFormat='v{0}'}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Classes="muted" Text="{Binding StatusText}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button Grid.Column="2" Classes="chip" Content="{Binding ToggleLabel}" Click="OnToggle" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

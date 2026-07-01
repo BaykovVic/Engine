@@ -19,6 +19,8 @@ public sealed class InspectorTool : EditorTool { }
 public sealed class MaterialsTool : EditorTool { }
 public sealed class TerrainTool : EditorTool { }
 public sealed class ProjectTool : EditorTool { }
+public sealed class ConsoleTool : EditorTool { }
+public sealed class PackagesTool : EditorTool { }
 public sealed class SceneDocument : EditorDocument { }
 
 public sealed class GameDocument : EditorDocument
