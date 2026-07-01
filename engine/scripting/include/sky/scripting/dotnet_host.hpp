@@ -28,6 +28,15 @@ public:
     /// Test/diagnostic readback: the IProbe value of a managed instance
     /// (-1 when the instance does not expose one).
     [[nodiscard]] virtual std::int64_t probeValue(std::uint64_t managedInstanceId) = 0;
+
+    /// Installs the reverse-boundary engine API (a table of native function
+    /// pointers scripts call to affect their object). Passed once at startup.
+    virtual void installEngineApi(const void* apiTable) = 0;
+
+    /// Binds a live managed instance to the native object id it drives, so the
+    /// script's transform helpers act on that object.
+    virtual void setInstanceObjectId(std::uint64_t managedInstanceId,
+                                     std::uint64_t objectId) = 0;
 };
 
 /// Returns nullptr when hostfxr cannot be located on this machine.

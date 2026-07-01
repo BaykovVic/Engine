@@ -19,3 +19,9 @@ target_include_directories(sky_editor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(sky_editor PRIVATE
     Qt5::Widgets sky::engine sky::sky_rendering_opengl sky::viewport_bridge sky::editor_tools)
+
+if(TARGET sky_managed)
+    target_compile_definitions(sky_editor PRIVATE
+        SKY_MANAGED_DIR="${SKY_MANAGED_DIR}")
+    add_dependencies(sky_editor sky_managed)
+endif()

@@ -47,6 +47,24 @@ public static class Bootstrap
         }
     }
 
+    /// <summary>Installs the native engine API (reverse-call function table).</summary>
+    [UnmanagedCallersOnly]
+    public static void Initialize(IntPtr apiPtr)
+    {
+        try { Engine.Install(apiPtr); } catch { /* isolated */ }
+    }
+
+    /// <summary>Points a live script instance at the native object it drives,
+    /// so its transform helpers act on that object.</summary>
+    [UnmanagedCallersOnly]
+    public static void SetObjectId(ulong instanceId, ulong objectId)
+    {
+        if (Instances.TryGetValue(instanceId, out var script))
+        {
+            script.Handle = new NativeHandle(objectId);
+        }
+    }
+
     [UnmanagedCallersOnly]
     public static ulong CreateInstance(IntPtr typeNameUtf8)
     {

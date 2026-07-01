@@ -27,6 +27,7 @@
 #include "sky/rendering/renderer_registry.hpp"
 #include "sky/scene/scene_authoring.hpp"
 #include "sky/scene/scene_world.hpp"
+#include "sky/scripting/dotnet_host.hpp"
 #include "sky/serialization/backends.hpp"
 
 namespace sky::editor {
@@ -75,6 +76,10 @@ public:
     void newScene();
     bool saveScene(const std::filesystem::path& path);
     bool openScene(const std::filesystem::path& path);
+
+    /// Drives the managed gameplay scripts one frame (call each frame while
+    /// playing). No-op when scripting is unavailable or nothing is scripted.
+    void tickScripts(double deltaSeconds);
 
     /// Applies the active brush at a world-space point on the terrain.
     void applyTerrainBrush(core::Vec3 worldPoint);
@@ -148,6 +153,7 @@ public:
     std::unique_ptr<physics::ObjectPhysicsSync> physicsSync;
     std::unique_ptr<serialization::SchemaMigrationService> migrations;
     std::unique_ptr<scene::SceneWorld> scenes;
+    std::unique_ptr<scripting::DotNetScriptHost> scriptHost;
     std::unique_ptr<PlayModeController> playMode;
     std::unique_ptr<terrain::TerrainWorld> terrain;
     std::unique_ptr<mapgen::IGenerationPipeline> mapgenPipeline;
@@ -167,6 +173,9 @@ private:
     void initTerrain();
     void resetScene();
     void reattachPhysics();
+    void initScripting();
+    void startPlayScripts();
+    void stopPlayScripts();
     object::ObjectHandle cloneSubtree(object::ObjectHandle source,
                                       object::ObjectHandle parent);
     void attachCrateBody(object::ObjectHandle object);
@@ -175,6 +184,8 @@ private:
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
     std::unordered_map<std::uint64_t, core::Transform> playSnapshot_;
     std::unordered_set<std::uint64_t> disabled_;
+    // Live managed script instances during play: (managedInstanceId, objectId).
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;
     physics::RigidBodyHandle terrainBody_;
     physics::ColliderHandle terrainCollider_;
     std::uint64_t terrainVersion_ = 0;

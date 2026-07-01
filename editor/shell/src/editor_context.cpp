@@ -1,6 +1,7 @@
 #include "editor_context.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 
@@ -8,6 +9,53 @@
 #include "sky/terrain/terrain_integration.hpp"
 
 namespace {
+
+// --- Reverse scripting boundary ------------------------------------------
+// Managed scripts call these to move the object they are attached to. A single
+// active EditorContext owns scripting at a time, so its object hierarchy is
+// exposed through this file-scope pointer, set in initScripting().
+sky::object::IObjectHierarchyAccess* g_scriptObjects = nullptr;
+
+void scriptSetLocalPosition(std::uint64_t obj, float x, float y, float z) {
+    if (g_scriptObjects == nullptr) return;
+    const sky::object::ObjectHandle handle{obj};
+    auto t = g_scriptObjects->localTransform(handle);
+    t.position = {x, y, z};
+    g_scriptObjects->setLocalTransform(handle, t);
+}
+
+void scriptSetLocalEuler(std::uint64_t obj, float xDeg, float yDeg, float zDeg) {
+    if (g_scriptObjects == nullptr) return;
+    const auto axisAngle = [](float degrees, float ax, float ay, float az) {
+        const float r = degrees * 3.14159265358979f / 180.0f;
+        const float s = std::sin(r / 2.0f);
+        return sky::core::Quat{ax * s, ay * s, az * s, std::cos(r / 2.0f)};
+    };
+    const sky::object::ObjectHandle handle{obj};
+    auto t = g_scriptObjects->localTransform(handle);
+    t.rotation = axisAngle(yDeg, 0, 1, 0) * axisAngle(xDeg, 1, 0, 0) *
+                 axisAngle(zDeg, 0, 0, 1);
+    g_scriptObjects->setLocalTransform(handle, t);
+}
+
+void scriptSetLocalScale(std::uint64_t obj, float x, float y, float z) {
+    if (g_scriptObjects == nullptr) return;
+    const sky::object::ObjectHandle handle{obj};
+    auto t = g_scriptObjects->localTransform(handle);
+    t.scale = {x, y, z};
+    g_scriptObjects->setLocalTransform(handle, t);
+}
+
+/// Native function table handed to managed SkyEngine.Engine (layout must match
+/// the managed Api struct: three cdecl pointers).
+struct SkyScriptApi {
+    void* setLocalPosition;
+    void* setLocalEuler;
+    void* setLocalScale;
+};
+SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
+                         reinterpret_cast<void*>(&scriptSetLocalEuler),
+                         reinterpret_cast<void*>(&scriptSetLocalScale)};
 
 /// Populates a Unity-like demo Assets folder so the Project browser has
 /// realistic content (textures, materials, scenes) under a stable root.
@@ -111,7 +159,7 @@ EditorContext::EditorContext() {
     components->registerComponentType(
         {"sky.rigidbody", "Rigidbody", false, "", {{"mass", "float"}}, "Physics"});
     components->registerComponentType(
-        {"sky.script", "Script", true, "Game.Behaviour", {}, "Scripting"});
+        {"sky.script", "Script", true, "", {{"class", "string"}}, "Scripting"});
     components->registerComponentType(
         {"sky.light", "Light", false, "",
          {{"type", "string"},
@@ -163,6 +211,7 @@ EditorContext::EditorContext() {
                                    texturePath.generic_string()});
     }
 
+    initScripting();
     buildDemoScene();
 }
 
@@ -242,9 +291,11 @@ void EditorContext::beginPlay() {
             stack.push_back(child);
         }
     }
+    startPlayScripts();
 }
 
 void EditorContext::endPlay() {
+    stopPlayScripts();
     for (const auto& [id, transform] : playSnapshot_) {
         const object::ObjectHandle object{id};
         if (objects->exists(object)) {
@@ -261,6 +312,81 @@ void EditorContext::endPlay() {
         }
     }
     playSnapshot_.clear();
+}
+
+void EditorContext::initScripting() {
+#ifdef SKY_MANAGED_DIR
+    const std::filesystem::path managedDir = SKY_MANAGED_DIR;
+    scripting::DotNetHostConfig config;
+    config.bootstrapAssembly = managedDir / "SkyEngine.Managed.dll";
+    scriptHost = scripting::createDotNetScriptHost(config);
+    if (scriptHost == nullptr || !scriptHost->start()) {
+        scriptHost.reset(); // no .NET runtime here: scripting is simply off
+        return;
+    }
+    scriptHost->loadAssembly(
+        {"SkyEngine.TestScripts", managedDir / "SkyEngine.TestScripts.dll"});
+    g_scriptObjects = objects.get();
+    scriptHost->installEngineApi(&g_scriptApi);
+#endif
+}
+
+void EditorContext::startPlayScripts() {
+    playScripts_.clear();
+    if (scriptHost == nullptr) {
+        return;
+    }
+    g_scriptObjects = objects.get(); // this context owns scripting while playing
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+        for (const auto comp : components->componentsOf(object)) {
+            if (components->descriptorOf(comp).typeId != "sky.script") {
+                continue;
+            }
+            std::string className;
+            if (const auto field = components->field(comp, "class")) {
+                if (const auto* s = std::get_if<std::string>(&*field)) {
+                    className = *s;
+                }
+            }
+            if (className.empty()) {
+                continue;
+            }
+            const auto mid = scriptHost->createInstance(className);
+            if (mid == 0) {
+                continue;
+            }
+            scriptHost->setInstanceObjectId(mid, object.value);
+            scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnCreate, 0.0);
+            scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnStart, 0.0);
+            playScripts_.emplace_back(mid, object.value);
+        }
+    }
+}
+
+void EditorContext::tickScripts(double deltaSeconds) {
+    if (scriptHost == nullptr) {
+        return;
+    }
+    for (const auto& [mid, objectId] : playScripts_) {
+        scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnUpdate,
+                                    deltaSeconds);
+    }
+}
+
+void EditorContext::stopPlayScripts() {
+    if (scriptHost != nullptr) {
+        for (const auto& [mid, objectId] : playScripts_) {
+            scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnDestroy, 0.0);
+            scriptHost->destroyInstance(mid);
+        }
+    }
+    playScripts_.clear();
 }
 
 object::ObjectHandle EditorContext::duplicateObject(object::ObjectHandle object) {
@@ -611,6 +737,9 @@ void EditorContext::buildDemoScene() {
         const auto mesh = components->attach(pyramid, "sky.mesh");
         components->setField(mesh, "material", std::string("Gold"));
         components->setField(mesh, "mesh", std::string("assets://Models/pyramid.obj"));
+        // A demo gameplay script: the pyramid spins in play mode.
+        const auto script = components->attach(pyramid, "sky.script");
+        components->setField(script, "class", std::string("SkyEngine.Tests.Rotator"));
     }
 
     const auto camera = createEmpty("Main Camera");

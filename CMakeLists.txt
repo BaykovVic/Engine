@@ -19,6 +19,28 @@ option(SKY_BUILD_OPENGL_BACKEND "Build the OpenGL rendering backend" ON)
 option(SKY_BUILD_VULKAN_BACKEND "Build the Vulkan rendering backend" ON)
 option(SKY_BUILD_TESTS "Build verification targets" ON)
 
+# Managed runtime + demo scripts, built with dotnet when available. Native
+# targets locate the assemblies at runtime through SKY_MANAGED_DIR; scripting is
+# simply off in builds without .NET.
+find_program(SKY_DOTNET dotnet)
+if(SKY_DOTNET)
+    set(SKY_MANAGED_DIR ${CMAKE_BINARY_DIR}/managed)
+    add_custom_command(
+        OUTPUT ${SKY_MANAGED_DIR}/SkyEngine.Managed.dll
+               ${SKY_MANAGED_DIR}/SkyEngine.TestScripts.dll
+        COMMAND ${SKY_DOTNET} build ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts
+                -c Release -o ${SKY_MANAGED_DIR} --nologo -v q
+        DEPENDS ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Bootstrap.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/ScriptComponent.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/NativeHandle.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Engine.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spinner.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Rotator.cs
+        COMMENT "Building managed assemblies")
+    add_custom_target(sky_managed ALL
+        DEPENDS ${SKY_MANAGED_DIR}/SkyEngine.Managed.dll)
+endif()
+
 add_subdirectory(engine)
 # Always entered; Qt-dependent targets inside are gated by SKY_BUILD_EDITOR.
 add_subdirectory(editor)

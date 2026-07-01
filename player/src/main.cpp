@@ -40,8 +40,10 @@ int runHeadless(EditorContext& context, int frames, const char* screenshotPath) 
 
     context.playMode->setScene(context.activeScene);
     context.playMode->play();
+    context.beginPlay(); // spins up the managed scripts (OnCreate/OnStart)
     for (int frame = 0; frame < frames; ++frame) {
         context.playMode->tickFrame(1.0 / 60.0);
+        context.tickScripts(1.0 / 60.0);
         renderer->submit(builder.build(kWidth, kHeight));
         renderer->renderFrame();
     }
@@ -101,6 +103,7 @@ int runWindowed(EditorContext& context, int frameLimit) {
 
     context.playMode->setScene(context.activeScene);
     context.playMode->play();
+    context.beginPlay(); // spins up the managed scripts (OnCreate/OnStart)
 
     auto previous = std::chrono::steady_clock::now();
     std::uint64_t frames = 0;
@@ -110,7 +113,9 @@ int runWindowed(EditorContext& context, int frameLimit) {
             std::chrono::duration<double>(now - previous).count();
         previous = now;
 
-        context.playMode->tickFrame(std::min(dt, 0.1));
+        const double step = std::min(dt, 0.1);
+        context.playMode->tickFrame(step);
+        context.tickScripts(step);
         renderer->submit(builder.build(renderer->frameWidth(),
                                        renderer->frameHeight()));
         renderer->renderFrame();

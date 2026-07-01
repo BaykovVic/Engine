@@ -44,6 +44,8 @@ using managed_invoke_lifecycle_fn = std::int32_t (*)(std::uint64_t id,
                                                      std::int32_t lifecycleEvent,
                                                      double deltaSeconds);
 using managed_get_probe_fn = std::int64_t (*)(std::uint64_t id);
+using managed_initialize_fn = void (*)(void* apiTable);
+using managed_set_object_id_fn = void (*)(std::uint64_t id, std::uint64_t objectId);
 
 std::filesystem::path discoverHostfxr() {
     std::vector<std::filesystem::path> roots;
@@ -121,11 +123,19 @@ public:
         }
         loader_ = reinterpret_cast<load_assembly_and_get_function_pointer_fn>(loader);
 
-        return resolve(managedLoadAssembly_, "LoadAssembly") &&
-               resolve(managedCreateInstance_, "CreateInstance") &&
-               resolve(managedDestroyInstance_, "DestroyInstance") &&
-               resolve(managedInvokeLifecycle_, "InvokeLifecycle") &&
-               resolve(managedGetProbe_, "GetProbe") && (started_ = true);
+        const bool ok = resolve(managedLoadAssembly_, "LoadAssembly") &&
+                        resolve(managedCreateInstance_, "CreateInstance") &&
+                        resolve(managedDestroyInstance_, "DestroyInstance") &&
+                        resolve(managedInvokeLifecycle_, "InvokeLifecycle") &&
+                        resolve(managedGetProbe_, "GetProbe");
+        if (!ok) {
+            return false;
+        }
+        started_ = true;
+        // Reverse-boundary entry points (present since the engine API landed).
+        resolve(managedInitialize_, "Initialize");
+        resolve(managedSetObjectId_, "SetObjectId");
+        return true;
     }
 
     void shutdown() override {
@@ -173,6 +183,19 @@ public:
         return started_ ? managedGetProbe_(managedInstanceId) : -1;
     }
 
+    void installEngineApi(const void* apiTable) override {
+        if (started_ && managedInitialize_ != nullptr) {
+            managedInitialize_(const_cast<void*>(apiTable));
+        }
+    }
+
+    void setInstanceObjectId(std::uint64_t managedInstanceId,
+                             std::uint64_t objectId) override {
+        if (started_ && managedSetObjectId_ != nullptr) {
+            managedSetObjectId_(managedInstanceId, objectId);
+        }
+    }
+
 private:
     template <typename Fn>
     bool resolve(Fn& slot, const char* methodName) {
@@ -194,6 +217,8 @@ private:
     managed_destroy_instance_fn managedDestroyInstance_ = nullptr;
     managed_invoke_lifecycle_fn managedInvokeLifecycle_ = nullptr;
     managed_get_probe_fn managedGetProbe_ = nullptr;
+    managed_initialize_fn managedInitialize_ = nullptr;
+    managed_set_object_id_fn managedSetObjectId_ = nullptr;
     bool started_ = false;
     std::vector<AssemblyRef> assemblies_;
 };

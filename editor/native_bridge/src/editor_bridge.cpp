@@ -914,6 +914,7 @@ int32_t sky_editor_render_offscreen(SkyEditorContext* ctx, uint32_t width,
     // Advance the simulation while playing (physics, scripts, ECS).
     if (session->context.playMode->state() == sky::editor::PlayModeState::Playing) {
         session->context.playMode->tickFrame(1.0 / 60.0);
+        session->context.tickScripts(1.0 / 60.0);
     }
     session->offscreenFrame->setCamera(session->camera.pose(),
                                        session->camera.orthoHeight());

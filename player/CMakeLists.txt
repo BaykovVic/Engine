@@ -11,6 +11,13 @@ if(Vulkan_FOUND)
     target_link_libraries(sky_player PRIVATE
         sky::engine sky::viewport_bridge
         sky::sky_rendering_opengl sky::sky_rendering_vulkan)
+    # Managed gameplay scripts: compiled in only when the dotnet SDK produced
+    # the assemblies. Without them EditorContext leaves scripting a no-op.
+    if(TARGET sky_managed)
+        target_compile_definitions(sky_player PRIVATE
+            SKY_MANAGED_DIR="${SKY_MANAGED_DIR}")
+        add_dependencies(sky_player sky_managed)
+    endif()
 else()
     message(STATUS "Vulkan SDK not found - sky_player is not built")
 endif()

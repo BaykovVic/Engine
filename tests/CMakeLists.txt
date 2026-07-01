@@ -64,28 +64,13 @@ if(SKY_BUILD_VULKAN_BACKEND)
     endif()
 endif()
 
-# Real .NET hosting: built and run only when the dotnet SDK is present.
-find_program(SKY_DOTNET dotnet)
-if(SKY_DOTNET)
-    set(SKY_MANAGED_OUT ${CMAKE_BINARY_DIR}/managed)
-    add_custom_command(
-        OUTPUT ${SKY_MANAGED_OUT}/SkyEngine.Managed.dll
-               ${SKY_MANAGED_OUT}/SkyEngine.TestScripts.dll
-        COMMAND ${SKY_DOTNET} build
-                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts
-                -c Release -o ${SKY_MANAGED_OUT} --nologo -v q
-        DEPENDS ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Bootstrap.cs
-                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/ScriptComponent.cs
-                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/NativeHandle.cs
-                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spinner.cs
-        COMMENT "Building managed assemblies")
-    add_custom_target(sky_managed ALL
-        DEPENDS ${SKY_MANAGED_OUT}/SkyEngine.Managed.dll)
-
+# Real .NET hosting: built and run only when the dotnet SDK is present. The
+# managed assemblies are built by the top-level sky_managed target.
+if(TARGET sky_managed)
     sky_add_test(dotnet_host_tests)
     add_dependencies(dotnet_host_tests sky_managed)
     target_compile_definitions(dotnet_host_tests PRIVATE
-        SKY_MANAGED_DIR="${SKY_MANAGED_OUT}")
+        SKY_MANAGED_DIR="${SKY_MANAGED_DIR}")
 endif()
 
 # Editor command layer (Qt-free): compiled together with the editor context.
