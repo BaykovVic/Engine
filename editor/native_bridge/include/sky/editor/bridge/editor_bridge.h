@@ -110,6 +110,13 @@ SKY_BRIDGE_API SkyObjectId sky_editor_create_primitive(SkyEditorContext* ctx,
 SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
                                                          const char* name,
                                                          const char* mesh_ref);
+
+/* Scene document lifecycle. new_scene clears to an empty scene; save_scene
+ * writes the object graph to a .skybox (SKYB); open_scene replaces the scene
+ * from a file. save/open return 1 on success, 0 on failure. */
+SKY_BRIDGE_API void sky_editor_new_scene(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path);
+SKY_BRIDGE_API int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path);
 SKY_BRIDGE_API SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx,
                                                 SkyObjectId object);
 SKY_BRIDGE_API void sky_editor_delete(SkyEditorContext* ctx, SkyObjectId object);

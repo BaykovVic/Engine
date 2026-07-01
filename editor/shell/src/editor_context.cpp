@@ -429,11 +429,10 @@ object::ObjectHandle EditorContext::restoreObject(const ObjectSnapshot& snapshot
     return object;
 }
 
-void EditorContext::buildDemoScene() {
-    activeScene = scenes->createScene({"SampleScene", {}});
-
+void EditorContext::initTerrain() {
     // The ground is a real terrain: heightfield data, physics collider and
-    // a scene object carrying its world placement.
+    // a scene object carrying its world placement. Its heightfield is not part
+    // of the scene schema, so scene save/open treat it as a fixture.
     terrain = terrain::createTerrainWorld(*storage);
     mapgenPipeline = mapgen::createGenerationPipeline();
 
@@ -469,6 +468,98 @@ void EditorContext::buildDemoScene() {
             terrainBody_, terrain::makeTerrainCollider(terrain->dataset(terrainHandle)));
     });
     ++terrainVersion_;
+}
+
+/// Tears the whole scene down: physics bodies, terrain fixture and every root
+/// object, leaving no active scene. Callers rebuild afterwards.
+void EditorContext::resetScene() {
+    for (auto& [id, body] : bodies_) {
+        physicsSync->unbind(body);
+        physics->destroyBody(body);
+    }
+    bodies_.clear();
+    if (terrainCollider_.isValid()) {
+        physics->detachCollider(terrainCollider_);
+        terrainCollider_ = {};
+    }
+    if (terrainBody_.isValid()) {
+        physics->destroyBody(terrainBody_);
+        terrainBody_ = {};
+    }
+    terrain.reset();
+    mapgenPipeline.reset();
+
+    // Detach components across every root subtree, then let the scene destroy
+    // the objects.
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+        components->detachAllFrom(object);
+    }
+    if (activeScene.isValid()) {
+        scenes->unloadScene(activeScene);
+    }
+    activeScene = scene::SceneHandle::invalid();
+    roots_.clear();
+    generatedObjects_.clear();
+    terrainObject = object::ObjectHandle::invalid();
+}
+
+/// Rebuilds physics bodies for loaded objects that carry a rigidbody component
+/// (the live simulation state is not part of the scene schema).
+void EditorContext::reattachPhysics() {
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+        if (object == terrainObject || bodies_.contains(object.value)) {
+            continue;
+        }
+        for (const auto component : components->componentsOf(object)) {
+            if (components->descriptorOf(component).typeId == "sky.rigidbody") {
+                attachCrateBody(object);
+                break;
+            }
+        }
+    }
+}
+
+void EditorContext::newScene() {
+    resetScene();
+    activeScene = scenes->createScene({"Untitled", {}});
+    initTerrain();
+}
+
+bool EditorContext::saveScene(const std::filesystem::path& path) {
+    // The terrain fixture is excluded — its heightfield is not in the schema.
+    return scenes->saveSceneAs(activeScene, path, terrainObject);
+}
+
+bool EditorContext::openScene(const std::filesystem::path& path) {
+    resetScene();
+    activeScene = scenes->loadScene(path);
+    if (!activeScene.isValid()) {
+        // Bad or missing file: leave the editor on a fresh empty scene.
+        activeScene = scenes->createScene({"Untitled", {}});
+        initTerrain();
+        return false;
+    }
+    roots_ = scenes->rootObjectsOf(activeScene);
+    initTerrain();      // appends the Terrain fixture to the loaded scene
+    reattachPhysics();  // recreate rigidbody bodies from components
+    return true;
+}
+
+void EditorContext::buildDemoScene() {
+    activeScene = scenes->createScene({"SampleScene", {}});
+    initTerrain();
 
     createCrate("Crate A", {-1.5f, 2.0f, 0.0f});
     createCrate("Crate B", {0.0f, 4.0f, 0.0f});

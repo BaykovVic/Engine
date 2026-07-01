@@ -92,6 +92,9 @@ internal static class EngineInterop
     // --- Authoring ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_primitive(IntPtr ctx, int kind, string name);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern ulong sky_editor_create_mesh_object(IntPtr ctx, string name, string meshRef);
+    [DllImport(Lib)] public static extern void sky_editor_new_scene(IntPtr ctx);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_save_scene(IntPtr ctx, string path);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_open_scene(IntPtr ctx, string path);
     [DllImport(Lib)] public static extern ulong sky_editor_duplicate(IntPtr ctx, ulong obj);
     [DllImport(Lib)] public static extern void sky_editor_delete(IntPtr ctx, ulong obj);
 

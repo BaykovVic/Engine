@@ -61,6 +61,14 @@ public:
     void beginPlay();
     void endPlay();
 
+    /// Scene document lifecycle. New clears to an empty scene (with the terrain
+    /// fixture); Save writes the object graph to a .skybox (SKYB, terrain
+    /// excluded); Open replaces the scene from a file. Open returns false on a
+    /// bad file (the editor is left on a fresh empty scene).
+    void newScene();
+    bool saveScene(const std::filesystem::path& path);
+    bool openScene(const std::filesystem::path& path);
+
     /// Applies the active brush at a world-space point on the terrain.
     void applyTerrainBrush(core::Vec3 worldPoint);
     /// Terrain height (world Y) under world-space (x, z).
@@ -136,6 +144,9 @@ public:
 
 private:
     void buildDemoScene();
+    void initTerrain();
+    void resetScene();
+    void reattachPhysics();
     object::ObjectHandle cloneSubtree(object::ObjectHandle source,
                                       object::ObjectHandle parent);
     void attachCrateBody(object::ObjectHandle object);

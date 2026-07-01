@@ -261,46 +261,27 @@ public:
     }
 
     bool saveScene(SceneHandle scene) override {
-        const auto* record = find(scene);
+        auto* record = find(scene);
         if (record == nullptr || record->descriptor.path.empty()) {
             return false;
         }
+        return writeScene(*record, object::ObjectHandle::invalid());
+    }
 
-        // Flatten the hierarchy in pre-order and remember each object's index
-        // so parent links can be stored as indices.
-        std::vector<object::ObjectHandle> order;
-        std::unordered_map<std::uint64_t, std::uint32_t> indexOf;
-        for (const auto root : record->rootObjects) {
-            flatten(root, order, indexOf);
+    bool saveSceneAs(SceneHandle scene, const std::filesystem::path& path,
+                     object::ObjectHandle excludeRoot) override {
+        auto* record = find(scene);
+        if (record == nullptr || path.empty()) {
+            return false;
         }
+        record->descriptor.path = path;
+        return writeScene(*record, excludeRoot);
+    }
 
-        serialization::ByteWriter writer;
-        writer.writeString(record->descriptor.name);
-        writer.writeU32(static_cast<std::uint32_t>(order.size()));
-        for (const auto object : order) {
-            const auto parent = deps_.hierarchy.parentOf(object);
-            const auto parentIt = indexOf.find(parent.value);
-            writer.writeU32(parentIt != indexOf.end() ? parentIt->second : kNoParent);
-            writer.writeString(deps_.objectQuery.nameOf(object));
-            writeTransform(writer, deps_.hierarchy.localTransform(object));
-
-            const auto components = deps_.componentQuery.componentsOf(object);
-            writer.writeU32(static_cast<std::uint32_t>(components.size()));
-            for (const auto component : components) {
-                writer.writeString(deps_.componentQuery.descriptorOf(component).typeId);
-                const auto fields = deps_.componentData != nullptr
-                                        ? deps_.componentData->fields(component)
-                                        : std::map<std::string, component::FieldValue>{};
-                writer.writeU32(static_cast<std::uint32_t>(fields.size()));
-                for (const auto& [name, value] : fields) {
-                    writeField(writer, name, value);
-                }
-            }
-        }
-
-        return deps_.storage.write(
-            record->descriptor.path,
-            {kSceneSchemaId, kSceneSchemaVersion, writer.takeBuffer()});
+    std::vector<object::ObjectHandle> rootObjectsOf(SceneHandle scene) const override {
+        const auto* record = find(scene);
+        return record != nullptr ? record->rootObjects
+                                 : std::vector<object::ObjectHandle>{};
     }
 
     void unloadScene(SceneHandle scene) override {
@@ -426,6 +407,48 @@ public:
     }
 
 private:
+    /// Serializes a scene record to its descriptor path, optionally skipping
+    /// one root subtree (used to keep the editor's terrain fixture, whose
+    /// heightfield is not part of the scene schema, out of the file).
+    bool writeScene(SceneRecord& record, object::ObjectHandle excludeRoot) {
+        std::vector<object::ObjectHandle> order;
+        std::unordered_map<std::uint64_t, std::uint32_t> indexOf;
+        for (const auto root : record.rootObjects) {
+            if (root == excludeRoot) {
+                continue;
+            }
+            flatten(root, order, indexOf);
+        }
+
+        serialization::ByteWriter writer;
+        writer.writeString(record.descriptor.name);
+        writer.writeU32(static_cast<std::uint32_t>(order.size()));
+        for (const auto object : order) {
+            const auto parent = deps_.hierarchy.parentOf(object);
+            const auto parentIt = indexOf.find(parent.value);
+            writer.writeU32(parentIt != indexOf.end() ? parentIt->second : kNoParent);
+            writer.writeString(deps_.objectQuery.nameOf(object));
+            writeTransform(writer, deps_.hierarchy.localTransform(object));
+
+            const auto components = deps_.componentQuery.componentsOf(object);
+            writer.writeU32(static_cast<std::uint32_t>(components.size()));
+            for (const auto component : components) {
+                writer.writeString(deps_.componentQuery.descriptorOf(component).typeId);
+                const auto fields = deps_.componentData != nullptr
+                                        ? deps_.componentData->fields(component)
+                                        : std::map<std::string, component::FieldValue>{};
+                writer.writeU32(static_cast<std::uint32_t>(fields.size()));
+                for (const auto& [name, value] : fields) {
+                    writeField(writer, name, value);
+                }
+            }
+        }
+
+        return deps_.storage.write(
+            record.descriptor.path,
+            {kSceneSchemaId, kSceneSchemaVersion, writer.takeBuffer()});
+    }
+
     SceneRecord* find(SceneHandle scene) {
         const auto it = scenes_.find(scene.value);
         return it != scenes_.end() ? &it->second : nullptr;

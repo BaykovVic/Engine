@@ -77,7 +77,37 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<SkyObject> Roots => _session.Roots;
     public IntPtr NativeContext => _session.Native;
-    public string SceneTitle => "SampleScene";
+
+    // --- Scene document (New / Open / Save) ---
+    private string _scenePath = "";
+    public string CurrentScenePath => _scenePath;
+    public bool HasScenePath => !string.IsNullOrEmpty(_scenePath);
+    public string SceneTitle => string.IsNullOrEmpty(_scenePath)
+        ? "SampleScene"
+        : System.IO.Path.GetFileNameWithoutExtension(_scenePath);
+
+    public void NewScene()
+    {
+        _session.NewScene();
+        _scenePath = "";
+        OnPropertyChanged(nameof(SceneTitle));
+        SelectedObject = Roots.Count > 0 ? Roots[0] : null;
+    }
+
+    public bool SaveScene(string path)
+    {
+        var ok = _session.SaveScene(path);
+        if (ok) { _scenePath = path; OnPropertyChanged(nameof(SceneTitle)); }
+        return ok;
+    }
+
+    public bool OpenScene(string path)
+    {
+        var ok = _session.OpenScene(path);
+        if (ok) { _scenePath = path; OnPropertyChanged(nameof(SceneTitle)); }
+        SelectedObject = Roots.Count > 0 ? (FirstWithComponents(Roots) ?? Roots[0]) : null;
+        return ok;
+    }
 
     public SkyObject? SelectedObject
     {

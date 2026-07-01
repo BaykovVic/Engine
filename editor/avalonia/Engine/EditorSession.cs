@@ -377,6 +377,21 @@ public sealed class EditorSession : IDisposable
         return id;
     }
 
+    public void NewScene()
+    {
+        EngineInterop.sky_editor_new_scene(_ctx);
+        Reload();
+    }
+
+    public bool SaveScene(string path) => EngineInterop.sky_editor_save_scene(_ctx, path) == 1;
+
+    public bool OpenScene(string path)
+    {
+        var ok = EngineInterop.sky_editor_open_scene(_ctx, path) == 1;
+        Reload();
+        return ok;
+    }
+
     public ulong Duplicate(ulong id)
     {
         var copy = EngineInterop.sky_editor_duplicate(_ctx, id);

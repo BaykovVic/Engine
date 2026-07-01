@@ -66,8 +66,12 @@
   вывести через ABI и в Edit-меню (Ctrl+Z/Ctrl+Y).
 - **Play/Pause/Stop** **[оба]** — `PlayModeController` существует; связать
   транспорт-кнопки тулбара через ABI (тик плеймода в кадровом цикле).
-- **New/Open/Save Scene** **[оба]** — `ISceneRepository` (SKYB) через ABI +
-  File-меню; диалоги файлов Avalonia.
+- **New/Open/Save Scene** **[оба]** — ✅ через `ISceneRepository` (SKYB,
+  `saveSceneAs`/`rootObjectsOf`) + ABI (`new/save/open_scene`) + File-меню с
+  диалогами Avalonia (Ctrl+N/O/S). Round-trip графа объектов (иерархия +
+  трансформы + компоненты) проверен; физика восстанавливается из
+  rigidbody-компонентов. Осталось: heightfield террейна и live-состояние
+  физики в формате (сейчас террейн — фикстура, переинициализируется).
 - **Иерархия: drag-drop reparent, rename, контекст-меню** **[оба]** —
   `reparent`/`renameObject` через ABI; меню Create/Rename/Duplicate/Delete.
 

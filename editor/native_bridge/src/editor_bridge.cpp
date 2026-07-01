@@ -495,6 +495,22 @@ SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx, const char* nam
         .value;
 }
 
+void sky_editor_new_scene(SkyEditorContext* ctx) { ec(ctx).newScene(); }
+
+int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path) {
+    if (path == nullptr) {
+        return 0;
+    }
+    return ec(ctx).saveScene(path) ? 1 : 0;
+}
+
+int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path) {
+    if (path == nullptr) {
+        return 0;
+    }
+    return ec(ctx).openScene(path) ? 1 : 0;
+}
+
 SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx, SkyObjectId object) {
     return ec(ctx).duplicateObject(handle(object)).value;
 }
