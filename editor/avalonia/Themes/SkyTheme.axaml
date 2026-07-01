@@ -200,4 +200,107 @@
     <Setter Property="Width" Value="46"/>
     <Setter Property="Height" Value="46"/>
   </Style>
+
+  <!-- ============ Control polish (ported from SkyStyles.reference) ============ -->
+
+  <!-- ComboBox (mesh picker, Add Component list) -->
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="7"/>
+    <Setter Property="Padding" Value="9,5"/>
+    <Setter Property="MinHeight" Value="{StaticResource SkyControlHeight}"/>
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ Border#Background"><Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/></Style>
+  <Style Selector="ComboBox:focus /template/ Border#Background"><Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/></Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="10,6"/>
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    <Setter Property="CornerRadius" Value="8"/>
+  </Style>
+
+  <!-- CheckBox: accent when checked -->
+  <Style Selector="CheckBox"><Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/></Style>
+  <Style Selector="CheckBox /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
+  <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+  </Style>
+  <Style Selector="CheckBox:checked /template/ Path"><Setter Property="Fill" Value="White"/><Setter Property="Stroke" Value="White"/></Style>
+
+  <!-- Slider (Terrain radius/strength) -->
+  <Style Selector="Slider"><Setter Property="MinHeight" Value="18"/></Style>
+  <Style Selector="Slider /template/ Border#TrackBackground"><Setter Property="Background" Value="{StaticResource SkyInsetBrush}"/><Setter Property="Height" Value="4"/><Setter Property="CornerRadius" Value="2"/></Style>
+  <Style Selector="Slider /template/ RepeatButton#PART_DecreaseButton"><Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="Slider /template/ Thumb">
+    <Setter Property="Background" Value="{StaticResource SkyTextPrimaryBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="Width" Value="14"/><Setter Property="Height" Value="14"/><Setter Property="CornerRadius" Value="7"/>
+  </Style>
+  <Style Selector="Slider /template/ Thumb:pointerover"><Setter Property="Background" Value="White"/></Style>
+
+  <!-- ScrollBar: thin overlay thumb -->
+  <Style Selector="ScrollBar:vertical"><Setter Property="Width" Value="{StaticResource SkyScrollSize}"/></Style>
+  <Style Selector="ScrollBar:horizontal"><Setter Property="Height" Value="{StaticResource SkyScrollSize}"/></Style>
+  <Style Selector="ScrollBar /template/ Thumb"><Setter Property="Background" Value="{StaticResource SkyLineStrongBrush}"/><Setter Property="CornerRadius" Value="4"/><Setter Property="Margin" Value="2"/></Style>
+  <Style Selector="ScrollBar /template/ Thumb:pointerover"><Setter Property="Background" Value="#4A515E"/></Style>
+  <Style Selector="ScrollBar /template/ RepeatButton"><Setter Property="Background" Value="Transparent"/><Setter Property="Opacity" Value="0"/></Style>
+
+  <!-- Flyouts / context menus / separators -->
+  <Style Selector="ContextMenu, MenuFlyoutPresenter">
+    <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="9"/>
+    <Setter Property="Padding" Value="5"/>
+  </Style>
+  <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="{StaticResource SkyAccentBrush}"/></Style>
+  <Style Selector="MenuItem:selected"><Setter Property="Foreground" Value="White"/></Style>
+  <Style Selector="MenuItem /template/ ContentPresenter#PART_InputGestureText"><Setter Property="Foreground" Value="{StaticResource SkyTextMutedBrush}"/></Style>
+  <Style Selector="Separator"><Setter Property="Background" Value="{StaticResource SkyLineStrongBrush}"/><Setter Property="Height" Value="1"/><Setter Property="Margin" Value="8,5"/></Style>
+
+  <!-- FlyoutPresenter (Add Component list container) -->
+  <Style Selector="FlyoutPresenter">
+    <Setter Property="Background" Value="{StaticResource SkyCardBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="9"/>
+    <Setter Property="Padding" Value="4"/>
+  </Style>
+
+  <!-- ToolTip -->
+  <Style Selector="ToolTip">
+    <Setter Property="Background" Value="#0C0D10"/>
+    <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyLineStrongBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="9,5"/>
+  </Style>
+
+  <!-- ListBox rows (Project grid + generic lists): rounded accent selection -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="CornerRadius" Value="7"/>
+    <Setter Property="Foreground" Value="{StaticResource SkyTextPrimaryBrush}"/>
+  </Style>
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{StaticResource SkyCardBrush}"/></Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource SkyAccentTintBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SkyAccentBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
 </Styles>

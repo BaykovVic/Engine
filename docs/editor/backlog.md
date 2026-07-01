@@ -103,9 +103,12 @@
 
 ## Раскладка и тема
 
-- **Полный порт `SkyStyles.axaml`** **[UI]** — ✅ по сути сделано: тема
-  доведена до дизайна (карточки, табы, шапки, чипы, бейджи, статус-бар) в
-  `SkyTheme.axaml`; dock-chrome стилизован.
+- **Полный порт `SkyStyles.axaml`** **[UI]** — ✅ тема доведена до дизайна
+  (карточки, табы, шапки, чипы, бейджи, статус-бар, dock-chrome) + polish-пасс
+  по контролам из `SkyStyles.axaml.reference`: ComboBox, CheckBox (акцент),
+  Slider, тонкий ScrollBar, ContextMenu/MenuFlyout/FlyoutPresenter, Separator,
+  ToolTip, ListBoxItem. Полный 1:1 (переименование классов вьюх под
+  kebab-конвенцию эталона) не делался — расхождение только в именах.
 - **Докинг** **[UI]** — ✅ сделано на Dock.Avalonia: панели Hierarchy/Scene/
   Game/Inspector/Terrain/Materials/Project/Console/Packages — перетаскиваемые,
   отрываемые, группируемые вкладки; Layout → Reset Layout. Осталось:
