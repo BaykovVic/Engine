@@ -67,6 +67,12 @@
   живых данных (`PackageWorld.discoveredPackages`), Activate/Deactivate через
   `IPackageActivationService`, Refresh (rediscover). ABI `package_count/info/
   active/set_active/refresh`, панель PackagesView.
+  ✅ P1 менеджера пакетов: честный semver (`*`, `>=`, `^`, точные версии),
+  MVS-резолв по нескольким версиям одного пакета с детектом конфликтов,
+  активация тянет зависимости, состояние персистится в `Packages/sky.lock`
+  (версии + чексуммы манифестов + active) и восстанавливается при старте.
+  Дальше (P2+): источники (git/tarball) + глобальный кэш, вкладка Browse в
+  панели, учёт чексумм-дрейфа в UI, managed-код в пакетах.
 
 ## Операции со сценой
 

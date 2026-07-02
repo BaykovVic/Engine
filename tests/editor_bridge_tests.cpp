@@ -680,6 +680,65 @@ void testBridgeScriptEngineApi() {
 #endif
 }
 
+// Package activation persists (Packages/sky.lock) and pulls dependencies:
+// activating terrain-tools also activates noise-lib, and a fresh context
+// (a new editor session) comes up with both still active.
+void testBridgePackagePersistence() {
+    const auto lockPath = std::filesystem::temp_directory_path() /
+                          "sky_editor_packages" / "sky.lock";
+    std::error_code stale;
+    std::filesystem::remove(lockPath, stale); // clean slate
+
+    int32_t terrainIndex = -1;
+    int32_t noiseIndex = -1;
+    const auto findPackages = [&](SkyEditorContext* ctx) {
+        terrainIndex = noiseIndex = -1;
+        for (int32_t i = 0; i < sky_editor_package_count(ctx); ++i) {
+            char id[64] = {0};
+            sky_editor_package_info(ctx, i, 0, id, sizeof(id));
+            if (std::strcmp(id, "sky.terrain-tools") == 0) {
+                terrainIndex = i;
+            } else if (std::strcmp(id, "sky.noise-lib") == 0) {
+                noiseIndex = i;
+            }
+        }
+        CHECK(terrainIndex >= 0);
+        CHECK(noiseIndex >= 0);
+    };
+
+    {
+        SkyEditorContext* ctx = sky_editor_create();
+        findPackages(ctx);
+        CHECK(sky_editor_package_active(ctx, terrainIndex) == 0);
+        // Activating the dependent activates its dependency too.
+        sky_editor_package_set_active(ctx, terrainIndex, 1);
+        CHECK(sky_editor_package_active(ctx, terrainIndex) == 1);
+        CHECK(sky_editor_package_active(ctx, noiseIndex) == 1);
+        sky_editor_destroy(ctx);
+    }
+    {
+        // A brand-new session restores the activation state from the lock.
+        SkyEditorContext* ctx = sky_editor_create();
+        findPackages(ctx);
+        CHECK(sky_editor_package_active(ctx, terrainIndex) == 1);
+        CHECK(sky_editor_package_active(ctx, noiseIndex) == 1);
+        // Deactivation persists as well.
+        sky_editor_package_set_active(ctx, terrainIndex, 0);
+        sky_editor_package_set_active(ctx, noiseIndex, 0);
+        CHECK(sky_editor_package_active(ctx, terrainIndex) == 0);
+        sky_editor_destroy(ctx);
+    }
+    {
+        SkyEditorContext* ctx = sky_editor_create();
+        findPackages(ctx);
+        CHECK(sky_editor_package_active(ctx, terrainIndex) == 0);
+        CHECK(sky_editor_package_active(ctx, noiseIndex) == 0);
+        sky_editor_destroy(ctx);
+    }
+    // The demo packages root is shared and stable: leave no lock behind.
+    std::filesystem::remove(lockPath, stale);
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -694,5 +753,6 @@ int main() {
     testBridgeUserScripts();
     testBridgePrefabs();
     testBridgeScriptEngineApi();
+    testBridgePackagePersistence();
     return sky::test::summary("editor_bridge_tests");
 }

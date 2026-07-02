@@ -50,8 +50,6 @@ struct BridgeSession {
     bool scriptClassesLoaded = false;
     // Serializable script fields per managed class (lazy, same lifetime).
     std::map<std::string, std::vector<sky::scripting::ScriptFieldInfo>> scriptFieldCache;
-    // Active package ids (managed via the Packages panel).
-    std::vector<std::string> activePackageIds;
     // Coalesces a stream of transform edits (e.g. a gizmo drag) into a single
     // undo entry: `pendingBefore` is the local transform captured before the
     // first mutation, committed via sky_editor_commit_edit.
@@ -994,9 +992,7 @@ int32_t sky_editor_package_active(SkyEditorContext* ctx, int32_t index) {
     if (index < 0 || std::size_t(index) >= packages.size()) {
         return 0;
     }
-    const auto& id = packages[std::size_t(index)].packageId;
-    const auto& active = self(ctx)->activePackageIds;
-    return std::find(active.begin(), active.end(), id) != active.end() ? 1 : 0;
+    return ec(ctx).packageActive(packages[std::size_t(index)].packageId) ? 1 : 0;
 }
 
 void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
@@ -1006,20 +1002,16 @@ void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
         return;
     }
     const auto& manifest = packages[std::size_t(index)];
-    auto& ids = self(ctx)->activePackageIds;
-    const auto handle = ec(ctx).packages->registerPackage(manifest);
-    if (active != 0) {
-        if (ec(ctx).packages->activate(handle) &&
-            std::find(ids.begin(), ids.end(), manifest.packageId) == ids.end()) {
-            ids.push_back(manifest.packageId);
-            logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
-                   "Activated " + manifest.displayName);
-        }
-    } else {
-        ec(ctx).packages->deactivate(handle);
-        std::erase(ids, manifest.packageId);
+    // Activation resolves and activates dependencies too; the state persists
+    // in Packages/sky.lock across sessions.
+    if (ec(ctx).setPackageActive(manifest.packageId, active != 0)) {
         logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
-               "Deactivated " + manifest.displayName);
+               (active != 0 ? "Activated " : "Deactivated ") +
+                   manifest.displayName);
+    } else if (active != 0) {
+        logMsg(self(ctx), sky::core::LogLevel::Warning, "Packages",
+               "Could not activate " + manifest.displayName +
+                   " (unresolved dependencies or version conflict)");
     }
 }
 

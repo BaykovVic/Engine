@@ -149,6 +149,15 @@ public:
     bool setObjectVelocity(object::ObjectHandle object, core::Vec3 velocity);
     [[nodiscard]] core::Vec3 objectVelocity(object::ObjectHandle object) const;
 
+    /// Package activation with persistence. Activating resolves the package's
+    /// dependency graph (dependencies activate first); the resulting state is
+    /// written to Packages/sky.lock and re-applied on the next startup.
+    /// Deactivation affects only the named package.
+    bool setPackageActive(const std::string& packageId, bool active);
+    [[nodiscard]] bool packageActive(const std::string& packageId) const {
+        return activePackages_.contains(packageId);
+    }
+
     [[nodiscard]] ObjectSnapshot snapshotObject(object::ObjectHandle object) const;
     /// Rebuilds an object subtree from a snapshot (invalid parent = root).
     object::ObjectHandle restoreObject(const ObjectSnapshot& snapshot,
@@ -216,6 +225,8 @@ private:
     void resetScene();
     void reattachPhysics();
     void initScripting();
+    void applyPackageLock();
+    void writePackageLock();
     void startPlayScripts();
     void stopPlayScripts();
     /// Creates managed instances for every sky.script in a subtree, pushes
@@ -233,6 +244,10 @@ private:
     std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;
     std::unordered_set<int> keysDown_;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
+    // Active package ids and their registry handles (registered on first
+    // activation, reused after).
+    std::unordered_set<std::string> activePackages_;
+    std::unordered_map<std::string, package::PackageHandle> packageHandles_;
     // Newest Assets/Scripts source mtime at the last successful compile;
     // beginPlay recompiles when the sources moved past it.
     std::filesystem::file_time_type userScriptsStamp_{};

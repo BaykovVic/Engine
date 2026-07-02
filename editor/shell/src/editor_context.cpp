@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "sky/package/package_lock.hpp"
 #include "sky/rendering_opengl/opengl_backend.hpp"
 #include "sky/serialization/byte_stream.hpp"
 #include "sky/terrain/terrain_integration.hpp"
@@ -281,6 +282,8 @@ EditorContext::EditorContext() {
     packages->discoverPackages(packagesRoot);
     vfs->mount("packages",
                platform::createDirectoryMount(*fileSystem, packagesRoot, true), 0);
+    // Re-apply the persisted activation state (Packages/sky.lock).
+    applyPackageLock();
 
     components->registerComponentType(
         {"sky.mesh", "Mesh Renderer", false, "",
@@ -1006,6 +1009,71 @@ object::ObjectHandle EditorContext::spawnPrefabAt(const std::string& path,
         startScriptsFor(object);
     }
     return object;
+}
+
+bool EditorContext::setPackageActive(const std::string& packageId, bool active) {
+    bool changed = false;
+    if (active) {
+        // The whole dependency graph activates, dependencies first; the
+        // resolver enforces version requirements (empty result = conflict,
+        // unknown package or cycle).
+        const auto order = packages->resolve({packageId});
+        if (order.empty()) {
+            return false;
+        }
+        for (const auto& manifest : order) {
+            if (activePackages_.contains(manifest.packageId)) {
+                continue;
+            }
+            const auto [it, inserted] =
+                packageHandles_.try_emplace(manifest.packageId);
+            if (inserted) {
+                it->second = packages->registerPackage(manifest);
+            }
+            if (packages->activate(it->second)) {
+                activePackages_.insert(manifest.packageId);
+                changed = true;
+            }
+        }
+    } else {
+        const auto it = packageHandles_.find(packageId);
+        if (it == packageHandles_.end() ||
+            !activePackages_.contains(packageId) ||
+            !packages->deactivate(it->second)) {
+            return false;
+        }
+        activePackages_.erase(packageId);
+        changed = true;
+    }
+    if (changed) {
+        writePackageLock();
+    }
+    return changed;
+}
+
+void EditorContext::applyPackageLock() {
+    const auto lock = package::loadPackageLock(
+        *storage, packagesRoot / package::kPackageLockFileName);
+    if (!lock) {
+        return; // no lock yet: everything starts inactive
+    }
+    std::unordered_set<std::string> seen;
+    for (const auto& entry : *lock) {
+        if (entry.active && seen.insert(entry.packageId).second) {
+            setPackageActive(entry.packageId, true);
+        }
+    }
+}
+
+void EditorContext::writePackageLock() {
+    std::vector<package::LockedPackage> locked;
+    for (const auto& manifest : packages->discoveredPackages()) {
+        locked.push_back({manifest.packageId, manifest.version,
+                          package::manifestChecksum(manifest),
+                          activePackages_.contains(manifest.packageId)});
+    }
+    package::savePackageLock(
+        *storage, packagesRoot / package::kPackageLockFileName, locked);
 }
 
 bool EditorContext::setObjectVelocity(object::ObjectHandle object,
