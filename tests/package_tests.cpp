@@ -8,7 +8,7 @@
 namespace {
 
 std::filesystem::path packagesRoot() {
-    return std::filesystem::temp_directory_path() / "sky_engine_tests" / "packages";
+    return std::filesystem::temp_directory_path() / "sky_engine_tests" / "package" / "packages";
 }
 
 void writePackage(sky::serialization::ISerializationBackend& storage,
@@ -63,7 +63,7 @@ void testDiscoveryAndResolution() {
     CHECK(packages->extensionsByCategory("importer").empty());
 
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "package");
 }
 
 void testCycleDetection() {
@@ -78,7 +78,7 @@ void testCycleDetection() {
     CHECK(packages->resolve({"pkg.a"}).empty());
 
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "package");
 }
 
 } // namespace

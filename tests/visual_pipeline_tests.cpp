@@ -19,7 +19,7 @@
 namespace {
 
 std::filesystem::path testRoot() {
-    return std::filesystem::temp_directory_path() / "sky_engine_tests";
+    return std::filesystem::temp_directory_path() / "sky_engine_tests" / "visual_pipeline";
 }
 
 void writeText(sky::platform::IFileSystem& fileSystem,

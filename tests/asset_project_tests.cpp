@@ -66,7 +66,7 @@ void testAssetDatabase() {
 void testProjectRoundTrip() {
     const auto fileSystem = sky::platform::createStdFileSystem();
     const auto storage = sky::serialization::createFileSerializationBackend(*fileSystem);
-    const auto root = std::filesystem::temp_directory_path() / "sky_engine_tests" / "proj";
+    const auto root = std::filesystem::temp_directory_path() / "sky_engine_tests" / "asset_project" / "proj";
 
     {
         const auto repository = sky::project::createProjectRepository(*storage);
@@ -108,7 +108,7 @@ void testProjectRoundTrip() {
     }
 
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "asset_project");
 }
 
 } // namespace

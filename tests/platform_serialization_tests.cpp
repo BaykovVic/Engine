@@ -9,7 +9,7 @@
 namespace {
 
 std::filesystem::path tempDir() {
-    return std::filesystem::temp_directory_path() / "sky_engine_tests";
+    return std::filesystem::temp_directory_path() / "sky_engine_tests" / "platform_serialization";
 }
 
 void testFileSystem() {

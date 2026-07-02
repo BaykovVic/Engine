@@ -57,7 +57,7 @@ void testTerrainEditingAndHooks() {
 void testTerrainPersistence() {
     const auto fileSystem = sky::platform::createStdFileSystem();
     const auto storage = sky::serialization::createFileSerializationBackend(*fileSystem);
-    const auto path = (std::filesystem::temp_directory_path() / "sky_engine_tests" /
+    const auto path = (std::filesystem::temp_directory_path() / "sky_engine_tests" / "terrain_mapgen" /
                        "ground.skyterrain").string();
 
     {
@@ -79,7 +79,7 @@ void testTerrainPersistence() {
     }
 
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "terrain_mapgen");
 }
 
 void testGenerationDeterminism() {

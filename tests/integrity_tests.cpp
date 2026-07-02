@@ -25,7 +25,7 @@
 namespace {
 
 std::filesystem::path testRoot() {
-    return std::filesystem::temp_directory_path() / "sky_engine_tests";
+    return std::filesystem::temp_directory_path() / "sky_engine_tests" / "integrity";
 }
 
 /// Doubles the X position of every bound entity — a data-oriented system

@@ -25,7 +25,7 @@ struct SceneFixture {
 
 void testSceneRoundTrip() {
     const auto path =
-        std::filesystem::temp_directory_path() / "sky_engine_tests" / "main.scene";
+        std::filesystem::temp_directory_path() / "sky_engine_tests" / "scene" / "main.scene";
 
     // Author a scene: root -> child hierarchy with components and transforms.
     {
@@ -77,17 +77,17 @@ void testSceneRoundTrip() {
     }
 
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "scene");
 }
 
 void testLoadRejectsCorruptScene() {
     SceneFixture fx;
     const auto path =
-        std::filesystem::temp_directory_path() / "sky_engine_tests" / "bad.scene";
+        std::filesystem::temp_directory_path() / "sky_engine_tests" / "scene" / "bad.scene";
     fx.fileSystem->writeAll(path, {std::byte{0xDE}, std::byte{0xAD}});
     CHECK(!fx.scenes->loadScene(path).isValid());
     std::filesystem::remove_all(std::filesystem::temp_directory_path() /
-                                "sky_engine_tests");
+                                "sky_engine_tests" / "scene");
 }
 
 void testSceneAuthoring() {
