@@ -1177,6 +1177,18 @@ int32_t sky_editor_play_state(SkyEditorContext* ctx) {
     return static_cast<int32_t>(ec(ctx).playMode->state());
 }
 
+void sky_editor_tick_play(SkyEditorContext* ctx, double dt) {
+    auto& context = ec(ctx);
+    if (context.playMode->state() == sky::editor::PlayModeState::Playing) {
+        context.playMode->tickFrame(dt);
+        context.tickScripts(dt);
+    }
+}
+
+void sky_editor_set_key_state(SkyEditorContext* ctx, int32_t key, int32_t down) {
+    ec(ctx).setKeyDown(key, down != 0);
+}
+
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {
 #ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);

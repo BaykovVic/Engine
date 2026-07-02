@@ -54,6 +54,14 @@ public static class Bootstrap
         try { Engine.Install(apiPtr); } catch { /* isolated */ }
     }
 
+    /// <summary>Publishes frame timing before the frame's OnUpdate dispatches.</summary>
+    [UnmanagedCallersOnly]
+    public static void TickFrame(double totalSeconds, double deltaSeconds)
+    {
+        Time.TotalTime = totalSeconds;
+        Time.DeltaTime = deltaSeconds;
+    }
+
     /// <summary>Points a live script instance at the native object it drives,
     /// so its transform helpers act on that object.</summary>
     [UnmanagedCallersOnly]

@@ -37,6 +37,10 @@ public:
     /// script's transform helpers act on that object.
     virtual void setInstanceObjectId(std::uint64_t managedInstanceId,
                                      std::uint64_t objectId) = 0;
+
+    /// Publishes frame timing to the managed side (SkyEngine.Time). Call once
+    /// per play frame, before dispatching the frame's lifecycle events.
+    virtual void beginFrame(double totalSeconds, double deltaSeconds) = 0;
 };
 
 /// Returns nullptr when hostfxr cannot be located on this machine.

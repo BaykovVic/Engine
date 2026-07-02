@@ -282,6 +282,50 @@ void testBridgeScriptLog() {
 #endif
 }
 
+// Keyboard input reaches gameplay scripts: the demo Main Camera carries a
+// WasdMover (3 units/s). Holding W for one simulated second moves it +3 on Z;
+// releasing stops it. Also proves Time.DeltaTime scaling and headless play
+// stepping through sky_editor_tick_play.
+void testBridgeScriptInput() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    SkyObjectId camera = 0;
+    const int32_t roots = sky_editor_root_count(ctx);
+    for (int32_t i = 0; i < roots && camera == 0; ++i) {
+        const SkyObjectId root = sky_editor_root_at(ctx, i);
+        if (nameOf(ctx, root) == "Main Camera") {
+            camera = root;
+        }
+    }
+    CHECK(camera != 0);
+
+    float before[3] = {0};
+    sky_editor_get_transform(ctx, camera, before, nullptr, nullptr);
+
+    sky_editor_set_key_state(ctx, 'W', 1);
+    CHECK(sky_editor_play(ctx) == 1);
+    for (int i = 0; i < 60; ++i) {
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+    float held[3] = {0};
+    sky_editor_get_transform(ctx, camera, held, nullptr, nullptr);
+    CHECK(std::fabs((held[2] - before[2]) - 3.0f) < 1e-3f);
+
+    sky_editor_set_key_state(ctx, 'W', 0);
+    for (int i = 0; i < 30; ++i) {
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+    float released[3] = {0};
+    sky_editor_get_transform(ctx, camera, released, nullptr, nullptr);
+    CHECK(std::fabs(released[2] - held[2]) < 1e-4f);
+
+    sky_editor_stop(ctx);
+    sky_editor_destroy(ctx);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -290,5 +334,6 @@ int main() {
     testBridgeComponentFields();
     testBridgeViewport();
     testBridgeScriptLog();
+    testBridgeScriptInput();
     return sky::test::summary("editor_bridge_tests");
 }

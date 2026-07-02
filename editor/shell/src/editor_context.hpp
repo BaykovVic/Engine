@@ -82,6 +82,19 @@ public:
     /// playing). No-op when scripting is unavailable or nothing is scripted.
     void tickScripts(double deltaSeconds);
 
+    /// Keyboard state for gameplay scripts (portable key codes: ASCII
+    /// uppercase for letters/digits, named keys from 256 — mirrored by the
+    /// managed SkyEngine.KeyCode enum). Fed by the editor's Game view or the
+    /// player's window; read by scripts through Input.GetKey.
+    void setKeyDown(int key, bool down) {
+        if (down) {
+            keysDown_.insert(key);
+        } else {
+            keysDown_.erase(key);
+        }
+    }
+    [[nodiscard]] bool keyDown(int key) const { return keysDown_.contains(key); }
+
     /// Applies the active brush at a world-space point on the terrain.
     void applyTerrainBrush(core::Vec3 worldPoint);
     /// Terrain height (world Y) under world-space (x, z).
@@ -192,6 +205,8 @@ private:
     std::unordered_set<std::uint64_t> disabled_;
     // Live managed script instances during play: (managedInstanceId, objectId).
     std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;
+    std::unordered_set<int> keysDown_;
+    double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
     physics::RigidBodyHandle terrainBody_;
     physics::ColliderHandle terrainCollider_;
     std::uint64_t terrainVersion_ = 0;

@@ -29,6 +29,29 @@ using sky::editor::FrameBuilder;
 constexpr std::uint32_t kWidth = 960;
 constexpr std::uint32_t kHeight = 540;
 
+// Platform keysym -> the engine's portable key codes (SkyEngine.KeyCode):
+// ASCII uppercase for letters/digits, Space = 32, named keys from 256.
+int mapPlatformKey(std::int32_t keysym) {
+    if (keysym >= 'a' && keysym <= 'z') return keysym - 'a' + 'A';
+    if ((keysym >= 'A' && keysym <= 'Z') || (keysym >= '0' && keysym <= '9') ||
+        keysym == ' ') {
+        return keysym;
+    }
+    switch (keysym) { // X11 keysyms (Cocoa layer reports the same values)
+        case 0xff1b: return 256; // Escape
+        case 0xff0d: return 257; // Enter
+        case 0xff09: return 258; // Tab
+        case 0xffe1: return 259; // Shift_L
+        case 0xffe3: return 260; // Control_L
+        case 0xffe9: return 261; // Alt_L
+        case 0xff51: return 262; // Left
+        case 0xff53: return 263; // Right
+        case 0xff52: return 264; // Up
+        case 0xff54: return 265; // Down
+        default: return 0;
+    }
+}
+
 int runHeadless(EditorContext& context, int frames, const char* screenshotPath) {
     const auto renderer =
         sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
@@ -98,6 +121,14 @@ int runWindowed(EditorContext& context, int frameLimit) {
         if (event.type == sky::platform::InputEventType::KeyDown &&
             event.keyCode == 0xff1b) {
             running = false;
+        }
+        // Keyboard state feeds the gameplay scripts (Input.GetKey).
+        if (event.type == sky::platform::InputEventType::KeyDown ||
+            event.type == sky::platform::InputEventType::KeyUp) {
+            if (const int key = mapPlatformKey(event.keyCode); key != 0) {
+                context.setKeyDown(
+                    key, event.type == sky::platform::InputEventType::KeyDown);
+            }
         }
     });
 

@@ -286,6 +286,17 @@ SKY_BRIDGE_API int32_t sky_editor_play(SkyEditorContext* ctx);
 SKY_BRIDGE_API void sky_editor_pause(SkyEditorContext* ctx);
 SKY_BRIDGE_API void sky_editor_stop(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_play_state(SkyEditorContext* ctx);
+/* Advances one simulation frame (physics + scripts) without rendering — for
+ * headless stepping in tests/tools. Rendering viewports tick on their own. */
+SKY_BRIDGE_API void sky_editor_tick_play(SkyEditorContext* ctx, double dt);
+
+/* Keyboard state for gameplay scripts (Input.GetKey). Key codes are the
+ * engine's portable set: ASCII uppercase for letters/digits, Space = 32,
+ * named keys from 256 (Escape, Enter, Tab, LShift, LCtrl, LAlt, arrows).
+ * The Game view feeds this from UI key events; a lost focus should clear
+ * held keys by sending up-events. */
+SKY_BRIDGE_API void sky_editor_set_key_state(SkyEditorContext* ctx, int32_t key,
+                                             int32_t down);
 
 #ifdef __cplusplus
 }

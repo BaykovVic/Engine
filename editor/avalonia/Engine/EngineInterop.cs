@@ -156,6 +156,8 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern void sky_editor_pause(IntPtr ctx);
     [DllImport(Lib)] public static extern void sky_editor_stop(IntPtr ctx);
     [DllImport(Lib)] public static extern int sky_editor_play_state(IntPtr ctx);
+    [DllImport(Lib)] public static extern void sky_editor_tick_play(IntPtr ctx, double dt);
+    [DllImport(Lib)] public static extern void sky_editor_set_key_state(IntPtr ctx, int key, int down);
 
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)

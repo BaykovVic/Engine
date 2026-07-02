@@ -15,14 +15,22 @@ public static class Engine
     public delegate void SetVec3Fn(ulong objectId, float x, float y, float z);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void GetVec3Fn(ulong objectId, out float x, out float y, out float z);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void LogFn(int level, [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int IsKeyDownFn(int key);
 
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
     internal static LogFn? Log;
+    internal static GetVec3Fn? GetLocalPosition;
+    internal static IsKeyDownFn? IsKeyDown;
 
-    /// Layout must match the native SkyScriptApi struct (four cdecl pointers).
+    /// Layout must match the native SkyScriptApi struct (six cdecl pointers).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
     {
@@ -30,6 +38,8 @@ public static class Engine
         public IntPtr SetLocalEuler;
         public IntPtr SetLocalScale;
         public IntPtr Log;
+        public IntPtr GetLocalPosition;
+        public IntPtr IsKeyDown;
     }
 
     internal static void Install(IntPtr apiPtr)
@@ -44,5 +54,9 @@ public static class Engine
             SetLocalScale = Marshal.GetDelegateForFunctionPointer<SetVec3Fn>(api.SetLocalScale);
         if (api.Log != IntPtr.Zero)
             Log = Marshal.GetDelegateForFunctionPointer<LogFn>(api.Log);
+        if (api.GetLocalPosition != IntPtr.Zero)
+            GetLocalPosition = Marshal.GetDelegateForFunctionPointer<GetVec3Fn>(api.GetLocalPosition);
+        if (api.IsKeyDown != IntPtr.Zero)
+            IsKeyDown = Marshal.GetDelegateForFunctionPointer<IsKeyDownFn>(api.IsKeyDown);
     }
 }

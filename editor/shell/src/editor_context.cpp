@@ -55,18 +55,36 @@ void scriptLogMessage(std::int32_t level, const char* message) {
     }
 }
 
+void scriptGetLocalPosition(std::uint64_t obj, float* x, float* y, float* z) {
+    sky::core::Vec3 p{};
+    if (g_scriptObjects != nullptr) {
+        p = g_scriptObjects->localTransform(sky::object::ObjectHandle{obj}).position;
+    }
+    if (x != nullptr) *x = p.x;
+    if (y != nullptr) *y = p.y;
+    if (z != nullptr) *z = p.z;
+}
+
+std::int32_t scriptIsKeyDown(std::int32_t key) {
+    return g_scriptContext != nullptr && g_scriptContext->keyDown(key) ? 1 : 0;
+}
+
 /// Native function table handed to managed SkyEngine.Engine (layout must match
-/// the managed Api struct: four cdecl pointers).
+/// the managed Api struct: six cdecl pointers).
 struct SkyScriptApi {
     void* setLocalPosition;
     void* setLocalEuler;
     void* setLocalScale;
     void* log;
+    void* getLocalPosition;
+    void* isKeyDown;
 };
 SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptSetLocalEuler),
                          reinterpret_cast<void*>(&scriptSetLocalScale),
-                         reinterpret_cast<void*>(&scriptLogMessage)};
+                         reinterpret_cast<void*>(&scriptLogMessage),
+                         reinterpret_cast<void*>(&scriptGetLocalPosition),
+                         reinterpret_cast<void*>(&scriptIsKeyDown)};
 
 /// Populates a Unity-like demo Assets folder so the Project browser has
 /// realistic content (textures, materials, scenes) under a stable root.
@@ -351,6 +369,7 @@ void EditorContext::initScripting() {
 
 void EditorContext::startPlayScripts() {
     playScripts_.clear();
+    playTime_ = 0.0;
     if (scriptHost == nullptr) {
         return;
     }
@@ -392,6 +411,8 @@ void EditorContext::tickScripts(double deltaSeconds) {
     if (scriptHost == nullptr) {
         return;
     }
+    playTime_ += deltaSeconds;
+    scriptHost->beginFrame(playTime_, deltaSeconds);
     for (const auto& [mid, objectId] : playScripts_) {
         scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnUpdate,
                                     deltaSeconds);
@@ -762,6 +783,12 @@ void EditorContext::buildDemoScene() {
     }
 
     const auto camera = createEmpty("Main Camera");
+    // WASD moves the camera in play mode — the input demo script.
+    {
+        const auto script = components->attach(camera, "sky.script");
+        components->setField(script, "class",
+                             std::string("SkyEngine.Tests.WasdMover"));
+    }
     // Positioned behind the scene, yawed 180 degrees to face it (cameras
     // look along their local -Z).
     objects->setLocalTransform(camera,

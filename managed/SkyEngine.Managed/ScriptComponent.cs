@@ -14,6 +14,14 @@ public abstract class ScriptComponent
     protected void SetLocalPosition(float x, float y, float z) =>
         Engine.SetLocalPosition?.Invoke(Handle.Value, x, y, z);
 
+    /// <summary>The object's local position (relative to its parent).</summary>
+    protected (float X, float Y, float Z) GetLocalPosition()
+    {
+        float x = 0, y = 0, z = 0;
+        Engine.GetLocalPosition?.Invoke(Handle.Value, out x, out y, out z);
+        return (x, y, z);
+    }
+
     /// <summary>Sets the object's local rotation from Euler angles in degrees.</summary>
     protected void SetLocalEuler(float x, float y, float z) =>
         Engine.SetLocalEuler?.Invoke(Handle.Value, x, y, z);

@@ -46,6 +46,7 @@ using managed_invoke_lifecycle_fn = std::int32_t (*)(std::uint64_t id,
 using managed_get_probe_fn = std::int64_t (*)(std::uint64_t id);
 using managed_initialize_fn = void (*)(void* apiTable);
 using managed_set_object_id_fn = void (*)(std::uint64_t id, std::uint64_t objectId);
+using managed_tick_frame_fn = void (*)(double totalSeconds, double deltaSeconds);
 
 std::filesystem::path discoverHostfxr() {
     std::vector<std::filesystem::path> roots;
@@ -135,6 +136,7 @@ public:
         // Reverse-boundary entry points (present since the engine API landed).
         resolve(managedInitialize_, "Initialize");
         resolve(managedSetObjectId_, "SetObjectId");
+        resolve(managedTickFrame_, "TickFrame");
         return true;
     }
 
@@ -196,6 +198,12 @@ public:
         }
     }
 
+    void beginFrame(double totalSeconds, double deltaSeconds) override {
+        if (started_ && managedTickFrame_ != nullptr) {
+            managedTickFrame_(totalSeconds, deltaSeconds);
+        }
+    }
+
 private:
     template <typename Fn>
     bool resolve(Fn& slot, const char* methodName) {
@@ -219,6 +227,7 @@ private:
     managed_get_probe_fn managedGetProbe_ = nullptr;
     managed_initialize_fn managedInitialize_ = nullptr;
     managed_set_object_id_fn managedSetObjectId_ = nullptr;
+    managed_tick_frame_fn managedTickFrame_ = nullptr;
     bool started_ = false;
     std::vector<AssemblyRef> assemblies_;
 };
