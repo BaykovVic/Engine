@@ -176,19 +176,21 @@ std::filesystem::path resolveAssetPath(const std::string& path,
     return std::filesystem::path(path);
 }
 
-/// Newest last-write time across Assets/Scripts/*.cs (epoch when none).
+/// Newest last-write time across *.cs in the given directories (epoch when
+/// none exist).
 std::filesystem::file_time_type newestUserScriptStamp(
-    const std::filesystem::path& assetsRoot) {
+    const std::vector<std::filesystem::path>& dirs) {
     std::filesystem::file_time_type newest{};
     std::error_code ec;
-    const auto dir = assetsRoot / "Scripts";
-    if (!std::filesystem::exists(dir, ec)) {
-        return newest;
-    }
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        if (entry.path().extension() == ".cs") {
-            const auto stamp = std::filesystem::last_write_time(entry.path(), ec);
-            newest = std::max(newest, stamp);
+    for (const auto& dir : dirs) {
+        if (!std::filesystem::exists(dir, ec)) {
+            continue;
+        }
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (entry.path().extension() == ".cs") {
+                const auto stamp = std::filesystem::last_write_time(entry.path(), ec);
+                newest = std::max(newest, stamp);
+            }
         }
     }
     return newest;
@@ -438,7 +440,7 @@ void EditorContext::beginPlay() {
     }
     // Unity-style edit -> Play flow: recompile user scripts when a source
     // changed since the last successful build.
-    if (newestUserScriptStamp(assetsRoot) != userScriptsStamp_) {
+    if (newestUserScriptStamp(scriptSourceDirs()) != userScriptsStamp_) {
         reloadUserScripts();
     }
     startPlayScripts();
@@ -464,27 +466,50 @@ void EditorContext::endPlay() {
     playSnapshot_.clear();
 }
 
+std::vector<std::filesystem::path> EditorContext::scriptSourceDirs() const {
+    std::vector<std::filesystem::path> dirs{assetsRoot / "Scripts"};
+    // Active code-carrying packages contribute their Runtime folder.
+    for (const auto& [id, handle] : packageHandles_) {
+        if (activePackages_.contains(id)) {
+            dirs.push_back(packages->manifest(handle).rootPath / "Runtime");
+        }
+    }
+    return dirs;
+}
+
 bool EditorContext::reloadUserScripts() {
 #ifdef SKY_MANAGED_DIR
     if (scriptHost == nullptr) {
         return false;
     }
-    const auto scriptsDir = assetsRoot / "Scripts";
+    const auto dirs = scriptSourceDirs();
     std::error_code ec;
     std::size_t sources = 0;
-    if (std::filesystem::exists(scriptsDir, ec)) {
-        for (const auto& entry : std::filesystem::directory_iterator(scriptsDir, ec)) {
-            if (entry.path().extension() == ".cs") {
-                ++sources;
+    std::vector<std::filesystem::path> sourceDirs;
+    for (const auto& dir : dirs) {
+        std::size_t here = 0;
+        if (std::filesystem::exists(dir, ec)) {
+            for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+                if (entry.path().extension() == ".cs") {
+                    ++here;
+                }
             }
+        }
+        if (here > 0) {
+            sources += here;
+            sourceDirs.push_back(dir);
         }
     }
     if (sources == 0) {
+        // The last source went away (e.g. the only code package deactivated):
+        // drop the previously loaded user assembly too.
+        scriptHost->unloadUserAssembly();
+        userScriptsStamp_ = {};
         return false;
     }
 
     // Library/ScriptBuild next to Assets, Unity-style: a generated csproj
-    // over Assets/Scripts/*.cs referencing the engine's managed assembly.
+    // over every source directory, referencing the engine's managed assembly.
     const auto buildDir = assetsRoot.parent_path() / "Library" / "ScriptBuild";
     std::filesystem::create_directories(buildDir, ec);
     const std::filesystem::path managedDir = SKY_MANAGED_DIR;
@@ -498,10 +523,12 @@ bool EditorContext::reloadUserScripts() {
                << "    <Nullable>enable</Nullable>\n"
                << "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>\n"
                << "  </PropertyGroup>\n"
-               << "  <ItemGroup>\n"
-               << "    <Compile Include=\""
-               << (scriptsDir / "*.cs").generic_string() << "\"/>\n"
-               << "    <Reference Include=\"SkyEngine.Managed\">\n"
+               << "  <ItemGroup>\n";
+        for (const auto& dir : sourceDirs) {
+            csproj << "    <Compile Include=\""
+                   << (dir / "*.cs").generic_string() << "\"/>\n";
+        }
+        csproj << "    <Reference Include=\"SkyEngine.Managed\">\n"
                << "      <HintPath>"
                << (managedDir / "SkyEngine.Managed.dll").generic_string()
                << "</HintPath>\n"
@@ -516,17 +543,19 @@ bool EditorContext::reloadUserScripts() {
                                 "\" --nologo -v q > /dev/null 2>&1";
     if (std::system(command.c_str()) != 0) {
         if (scriptLog) {
-            scriptLog(4, "Script compilation failed (Assets/Scripts)");
+            scriptLog(4, "Script compilation failed (project + package scripts)");
         }
         return false;
     }
     const bool loaded =
         scriptHost->loadUserAssembly(outDir / "SkyProject.Scripts.dll");
     if (loaded) {
-        userScriptsStamp_ = newestUserScriptStamp(assetsRoot);
+        userScriptsStamp_ = newestUserScriptStamp(dirs);
         if (scriptLog) {
             scriptLog(2, "Compiled " + std::to_string(sources) +
-                             " user script(s) -> SkyProject.Scripts.dll");
+                             " user script(s) from " +
+                             std::to_string(sourceDirs.size()) +
+                             " source set(s) -> SkyProject.Scripts.dll");
         }
     } else if (scriptLog) {
         scriptLog(4, "Failed to load compiled user scripts");
@@ -1060,6 +1089,9 @@ bool EditorContext::setPackageActive(const std::string& packageId, bool active) 
     }
     if (changed) {
         writePackageLock();
+        // The active set defines which package Runtime/*.cs compile into the
+        // user assembly; rebuild it (no-op before scripting comes up).
+        reloadUserScripts();
     }
     return changed;
 }

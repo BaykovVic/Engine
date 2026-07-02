@@ -1005,6 +1005,11 @@ void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
     // Activation resolves and activates dependencies too; the state persists
     // in Packages/sky.lock across sessions.
     if (ec(ctx).setPackageActive(manifest.packageId, active != 0)) {
+        // Package Runtime scripts may have entered or left the user
+        // assembly: drop the cached class and field lists.
+        self(ctx)->scriptClassesLoaded = false;
+        self(ctx)->scriptClasses.clear();
+        self(ctx)->scriptFieldCache.clear();
         logMsg(self(ctx), sky::core::LogLevel::Info, "Packages",
                (active != 0 ? "Activated " : "Deactivated ") +
                    manifest.displayName);

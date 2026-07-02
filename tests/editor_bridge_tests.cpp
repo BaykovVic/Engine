@@ -787,6 +787,96 @@ void testBridgePackageInstall() {
                                 cleanup);
 }
 
+// A package that ships code: its Runtime/*.cs compile into the user assembly
+// on activation, the class appears in the picker and drives objects in play;
+// deactivation recompiles without it and the class disappears.
+void testBridgePackageCode() {
+#ifdef SKY_TEST_MANAGED
+    // Author a code-carrying package.
+    const auto base = std::filesystem::temp_directory_path() /
+                      "sky_engine_tests" / "bridge_pkg_code";
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const auto storage =
+        sky::serialization::createFileSerializationBackend(*fileSystem);
+    sky::package::PackageManifest manifest;
+    manifest.packageId = "pkg.gameplay";
+    manifest.version = "1.0.0";
+    manifest.displayName = "Gameplay Pack";
+    manifest.rootPath = base / "pkg.gameplay";
+    CHECK(sky::package::savePackageManifest(*storage, manifest));
+    std::filesystem::create_directories(manifest.rootPath / "Runtime");
+    {
+        std::ofstream source(manifest.rootPath / "Runtime" / "Riser.cs");
+        source << "namespace SkyPackages;\n"
+               << "public class Riser : SkyEngine.ScriptComponent\n"
+               << "{\n"
+               << "    public float Height = 3.0f;\n"
+               << "    public override void OnUpdate(double dt) "
+               << "{ SetLocalPosition(0.0f, Height, 0.0f); }\n"
+               << "}\n";
+    }
+
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+    CHECK(sky_editor_package_install(ctx, manifest.rootPath.string().c_str()) == 1);
+
+    const auto hasClass = [&](const char* name) {
+        for (int32_t i = 0; i < sky_editor_script_class_count(ctx); ++i) {
+            char buffer[128] = {0};
+            sky_editor_script_class_name(ctx, i, buffer, sizeof(buffer));
+            if (std::strcmp(buffer, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto setActive = [&](int32_t active) {
+        for (int32_t i = 0; i < sky_editor_package_count(ctx); ++i) {
+            char id[64] = {0};
+            sky_editor_package_info(ctx, i, 0, id, sizeof(id));
+            if (std::strcmp(id, "pkg.gameplay") == 0) {
+                sky_editor_package_set_active(ctx, i, active);
+                return;
+            }
+        }
+        CHECK(false);
+    };
+
+    CHECK(!hasClass("SkyPackages.Riser")); // inactive: not compiled in
+    setActive(1);
+    CHECK(hasClass("SkyPackages.Riser"));
+
+    // The package class works like any script: attach, play, it moves things.
+    const SkyObjectId cube =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Risen");
+    attachScript(ctx, cube, "SkyPackages.Riser");
+    CHECK(sky_editor_play(ctx) == 1);
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+    float position[3] = {0};
+    sky_editor_get_transform(ctx, cube, position, nullptr, nullptr);
+    CHECK(std::fabs(position[1] - 3.0f) < 1e-4f);
+    sky_editor_stop(ctx);
+
+    // Deactivation recompiles without the package: the class is gone.
+    setActive(0);
+    CHECK(!hasClass("SkyPackages.Riser"));
+
+    sky_editor_destroy(ctx);
+    // Shared demo roots: leave nothing behind.
+    std::error_code cleanup;
+    std::filesystem::remove_all(base, cleanup);
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                    "sky_editor_packages" / "pkg.gameplay-1.0.0",
+                                cleanup);
+    std::filesystem::remove(std::filesystem::temp_directory_path() /
+                                "sky_editor_packages" / "sky.lock",
+                            cleanup);
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                    "sky_editor_pkg_cache",
+                                cleanup);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -803,5 +893,6 @@ int main() {
     testBridgeScriptEngineApi();
     testBridgePackagePersistence();
     testBridgePackageInstall();
+    testBridgePackageCode();
     return sky::test::summary("editor_bridge_tests");
 }

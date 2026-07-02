@@ -89,6 +89,17 @@ public static class Bootstrap
         }
     }
 
+    /// <summary>Unloads the user-scripts assembly (its collectible context
+    /// goes away). Used when the last user script source disappears — e.g.
+    /// deactivating the only code-carrying package.</summary>
+    [UnmanagedCallersOnly]
+    public static void UnloadUserAssembly()
+    {
+        _userContext?.Unload();
+        _userContext = null;
+        _userAssembly = null;
+    }
+
     /// <summary>Installs the native engine API (reverse-call function table).</summary>
     [UnmanagedCallersOnly]
     public static void Initialize(IntPtr apiPtr)

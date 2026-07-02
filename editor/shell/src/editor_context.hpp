@@ -232,6 +232,9 @@ private:
     void resetScene();
     void reattachPhysics();
     void initScripting();
+    /// Every directory user script sources come from: the project's
+    /// Assets/Scripts plus each active package's Runtime folder.
+    [[nodiscard]] std::vector<std::filesystem::path> scriptSourceDirs() const;
     void applyPackageLock();
     void writePackageLock();
     void startPlayScripts();
