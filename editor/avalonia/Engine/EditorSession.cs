@@ -320,6 +320,7 @@ public sealed class ProjectEntry
         var ext = System.IO.Path.GetExtension(Name).ToLowerInvariant();
         Glyph = IsDirectory ? "IconFolder"
             : ext is ".png" or ".jpg" or ".jpeg" or ".tga" or ".bmp" or ".raw" ? "IconImage"
+            : ext is ".skyprefab" ? "IconMesh"
             : "IconFile";
     }
 
@@ -439,6 +440,16 @@ public sealed class EditorSession : IDisposable
     public ulong CreateModel(string name, string meshRef)
     {
         var id = EngineInterop.sky_editor_create_mesh_object(_ctx, name, meshRef);
+        Reload();
+        return id;
+    }
+
+    public bool SavePrefab(ulong id, string path) =>
+        EngineInterop.sky_editor_save_prefab(_ctx, id, path) == 1;
+
+    public ulong InstantiatePrefab(string path)
+    {
+        var id = EngineInterop.sky_editor_instantiate_prefab(_ctx, path);
         Reload();
         return id;
     }

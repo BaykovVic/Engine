@@ -391,6 +391,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         e is { IsDirectory: false } &&
         Array.Exists(ModelExts, x => e.Name.ToLowerInvariant().EndsWith(x));
 
+    public bool IsPrefabAsset(ProjectEntry? e) =>
+        e is { IsDirectory: false } &&
+        e.Name.ToLowerInvariant().EndsWith(".skyprefab");
+
     /// The VFS reference for a Project entry in the current folder, e.g.
     /// "assets://Models/ship.fbx".
     public string AssetRefFor(ProjectEntry e)
@@ -406,6 +410,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (string.IsNullOrEmpty(assetRef)) return;
         var name = EditorSession.MeshDisplayName(assetRef);
         SelectById(_session.CreateModel(name, assetRef));
+    }
+
+    /// Instantiates a .skyprefab dragged from the Project panel.
+    public void InstantiatePrefabFromAsset(string assetRef)
+    {
+        if (string.IsNullOrEmpty(assetRef)) return;
+        SelectById(_session.InstantiatePrefab(assetRef));
+    }
+
+    /// Saves the selected object (with children, components and physics
+    /// binding) as Assets/Prefabs/<Name>.skyprefab.
+    public void SaveSelectedAsPrefab()
+    {
+        if (SelectedObject == null) return;
+        var safe = string.Join("_", SelectedObject.Name.Split(
+            System.IO.Path.GetInvalidFileNameChars(),
+            StringSplitOptions.RemoveEmptyEntries)).Replace(' ', '_');
+        if (safe.Length == 0) safe = "Prefab";
+        _session.SavePrefab(SelectedObject.Id, $"assets://Prefabs/{safe}.skyprefab");
     }
 
     public void OpenProjectEntry(ProjectEntry? entry)

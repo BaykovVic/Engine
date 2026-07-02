@@ -493,6 +493,72 @@ void testBridgeUserScripts() {
 #endif
 }
 
+std::string componentField(SkyEditorContext* ctx, SkyObjectId object,
+                           const char* typeId, int32_t fieldIndex) {
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, typeId) == 0) {
+            char value[256] = {0};
+            sky_editor_component_field_value(ctx, object, i, fieldIndex, value,
+                                             sizeof(value));
+            return value;
+        }
+    }
+    return {};
+}
+
+// Prefabs: saving the demo pyramid captures its components, fields and
+// transform; instantiating rebuilds an identical object (undoable).
+void testBridgePrefabs() {
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    SkyObjectId pyramid = 0;
+    for (int32_t i = 0; i < sky_editor_root_count(ctx) && pyramid == 0; ++i) {
+        const SkyObjectId root = sky_editor_root_at(ctx, i);
+        if (nameOf(ctx, root) == "Pyramid (obj)") {
+            pyramid = root;
+        }
+    }
+    CHECK(pyramid != 0);
+
+    const auto path = std::filesystem::temp_directory_path() /
+                      "sky_engine_tests" / "bridge_prefab" / "pyramid.skyprefab";
+    std::filesystem::create_directories(path.parent_path());
+    CHECK(sky_editor_save_prefab(ctx, pyramid, path.string().c_str()) == 1);
+
+    const int32_t rootsBefore = sky_editor_root_count(ctx);
+    const SkyObjectId copy =
+        sky_editor_instantiate_prefab(ctx, path.string().c_str());
+    CHECK(copy != 0);
+    CHECK(copy != pyramid);
+    CHECK(sky_editor_root_count(ctx) == rootsBefore + 1);
+    CHECK(nameOf(ctx, copy) == "Pyramid (obj)");
+
+    // Components and authored fields round-trip: mesh ref, material, script.
+    CHECK(hasComponent(ctx, copy, "sky.mesh"));
+    CHECK(hasComponent(ctx, copy, "sky.script"));
+    CHECK(componentField(ctx, copy, "sky.mesh", 1) ==
+          "assets://Models/pyramid.obj");
+    CHECK(componentField(ctx, copy, "sky.script", 0) == "SkyEngine.Tests.Rotator");
+    float scale[3] = {0};
+    sky_editor_get_transform(ctx, copy, nullptr, nullptr, scale);
+    CHECK(std::fabs(scale[0] - 1.4f) < 1e-5f);
+
+    // Instantiation is one undo step.
+    CHECK(sky_editor_undo(ctx) == 1);
+    CHECK(sky_editor_object_exists(ctx, copy) == 0);
+    CHECK(sky_editor_root_count(ctx) == rootsBefore);
+
+    // A bad file fails cleanly.
+    CHECK(sky_editor_instantiate_prefab(ctx, "/nonexistent.skyprefab") == 0);
+
+    sky_editor_destroy(ctx);
+    std::error_code cleanup;
+    std::filesystem::remove_all(path.parent_path(), cleanup);
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -505,5 +571,6 @@ int main() {
     testBridgeScriptClasses();
     testBridgeScriptFields();
     testBridgeUserScripts();
+    testBridgePrefabs();
     return sky::test::summary("editor_bridge_tests");
 }

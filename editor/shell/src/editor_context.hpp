@@ -133,6 +133,12 @@ public:
     /// keeping the scene root list consistent.
     void reparent(object::ObjectHandle child, object::ObjectHandle newParent);
 
+    /// Prefabs: a .skyprefab is a serialized object subtree (SKYP over the
+    /// same lossless ObjectSnapshot undo/delete use). Paths accept plain
+    /// filesystem paths or "assets://" VFS references.
+    bool savePrefab(object::ObjectHandle object, const std::string& path);
+    object::ObjectHandle instantiatePrefab(const std::string& path);
+
     [[nodiscard]] ObjectSnapshot snapshotObject(object::ObjectHandle object) const;
     /// Rebuilds an object subtree from a snapshot (invalid parent = root).
     object::ObjectHandle restoreObject(const ObjectSnapshot& snapshot,

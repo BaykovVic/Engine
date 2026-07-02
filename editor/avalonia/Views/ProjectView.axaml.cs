@@ -46,7 +46,7 @@ public partial class ProjectView : UserControl
         var main = (DataContext as EditorTool)?.Main;
         var entry = _pressEntry;
         _pressEntry = null;
-        if (main == null || !main.IsModelAsset(entry))
+        if (main == null || (!main.IsModelAsset(entry) && !main.IsPrefabAsset(entry)))
             return;
 
         var data = new DataObject();

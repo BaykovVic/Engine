@@ -24,6 +24,8 @@
         <MenuItem Header="Create Cube" Click="OnCreateCube"/>
         <MenuItem Header="Duplicate" Click="OnDuplicate" InputGesture="Ctrl+D"/>
         <MenuItem Header="Delete" Click="OnDelete" InputGesture="Delete"/>
+        <Separator/>
+        <MenuItem Header="Save as Prefab" Click="OnSaveAsPrefab"/>
       </MenuItem>
       <MenuItem Header="Window"/><MenuItem Header="Help"/>
     </Menu>

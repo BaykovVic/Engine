@@ -115,6 +115,7 @@ public partial class MainWindow : Window
     private void OnCreateCube(object? sender, RoutedEventArgs e) => _vm.CreateCube();
     private void OnDuplicate(object? sender, RoutedEventArgs e) => _vm.DuplicateSelected();
     private void OnDelete(object? sender, RoutedEventArgs e) => _vm.DeleteSelected();
+    private void OnSaveAsPrefab(object? sender, RoutedEventArgs e) => _vm.SaveSelectedAsPrefab();
     private void OnPlay(object? sender, RoutedEventArgs e) => _vm.Play();
     private void OnPause(object? sender, RoutedEventArgs e) => _vm.Pause();
     private void OnStop(object? sender, RoutedEventArgs e) => _vm.Stop();

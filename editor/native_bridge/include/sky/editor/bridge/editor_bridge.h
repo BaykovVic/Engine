@@ -114,6 +114,15 @@ SKY_BRIDGE_API SkyObjectId sky_editor_create_mesh_object(SkyEditorContext* ctx,
 /* Scene document lifecycle. new_scene clears to an empty scene; save_scene
  * writes the object graph to a .skybox (SKYB); open_scene replaces the scene
  * from a file. save/open return 1 on success, 0 on failure. */
+/* Prefabs: save writes an object subtree (with components, fields and
+ * physics binding) to a .skyprefab; instantiate rebuilds it as a scene root
+ * (undoable). Paths may be plain or "assets://..." VFS references. */
+SKY_BRIDGE_API int32_t sky_editor_save_prefab(SkyEditorContext* ctx,
+                                              SkyObjectId object,
+                                              const char* path);
+SKY_BRIDGE_API SkyObjectId sky_editor_instantiate_prefab(SkyEditorContext* ctx,
+                                                         const char* path);
+
 /* Renames an object (undoable). */
 SKY_BRIDGE_API void sky_editor_rename_object(SkyEditorContext* ctx,
                                              SkyObjectId object, const char* name);

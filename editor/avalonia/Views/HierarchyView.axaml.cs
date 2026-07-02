@@ -32,7 +32,12 @@ public partial class HierarchyView : UserControl
     private void OnDrop(object? sender, DragEventArgs e)
     {
         if (e.Data.Get(ProjectView.AssetRefFormat) is string assetRef)
-            Vm?.CreateModelFromAsset(assetRef);
+        {
+            if (assetRef.ToLowerInvariant().EndsWith(".skyprefab"))
+                Vm?.InstantiatePrefabFromAsset(assetRef);
+            else
+                Vm?.CreateModelFromAsset(assetRef);
+        }
         e.Handled = true;
     }
 }

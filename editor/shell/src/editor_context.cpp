@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "sky/rendering_opengl/opengl_backend.hpp"
+#include "sky/serialization/byte_stream.hpp"
 #include "sky/terrain/terrain_integration.hpp"
 
 namespace {
@@ -86,6 +87,17 @@ SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptLogMessage),
                          reinterpret_cast<void*>(&scriptGetLocalPosition),
                          reinterpret_cast<void*>(&scriptIsKeyDown)};
+
+/// Resolves an "assets://" VFS reference against the Assets root; plain
+/// filesystem paths pass through unchanged.
+std::filesystem::path resolveAssetPath(const std::string& path,
+                                       const std::filesystem::path& assetsRoot) {
+    constexpr const char* kPrefix = "assets://";
+    if (path.rfind(kPrefix, 0) == 0) {
+        return assetsRoot / path.substr(std::string(kPrefix).size());
+    }
+    return std::filesystem::path(path);
+}
 
 /// Newest last-write time across Assets/Scripts/*.cs (epoch when none).
 std::filesystem::file_time_type newestUserScriptStamp(
@@ -684,6 +696,180 @@ std::size_t EditorContext::generateTerrain(std::uint64_t seed) {
         roots_.push_back(object);
     }
     return generatedObjects_.size();
+}
+
+namespace {
+
+constexpr std::uint32_t kPrefabMagic = 0x50594B53;   // "SKYP"
+constexpr std::uint32_t kPrefabVersion = 1;
+
+void writeSnapshot(serialization::ByteWriter& writer, const ObjectSnapshot& s) {
+    writer.writeString(s.name);
+    for (const float v : {s.local.position.x, s.local.position.y, s.local.position.z,
+                          s.local.rotation.x, s.local.rotation.y, s.local.rotation.z,
+                          s.local.rotation.w, s.local.scale.x, s.local.scale.y,
+                          s.local.scale.z}) {
+        writer.writeF32(v);
+    }
+    writer.writeU32(s.hasPhysicsBody ? 1 : 0);
+    writer.writeU32(static_cast<std::uint32_t>(s.components.size()));
+    for (const auto& comp : s.components) {
+        writer.writeString(comp.typeId);
+        writer.writeU32(static_cast<std::uint32_t>(comp.fields.size()));
+        for (const auto& [name, value] : comp.fields) {
+            writer.writeString(name);
+            writer.writeU32(static_cast<std::uint32_t>(value.index()));
+            std::visit(
+                [&writer](const auto& x) {
+                    using T = std::decay_t<decltype(x)>;
+                    if constexpr (std::is_same_v<T, float>) {
+                        writer.writeF32(x);
+                    } else if constexpr (std::is_same_v<T, std::int64_t>) {
+                        writer.writeU64(static_cast<std::uint64_t>(x));
+                    } else if constexpr (std::is_same_v<T, bool>) {
+                        writer.writeU32(x ? 1 : 0);
+                    } else if constexpr (std::is_same_v<T, std::string>) {
+                        writer.writeString(x);
+                    } else {
+                        writer.writeF32(x.x);
+                        writer.writeF32(x.y);
+                        writer.writeF32(x.z);
+                    }
+                },
+                value);
+        }
+    }
+    writer.writeU32(static_cast<std::uint32_t>(s.children.size()));
+    for (const auto& child : s.children) {
+        writeSnapshot(writer, child);
+    }
+}
+
+bool readSnapshot(serialization::ByteReader& reader, ObjectSnapshot& out) {
+    const auto name = reader.readString();
+    if (!name) {
+        return false;
+    }
+    out.name = *name;
+    float values[10] = {};
+    for (float& v : values) {
+        const auto f = reader.readF32();
+        if (!f) {
+            return false;
+        }
+        v = *f;
+    }
+    out.local.position = {values[0], values[1], values[2]};
+    out.local.rotation = {values[3], values[4], values[5], values[6]};
+    out.local.scale = {values[7], values[8], values[9]};
+    const auto hasBody = reader.readU32();
+    const auto componentCount = reader.readU32();
+    if (!hasBody || !componentCount) {
+        return false;
+    }
+    out.hasPhysicsBody = *hasBody != 0;
+    for (std::uint32_t c = 0; c < *componentCount; ++c) {
+        ComponentSnapshot comp;
+        const auto typeId = reader.readString();
+        const auto fieldCount = reader.readU32();
+        if (!typeId || !fieldCount) {
+            return false;
+        }
+        comp.typeId = *typeId;
+        for (std::uint32_t f = 0; f < *fieldCount; ++f) {
+            const auto fieldName = reader.readString();
+            const auto kind = reader.readU32();
+            if (!fieldName || !kind) {
+                return false;
+            }
+            component::FieldValue value;
+            switch (*kind) {
+                case 0: {
+                    const auto v = reader.readF32();
+                    if (!v) return false;
+                    value = *v;
+                    break;
+                }
+                case 1: {
+                    const auto v = reader.readU64();
+                    if (!v) return false;
+                    value = static_cast<std::int64_t>(*v);
+                    break;
+                }
+                case 2: {
+                    const auto v = reader.readU32();
+                    if (!v) return false;
+                    value = *v != 0;
+                    break;
+                }
+                case 3: {
+                    const auto v = reader.readString();
+                    if (!v) return false;
+                    value = *v;
+                    break;
+                }
+                case 4: {
+                    const auto x = reader.readF32();
+                    const auto y = reader.readF32();
+                    const auto z = reader.readF32();
+                    if (!x || !y || !z) return false;
+                    value = core::Vec3{*x, *y, *z};
+                    break;
+                }
+                default:
+                    return false;
+            }
+            comp.fields.emplace(*fieldName, std::move(value));
+        }
+        out.components.push_back(std::move(comp));
+    }
+    const auto childCount = reader.readU32();
+    if (!childCount) {
+        return false;
+    }
+    for (std::uint32_t i = 0; i < *childCount; ++i) {
+        ObjectSnapshot child;
+        if (!readSnapshot(reader, child)) {
+            return false;
+        }
+        out.children.push_back(std::move(child));
+    }
+    return true;
+}
+
+} // namespace
+
+bool EditorContext::savePrefab(object::ObjectHandle object,
+                               const std::string& path) {
+    if (!objects->exists(object)) {
+        return false;
+    }
+    serialization::ByteWriter writer;
+    writer.writeU32(kPrefabMagic);
+    writer.writeU32(kPrefabVersion);
+    writeSnapshot(writer, snapshotObject(object));
+
+    const auto resolved = resolveAssetPath(path, assetsRoot);
+    fileSystem->createDirectories(resolved.parent_path());
+    return fileSystem->writeAll(resolved, writer.buffer());
+}
+
+object::ObjectHandle EditorContext::instantiatePrefab(const std::string& path) {
+    const auto bytes = fileSystem->readAll(resolveAssetPath(path, assetsRoot));
+    if (!bytes) {
+        return object::ObjectHandle::invalid();
+    }
+    serialization::ByteReader reader(*bytes);
+    const auto magic = reader.readU32();
+    const auto version = reader.readU32();
+    if (!magic || *magic != kPrefabMagic || !version || *version > kPrefabVersion) {
+        return object::ObjectHandle::invalid();
+    }
+    ObjectSnapshot snapshot;
+    if (!readSnapshot(reader, snapshot)) {
+        return object::ObjectHandle::invalid();
+    }
+    return restoreObject(snapshot, object::ObjectHandle::invalid());
 }
 
 ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const {

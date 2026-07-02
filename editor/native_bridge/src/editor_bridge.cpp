@@ -862,6 +862,37 @@ int32_t sky_editor_open_scene(SkyEditorContext* ctx, const char* path) {
     return ok ? 1 : 0;
 }
 
+int32_t sky_editor_save_prefab(SkyEditorContext* ctx, SkyObjectId object,
+                               const char* path) {
+    if (path == nullptr) {
+        return 0;
+    }
+    const bool ok = ec(ctx).savePrefab(handle(object), path);
+    logMsg(self(ctx), ok ? sky::core::LogLevel::Info : sky::core::LogLevel::Error,
+           "Prefab",
+           ok ? "Saved " + std::string(path)
+              : "Failed to save " + std::string(path));
+    return ok ? 1 : 0;
+}
+
+SkyObjectId sky_editor_instantiate_prefab(SkyEditorContext* ctx, const char* path) {
+    if (path == nullptr) {
+        return 0;
+    }
+    commitTransform(self(ctx));
+    const auto created = ec(ctx).instantiatePrefab(path);
+    if (!created.isValid()) {
+        logMsg(self(ctx), sky::core::LogLevel::Error, "Prefab",
+               "Failed to instantiate " + std::string(path));
+        return 0;
+    }
+    self(ctx)->undo->push(
+        sky::editor::makeCreateSnapshotCommand(ec(ctx), created));
+    logMsg(self(ctx), sky::core::LogLevel::Info, "Prefab",
+           "Instantiated " + ec(ctx).objects->nameOf(created));
+    return created.value;
+}
+
 SkyObjectId sky_editor_duplicate(SkyEditorContext* ctx, SkyObjectId object) {
     commitTransform(self(ctx));
     const auto copy = ec(ctx).duplicateObject(handle(object));
