@@ -438,6 +438,10 @@ void testBridgeUserScripts() {
     sky_editor_assets_root(ctx, root, sizeof(root));
     CHECK(root[0] != '\0');
     const std::filesystem::path scriptsDir = std::filesystem::path(root) / "Scripts";
+    // The demo assets root is stable across runs: clear anything an earlier
+    // interrupted run left behind before authoring this test's script.
+    std::error_code stale;
+    std::filesystem::remove_all(scriptsDir, stale);
     std::filesystem::create_directories(scriptsDir);
     {
         std::ofstream source(scriptsDir / "Lifter.cs");

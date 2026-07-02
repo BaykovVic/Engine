@@ -10,7 +10,8 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 lightVec[4];   // direction (directional) or position (point)
     vec4 lightColor[4]; // rgb premultiplied by intensity
     vec4 lightMeta[4];  // x = type (0 dir, 1 point), y = range
-    vec4 counts;        // x = light count
+    vec4 counts;        // x = light count, y = shadows on, z = shadow light
+    mat4 lightViewProjection;
 } frame;
 
 layout(push_constant) uniform Push {

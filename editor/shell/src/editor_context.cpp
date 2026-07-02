@@ -132,7 +132,11 @@ void populateDemoAssets(const std::filesystem::path& root) {
     touch(root / "Textures" / "heightmap.raw");
     touch(root / "Materials" / "Grassland.mat");
     touch(root / "Materials" / "Cliff Rock.mat");
-    touch(root / "Scripts" / "TerrainStreamer.cs");
+    // Note: no Scripts fixture — anything under Assets/Scripts is compiled as
+    // real user code at startup, so the demo must not plant placeholder .cs
+    // files there.
+    std::error_code ec;
+    std::filesystem::remove(root / "Scripts" / "TerrainStreamer.cs", ec);
 }
 
 // The demo terrain: a 48x48 heightfield centred on the world origin.

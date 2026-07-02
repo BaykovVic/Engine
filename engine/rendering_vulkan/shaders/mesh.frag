@@ -14,7 +14,8 @@ layout(set = 0, binding = 0) uniform Frame {
     vec4 lightVec[4];
     vec4 lightColor[4];
     vec4 lightMeta[4];
-    vec4 counts;
+    vec4 counts;       // x = light count, y = shadows on, z = shadow light
+    mat4 lightViewProjection;
 } frame;
 
 layout(set = 1, binding = 0) uniform sampler2D uAlbedo;
@@ -23,6 +24,7 @@ layout(set = 3, binding = 0) uniform sampler2D uRoughnessMap;
 layout(set = 4, binding = 0) uniform sampler2D uMetallicMap;
 layout(set = 5, binding = 0) uniform sampler2D uOcclusionMap;
 layout(set = 6, binding = 0) uniform sampler2D uHeightMap;
+layout(set = 7, binding = 0) uniform sampler2D uShadowMap;
 
 layout(push_constant) uniform Push {
     mat4 model;
@@ -49,6 +51,28 @@ float geometrySchlick(float ndv, float rough) {
 }
 vec3 fresnelSchlick(float vdh, vec3 f0) {
     return f0 + (1.0 - f0) * pow(clamp(1.0 - vdh, 0.0, 1.0), 5.0);
+}
+
+// 3x3 PCF visibility of a world point in the directional shadow map
+// (1 = fully lit). Points outside the light's ortho box count as lit.
+float shadowVisibility(vec3 worldPos, float ndl) {
+    vec4 lightClip = frame.lightViewProjection * vec4(worldPos, 1.0);
+    vec3 ndc = lightClip.xyz / lightClip.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
+        ndc.z < 0.0 || ndc.z > 1.0) {
+        return 1.0;
+    }
+    float bias = max(0.0025 * (1.0 - ndl), 0.0006);
+    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    float sum = 0.0;
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float depth = texture(uShadowMap, uv + vec2(x, y) * texel).r;
+            sum += (ndc.z - bias) > depth ? 0.0 : 1.0;
+        }
+    }
+    return sum / 9.0;
 }
 
 void main() {
@@ -127,7 +151,10 @@ void main() {
         vec3 spec = (d * g * f) / max(4.0 * ndv * ndl, 1e-4);
         vec3 kd = (vec3(1.0) - f) * (1.0 - metal);
         vec3 radiance = frame.lightColor[i].rgb * attenuation;
-        lo += (kd * albedo + spec) * radiance * ndl;
+        float visibility = (frame.counts.y > 0.5 && i == int(frame.counts.z))
+                               ? shadowVisibility(vWorldPos, ndl)
+                               : 1.0;
+        lo += (kd * albedo + spec) * radiance * ndl * visibility;
     }
     vec3 ambient = albedo * ao * 0.22;
     fragColor = vec4(ambient + lo + pc.emissive.rgb, 1.0);
