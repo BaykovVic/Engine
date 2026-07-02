@@ -82,6 +82,13 @@ public:
     /// playing). No-op when scripting is unavailable or nothing is scripted.
     void tickScripts(double deltaSeconds);
 
+    /// Compiles the project's user scripts (Assets/Scripts/*.cs) into
+    /// SkyProject.Scripts.dll and (re)loads it into the script host. False
+    /// when there are no scripts, no .NET, or the build failed (the failure
+    /// is reported through scriptLog). beginPlay recompiles automatically
+    /// when a source changed since the last successful build.
+    bool reloadUserScripts();
+
     /// Keyboard state for gameplay scripts (portable key codes: ASCII
     /// uppercase for letters/digits, named keys from 256 — mirrored by the
     /// managed SkyEngine.KeyCode enum). Fed by the editor's Game view or the
@@ -207,6 +214,9 @@ private:
     std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;
     std::unordered_set<int> keysDown_;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
+    // Newest Assets/Scripts source mtime at the last successful compile;
+    // beginPlay recompiles when the sources moved past it.
+    std::filesystem::file_time_type userScriptsStamp_{};
     physics::RigidBodyHandle terrainBody_;
     physics::ColliderHandle terrainCollider_;
     std::uint64_t terrainVersion_ = 0;

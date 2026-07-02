@@ -87,6 +87,9 @@ target_link_libraries(editor_bridge_tests PRIVATE sky::editor_bridge sky::engine
 if(TARGET sky_managed)
     # The bridge hosts .NET in this build: the script-log case can run.
     target_compile_definitions(editor_bridge_tests PRIVATE SKY_TEST_MANAGED)
+    # The user-scripts case runs dotnet build and mutates the shared demo
+    # assets root; keep it off the parallel schedule.
+    set_tests_properties(editor_bridge_tests PROPERTIES RUN_SERIAL ON)
 endif()
 find_package(X11 QUIET)
 if(X11_FOUND)

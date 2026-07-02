@@ -24,6 +24,11 @@ public static class Bootstrap
     private static readonly List<Assembly> LoadedAssemblies = new();
     private static ulong _nextId = 1;
 
+    // The user-scripts assembly lives in its own collectible load context, so
+    // recompiling the project's scripts can swap it between play sessions.
+    private static AssemblyLoadContext? _userContext;
+    private static Assembly? _userAssembly;
+
     [UnmanagedCallersOnly]
     public static int LoadAssembly(IntPtr pathUtf8)
     {
@@ -39,6 +44,43 @@ public static class Bootstrap
             var context = AssemblyLoadContext.GetLoadContext(typeof(Bootstrap).Assembly)
                           ?? AssemblyLoadContext.Default;
             LoadedAssemblies.Add(context.LoadFromAssemblyPath(Path.GetFullPath(path)));
+            return 1;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Loads (or replaces) the project's compiled user-scripts
+    /// assembly. Read into memory and hosted in a collectible load context:
+    /// the file stays unlocked and a recompile swaps the old code out. Engine
+    /// types resolve back to this assembly's context, so ScriptComponent
+    /// keeps one identity.</summary>
+    [UnmanagedCallersOnly]
+    public static int LoadUserAssembly(IntPtr pathUtf8)
+    {
+        try
+        {
+            var path = Marshal.PtrToStringUTF8(pathUtf8);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return 0;
+            }
+            var bootstrapContext = AssemblyLoadContext.GetLoadContext(typeof(Bootstrap).Assembly)
+                                   ?? AssemblyLoadContext.Default;
+            var context = new AssemblyLoadContext("SkyUserScripts", isCollectible: true);
+            context.Resolving += (_, name) =>
+            {
+                try { return bootstrapContext.LoadFromAssemblyName(name); }
+                catch { return null; }
+            };
+            using var stream = new MemoryStream(File.ReadAllBytes(Path.GetFullPath(path)));
+            var assembly = context.LoadFromStream(stream);
+
+            _userContext?.Unload();
+            _userContext = context;
+            _userAssembly = assembly;
             return 1;
         }
         catch
@@ -147,6 +189,10 @@ public static class Bootstrap
         {
             var names = new List<string>();
             var assemblies = new List<Assembly>(LoadedAssemblies) { typeof(Bootstrap).Assembly };
+            if (_userAssembly != null)
+            {
+                assemblies.Add(_userAssembly);
+            }
             foreach (var assembly in assemblies)
             {
                 foreach (var type in assembly.GetTypes())
@@ -282,6 +328,11 @@ public static class Bootstrap
 
     private static Type? ResolveType(string typeName)
     {
+        // User scripts win: a project class shadows same-named engine samples.
+        if (_userAssembly?.GetType(typeName) is { } userType)
+        {
+            return userType;
+        }
         var type = Type.GetType(typeName);
         if (type != null)
         {

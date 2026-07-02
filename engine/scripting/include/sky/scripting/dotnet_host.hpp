@@ -64,6 +64,11 @@ public:
     virtual bool setInstanceField(std::uint64_t managedInstanceId,
                                   const std::string& name,
                                   const std::string& value) = 0;
+
+    /// Loads (or replaces) the project's compiled user-scripts assembly. It
+    /// lives in a collectible load context, so recompiling swaps it between
+    /// play sessions; user classes shadow engine samples in type resolution.
+    virtual bool loadUserAssembly(const std::filesystem::path& path) = 0;
 };
 
 /// Returns nullptr when hostfxr cannot be located on this machine.

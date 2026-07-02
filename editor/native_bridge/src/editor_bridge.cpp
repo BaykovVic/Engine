@@ -374,6 +374,21 @@ int32_t sky_editor_available_type_category(SkyEditorContext* ctx, int32_t index,
     return copyString(types[std::size_t(index)].category, buffer, capacity);
 }
 
+int32_t sky_editor_assets_root(SkyEditorContext* ctx, char* buffer,
+                               int32_t capacity) {
+    return copyString(ec(ctx).assetsRoot.string(), buffer, capacity);
+}
+
+int32_t sky_editor_reload_scripts(SkyEditorContext* ctx) {
+    auto* session = self(ctx);
+    const bool ok = session->context.reloadUserScripts();
+    // The managed surface may have changed: re-query classes and fields.
+    session->scriptClassesLoaded = false;
+    session->scriptClasses.clear();
+    session->scriptFieldCache.clear();
+    return ok ? 1 : 0;
+}
+
 int32_t sky_editor_script_class_count(SkyEditorContext* ctx) {
     return static_cast<int32_t>(scriptClasses(self(ctx)).size());
 }
@@ -1294,6 +1309,10 @@ int32_t sky_editor_play(SkyEditorContext* ctx) {
     const bool ok = context.playMode->play();
     if (ok && entering) {
         context.beginPlay();
+        // beginPlay may have recompiled user scripts; drop stale class caches.
+        self(ctx)->scriptClassesLoaded = false;
+        self(ctx)->scriptClasses.clear();
+        self(ctx)->scriptFieldCache.clear();
         logMsg(self(ctx), sky::core::LogLevel::Info, "Play", "Entered play mode");
     }
     return ok ? 1 : 0;

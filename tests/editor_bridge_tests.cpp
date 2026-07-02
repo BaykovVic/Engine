@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include <X11/Xlib.h>
@@ -424,6 +426,73 @@ void testBridgeScriptFields() {
 #endif
 }
 
+// User scripts, the full project workflow: author a .cs under Assets/Scripts,
+// compile + load it through the ABI (dotnet build behind the scenes), pick the
+// class on an object, play — the user's code drives the object.
+void testBridgeUserScripts() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    char root[512] = {0};
+    sky_editor_assets_root(ctx, root, sizeof(root));
+    CHECK(root[0] != '\0');
+    const std::filesystem::path scriptsDir = std::filesystem::path(root) / "Scripts";
+    std::filesystem::create_directories(scriptsDir);
+    {
+        std::ofstream source(scriptsDir / "Lifter.cs");
+        source << "namespace SkyProject;\n"
+               << "public class Lifter : SkyEngine.ScriptComponent\n"
+               << "{\n"
+               << "    public float Height = 2.0f;\n"
+               << "    public override void OnUpdate(double dt) "
+               << "{ SetLocalPosition(0.0f, Height, 0.0f); }\n"
+               << "}\n";
+    }
+
+    // Compile + load; the class list now carries the project class.
+    CHECK(sky_editor_reload_scripts(ctx) == 1);
+    bool found = false;
+    for (int32_t i = 0; i < sky_editor_script_class_count(ctx) && !found; ++i) {
+        char name[128] = {0};
+        sky_editor_script_class_name(ctx, i, name, sizeof(name));
+        found = std::strcmp(name, "SkyProject.Lifter") == 0;
+    }
+    CHECK(found);
+
+    // Attach it and play: the user's OnUpdate lifts the object to Height.
+    const SkyObjectId object =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Lifted");
+    CHECK(object != 0);
+    sky_editor_add_component(ctx, object, "sky.script");
+    int32_t script = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+    sky_editor_set_component_field(ctx, object, script, 0, "SkyProject.Lifter");
+    // Its serializable field surfaces like any script's.
+    CHECK(sky_editor_script_field_count(ctx, object, script) == 1);
+
+    CHECK(sky_editor_play(ctx) == 1);
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+    float position[3] = {0};
+    sky_editor_get_transform(ctx, object, position, nullptr, nullptr);
+    CHECK(std::fabs(position[1] - 2.0f) < 1e-4f);
+    sky_editor_stop(ctx);
+
+    sky_editor_destroy(ctx);
+    // The demo assets root is shared and stable: leave no user scripts behind,
+    // or every future context would recompile them at startup.
+    std::error_code cleanup;
+    std::filesystem::remove_all(scriptsDir, cleanup);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -435,5 +504,6 @@ int main() {
     testBridgeScriptInput();
     testBridgeScriptClasses();
     testBridgeScriptFields();
+    testBridgeUserScripts();
     return sky::test::summary("editor_bridge_tests");
 }

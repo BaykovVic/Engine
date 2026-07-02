@@ -136,6 +136,17 @@ SKY_BRIDGE_API int32_t sky_editor_available_type_name(SkyEditorContext* ctx,
 SKY_BRIDGE_API int32_t sky_editor_available_type_category(SkyEditorContext* ctx,
                                                           int32_t index, char* buffer,
                                                           int32_t capacity);
+/* The project's Assets folder on disk (user scripts live in
+ * <assets>/Scripts). Returns the byte length written. */
+SKY_BRIDGE_API int32_t sky_editor_assets_root(SkyEditorContext* ctx, char* buffer,
+                                              int32_t capacity);
+
+/* Compiles Assets/Scripts/*.cs into the project scripts assembly and
+ * (re)loads it; the class list below refreshes. Returns 1 on success, 0 when
+ * there are no scripts or the build failed (errors land in the Console).
+ * Entering play also recompiles automatically when a source changed. */
+SKY_BRIDGE_API int32_t sky_editor_reload_scripts(SkyEditorContext* ctx);
+
 /* Managed script classes (ScriptComponent subclasses in the loaded
  * assemblies) — the choices for a sky.script component's "class" field. */
 SKY_BRIDGE_API int32_t sky_editor_script_class_count(SkyEditorContext* ctx);

@@ -55,6 +55,7 @@ using managed_get_script_fields_fn = std::int32_t (*)(const char* className,
 using managed_set_script_field_fn = std::int32_t (*)(std::uint64_t id,
                                                      const char* name,
                                                      const char* value);
+using managed_load_user_assembly_fn = std::int32_t (*)(const char* path);
 
 /// Non-empty lines of a '\n'-separated managed string payload.
 std::vector<std::string> splitLines(const std::string& text) {
@@ -165,6 +166,7 @@ public:
         resolve(managedGetScriptClasses_, "GetScriptClasses");
         resolve(managedGetScriptFields_, "GetScriptFields");
         resolve(managedSetScriptField_, "SetScriptField");
+        resolve(managedLoadUserAssembly_, "LoadUserAssembly");
         return true;
     }
 
@@ -284,6 +286,11 @@ public:
                                       value.c_str()) != 0;
     }
 
+    bool loadUserAssembly(const std::filesystem::path& path) override {
+        return started_ && managedLoadUserAssembly_ != nullptr &&
+               managedLoadUserAssembly_(path.string().c_str()) != 0;
+    }
+
 private:
     template <typename Fn>
     bool resolve(Fn& slot, const char* methodName) {
@@ -311,6 +318,7 @@ private:
     managed_get_script_classes_fn managedGetScriptClasses_ = nullptr;
     managed_get_script_fields_fn managedGetScriptFields_ = nullptr;
     managed_set_script_field_fn managedSetScriptField_ = nullptr;
+    managed_load_user_assembly_fn managedLoadUserAssembly_ = nullptr;
     bool started_ = false;
     std::vector<AssemblyRef> assemblies_;
 };
