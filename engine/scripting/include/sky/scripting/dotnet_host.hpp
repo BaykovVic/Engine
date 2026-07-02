@@ -17,6 +17,14 @@ struct DotNetHostConfig {
     std::filesystem::path bootstrapAssembly;
 };
 
+/// One serializable script field: a public float/int/bool/string instance
+/// field of a ScriptComponent subclass, with its declared default value.
+struct ScriptFieldInfo {
+    std::string name;
+    std::string typeName;     // "float" | "int" | "bool" | "string"
+    std::string defaultValue; // string form of the declared initializer
+};
+
 /// The real Managed Runtime Host: hosts the .NET runtime through hostfxr
 /// and dispatches into SkyEngine.Bootstrap. Implements the same IScriptHost
 /// contract the test double does — the Scripting Boundary cannot tell them
@@ -45,6 +53,17 @@ public:
     /// Full names of every instantiable ScriptComponent subclass in the
     /// loaded assemblies — the editor's script-class picker.
     [[nodiscard]] virtual std::vector<std::string> scriptClassNames() = 0;
+
+    /// A class's serializable script fields (public float/int/bool/string
+    /// instance fields) with their declared defaults — the Inspector rows.
+    [[nodiscard]] virtual std::vector<ScriptFieldInfo> scriptFields(
+        const std::string& className) = 0;
+
+    /// Sets a serializable field on a live instance from its string form
+    /// (authored values pushed at play start). False if the field is unknown.
+    virtual bool setInstanceField(std::uint64_t managedInstanceId,
+                                  const std::string& name,
+                                  const std::string& value) = 0;
 };
 
 /// Returns nullptr when hostfxr cannot be located on this machine.

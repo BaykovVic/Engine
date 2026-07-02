@@ -163,6 +163,13 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_script_class_count(IntPtr ctx);
     [DllImport(Lib)] public static extern int sky_editor_script_class_name(IntPtr ctx, int index, byte[] buffer, int capacity);
 
+    // --- Serializable script fields (public fields of the managed class) ---
+    [DllImport(Lib)] public static extern int sky_editor_script_field_count(IntPtr ctx, ulong obj, int component);
+    [DllImport(Lib)] public static extern int sky_editor_script_field_name(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_script_field_type(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern int sky_editor_script_field_value(IntPtr ctx, ulong obj, int component, int field, byte[] buffer, int capacity);
+    [DllImport(Lib)] public static extern void sky_editor_set_script_field(IntPtr ctx, ulong obj, int component, int field, string value);
+
     /// Reads a name/type string through the caller-owned-buffer ABI idiom.
     public static string ReadString(Func<byte[], int, int> call)
     {

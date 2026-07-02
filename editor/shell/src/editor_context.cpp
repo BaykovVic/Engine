@@ -400,6 +400,34 @@ void EditorContext::startPlayScripts() {
                 continue;
             }
             scriptHost->setInstanceObjectId(mid, object.value);
+            // Authored field values (Inspector edits stored on the component)
+            // reach the instance before any lifecycle runs, Unity-style.
+            for (const auto& [name, value] : components->fields(comp)) {
+                if (name == "class") {
+                    continue;
+                }
+                scriptHost->setInstanceField(
+                    mid, name,
+                    std::visit(
+                        [](const auto& x) -> std::string {
+                            using T = std::decay_t<decltype(x)>;
+                            if constexpr (std::is_same_v<T, float>) {
+                                char b[32];
+                                std::snprintf(b, sizeof(b), "%g",
+                                              static_cast<double>(x));
+                                return b;
+                            } else if constexpr (std::is_same_v<T, std::int64_t>) {
+                                return std::to_string(x);
+                            } else if constexpr (std::is_same_v<T, bool>) {
+                                return x ? "true" : "false";
+                            } else if constexpr (std::is_same_v<T, std::string>) {
+                                return x;
+                            } else {
+                                return {}; // Vec3 params are not supported yet
+                            }
+                        },
+                        value));
+            }
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnCreate, 0.0);
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnStart, 0.0);
             playScripts_.emplace_back(mid, object.value);

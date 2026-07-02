@@ -29,12 +29,26 @@ internal static class Program
             .SetupWithoutStarting();
 
         var window = new MainWindow();
+
+        // --size WxH: capture at a custom window size (e.g. tall Inspectors).
+        var cmdArgs = Environment.GetCommandLineArgs();
+        var sizeIndex = Array.IndexOf(cmdArgs, "--size");
+        if (sizeIndex >= 0 && sizeIndex + 1 < cmdArgs.Length)
+        {
+            var parts = cmdArgs[sizeIndex + 1].Split('x');
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], out var w) && double.TryParse(parts[1], out var h))
+            {
+                window.Width = w;
+                window.Height = h;
+            }
+        }
+
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
         // --select <name>: select a scene object by name, so captures can show
         // its Inspector (components, script class picker, ...).
-        var cmdArgs = Environment.GetCommandLineArgs();
         var selectIndex = Array.IndexOf(cmdArgs, "--select");
         if (selectIndex >= 0 && selectIndex + 1 < cmdArgs.Length &&
             window.DataContext is MainViewModel svm)

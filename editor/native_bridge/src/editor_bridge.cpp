@@ -48,6 +48,8 @@ struct BridgeSession {
     // Managed script classes (lazy; refreshed if assemblies ever reload).
     std::vector<std::string> scriptClasses;
     bool scriptClassesLoaded = false;
+    // Serializable script fields per managed class (lazy, same lifetime).
+    std::map<std::string, std::vector<sky::scripting::ScriptFieldInfo>> scriptFieldCache;
     // Active package ids (managed via the Packages panel).
     std::vector<std::string> activePackageIds;
     // Coalesces a stream of transform edits (e.g. a gizmo drag) into a single
@@ -383,6 +385,116 @@ int32_t sky_editor_script_class_name(SkyEditorContext* ctx, int32_t index,
         return copyString("", buffer, capacity);
     }
     return copyString(classes[std::size_t(index)], buffer, capacity);
+}
+
+namespace {
+
+/// The serializable fields of the managed class behind a sky.script
+/// component, from the per-session cache (nullptr when not a script
+/// component, no class set, or scripting unavailable).
+const std::vector<sky::scripting::ScriptFieldInfo>* scriptFieldsAt(
+    BridgeSession* session, SkyObjectId object, int32_t component) {
+    auto& context = session->context;
+    const auto handle = componentAt(context, object, component);
+    if (!handle.isValid() ||
+        context.components->descriptorOf(handle).typeId != "sky.script" ||
+        context.scriptHost == nullptr) {
+        return nullptr;
+    }
+    std::string className;
+    if (const auto field = context.components->field(handle, "class")) {
+        if (const auto* s = std::get_if<std::string>(&*field)) {
+            className = *s;
+        }
+    }
+    if (className.empty()) {
+        return nullptr;
+    }
+    const auto [it, inserted] = session->scriptFieldCache.try_emplace(className);
+    if (inserted) {
+        it->second = context.scriptHost->scriptFields(className);
+    }
+    return &it->second;
+}
+
+/// Parses a script field's string form by its managed type name.
+sky::component::FieldValue parseScriptField(const std::string& typeName,
+                                            const std::string& text) {
+    if (typeName == "float") {
+        return std::strtof(text.c_str(), nullptr);
+    }
+    if (typeName == "int") {
+        return std::int64_t(std::strtoll(text.c_str(), nullptr, 10));
+    }
+    if (typeName == "bool") {
+        return text == "true" || text == "1";
+    }
+    return text;
+}
+
+} // namespace
+
+int32_t sky_editor_script_field_count(SkyEditorContext* ctx, SkyObjectId object,
+                                      int32_t component) {
+    const auto* fields = scriptFieldsAt(self(ctx), object, component);
+    return fields != nullptr ? static_cast<int32_t>(fields->size()) : 0;
+}
+
+int32_t sky_editor_script_field_name(SkyEditorContext* ctx, SkyObjectId object,
+                                     int32_t component, int32_t field,
+                                     char* buffer, int32_t capacity) {
+    const auto* fields = scriptFieldsAt(self(ctx), object, component);
+    if (fields == nullptr || field < 0 || std::size_t(field) >= fields->size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString((*fields)[std::size_t(field)].name, buffer, capacity);
+}
+
+int32_t sky_editor_script_field_type(SkyEditorContext* ctx, SkyObjectId object,
+                                     int32_t component, int32_t field,
+                                     char* buffer, int32_t capacity) {
+    const auto* fields = scriptFieldsAt(self(ctx), object, component);
+    if (fields == nullptr || field < 0 || std::size_t(field) >= fields->size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString((*fields)[std::size_t(field)].typeName, buffer, capacity);
+}
+
+int32_t sky_editor_script_field_value(SkyEditorContext* ctx, SkyObjectId object,
+                                      int32_t component, int32_t field,
+                                      char* buffer, int32_t capacity) {
+    const auto* fields = scriptFieldsAt(self(ctx), object, component);
+    if (fields == nullptr || field < 0 || std::size_t(field) >= fields->size()) {
+        return copyString("", buffer, capacity);
+    }
+    const auto& info = (*fields)[std::size_t(field)];
+    const auto handle = componentAt(ec(ctx), object, component);
+    const auto stored = ec(ctx).components->field(handle, info.name);
+    // The authored value wins; otherwise show the script's declared default.
+    return copyString(stored ? fieldValueString(*stored) : info.defaultValue,
+                      buffer, capacity);
+}
+
+void sky_editor_set_script_field(SkyEditorContext* ctx, SkyObjectId object,
+                                 int32_t component, int32_t field,
+                                 const char* value) {
+    const auto* fields = scriptFieldsAt(self(ctx), object, component);
+    if (fields == nullptr || field < 0 || std::size_t(field) >= fields->size() ||
+        value == nullptr) {
+        return;
+    }
+    const auto& info = (*fields)[std::size_t(field)];
+    const auto handle = componentAt(ec(ctx), object, component);
+    const auto parsed = parseScriptField(info.typeName, value);
+    commitTransform(self(ctx));
+    // Undo restores the previous authored value, or the declared default when
+    // this is the field's first edit.
+    const auto before = ec(ctx).components->field(handle, info.name);
+    ec(ctx).components->setField(handle, info.name, parsed);
+    self(ctx)->undo->push(sky::editor::makeFieldCommand(
+        handle, info.name,
+        before ? *before : parseScriptField(info.typeName, info.defaultValue),
+        parsed));
 }
 
 void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,

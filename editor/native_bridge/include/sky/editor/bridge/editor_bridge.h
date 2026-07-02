@@ -142,6 +142,31 @@ SKY_BRIDGE_API int32_t sky_editor_script_class_count(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_script_class_name(SkyEditorContext* ctx,
                                                     int32_t index, char* buffer,
                                                     int32_t capacity);
+
+/* Serializable script fields of a sky.script component's class: public
+ * float/int/bool/string fields declared by the managed script. Values read
+ * back the authored value stored on the component, falling back to the
+ * script's declared default; the setter stores on the component (undoable,
+ * persisted in the scene, pushed to the instance at play start). */
+SKY_BRIDGE_API int32_t sky_editor_script_field_count(SkyEditorContext* ctx,
+                                                     SkyObjectId object,
+                                                     int32_t component);
+SKY_BRIDGE_API int32_t sky_editor_script_field_name(SkyEditorContext* ctx,
+                                                    SkyObjectId object,
+                                                    int32_t component, int32_t field,
+                                                    char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_script_field_type(SkyEditorContext* ctx,
+                                                    SkyObjectId object,
+                                                    int32_t component, int32_t field,
+                                                    char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_script_field_value(SkyEditorContext* ctx,
+                                                     SkyObjectId object,
+                                                     int32_t component, int32_t field,
+                                                     char* buffer, int32_t capacity);
+SKY_BRIDGE_API void sky_editor_set_script_field(SkyEditorContext* ctx,
+                                                SkyObjectId object,
+                                                int32_t component, int32_t field,
+                                                const char* value);
 /* Attach a component type / detach the component at an index (both undoable). */
 SKY_BRIDGE_API void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
                                              const char* type_id);

@@ -353,6 +353,77 @@ void testBridgeScriptClasses() {
 #endif
 }
 
+// Serializable script fields: the managed Rotator declares `public float
+// Speed = 90`. The Inspector ABI surfaces it with its default; authoring it
+// to 180 stores on the component and reaches the instance at play start —
+// one simulated second then yaws the pyramid 180° instead of 90°.
+void testBridgeScriptFields() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    SkyObjectId pyramid = 0;
+    const int32_t roots = sky_editor_root_count(ctx);
+    for (int32_t i = 0; i < roots && pyramid == 0; ++i) {
+        const SkyObjectId root = sky_editor_root_at(ctx, i);
+        if (nameOf(ctx, root) == "Pyramid (obj)") {
+            pyramid = root;
+        }
+    }
+    CHECK(pyramid != 0);
+    int32_t script = -1;
+    const int32_t count = sky_editor_component_count(ctx, pyramid);
+    for (int32_t i = 0; i < count; ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, pyramid, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+
+    // The managed class's field list surfaces Speed with its declared default.
+    CHECK(sky_editor_script_field_count(ctx, pyramid, script) >= 1);
+    int32_t speed = -1;
+    for (int32_t i = 0; i < sky_editor_script_field_count(ctx, pyramid, script); ++i) {
+        char name[64] = {0};
+        sky_editor_script_field_name(ctx, pyramid, script, i, name, sizeof(name));
+        if (std::strcmp(name, "Speed") == 0) {
+            speed = i;
+        }
+    }
+    CHECK(speed >= 0);
+    char text[64] = {0};
+    sky_editor_script_field_type(ctx, pyramid, script, speed, text, sizeof(text));
+    CHECK(std::strcmp(text, "float") == 0);
+    sky_editor_script_field_value(ctx, pyramid, script, speed, text, sizeof(text));
+    CHECK(std::strcmp(text, "90") == 0);
+
+    // Author 180 and verify the read-back and the play-time effect.
+    sky_editor_set_script_field(ctx, pyramid, script, speed, "180");
+    sky_editor_script_field_value(ctx, pyramid, script, speed, text, sizeof(text));
+    CHECK(std::strcmp(text, "180") == 0);
+
+    CHECK(sky_editor_play(ctx) == 1);
+    for (int i = 0; i < 60; ++i) {
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+    float rotation[4] = {0};
+    sky_editor_get_transform(ctx, pyramid, nullptr, rotation, nullptr);
+    // 180° yaw: quaternion (0, ±1, 0, ~0).
+    CHECK(std::fabs(rotation[1]) > 0.999f);
+    CHECK(std::fabs(rotation[3]) < 0.01f);
+    sky_editor_stop(ctx);
+
+    // The authored value is undoable back to the declared default.
+    CHECK(sky_editor_undo(ctx) == 1);
+    sky_editor_script_field_value(ctx, pyramid, script, speed, text, sizeof(text));
+    CHECK(std::strcmp(text, "90") == 0);
+
+    sky_editor_destroy(ctx);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -363,5 +434,6 @@ int main() {
     testBridgeScriptLog();
     testBridgeScriptInput();
     testBridgeScriptClasses();
+    testBridgeScriptFields();
     return sky::test::summary("editor_bridge_tests");
 }

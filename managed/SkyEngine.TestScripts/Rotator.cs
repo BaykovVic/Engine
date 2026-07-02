@@ -7,6 +7,9 @@ namespace SkyEngine.Tests;
 /// </summary>
 public class Rotator : SkyEngine.ScriptComponent
 {
+    /// Degrees per second around Y — serializable, editable in the Inspector.
+    public float Speed = 90.0f;
+
     private float _angle;
 
     public override void OnStart()
@@ -16,7 +19,7 @@ public class Rotator : SkyEngine.ScriptComponent
 
     public override void OnUpdate(double deltaSeconds)
     {
-        _angle += (float)(deltaSeconds * 90.0);
+        _angle += (float)(deltaSeconds * Speed);
         SetLocalEuler(0.0f, _angle, 0.0f);
     }
 }

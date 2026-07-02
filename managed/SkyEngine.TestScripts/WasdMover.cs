@@ -8,7 +8,8 @@ namespace SkyEngine.Tests;
 /// </summary>
 public class WasdMover : SkyEngine.ScriptComponent
 {
-    private const float Speed = 3.0f;
+    /// Units per second — serializable, editable in the Inspector.
+    public float Speed = 3.0f;
 
     public override void OnUpdate(double deltaSeconds)
     {

@@ -78,8 +78,10 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     private readonly int _field;
     private string _value;
 
+    private readonly bool _scriptParam;
+
     public ComponentField(EditorSession session, ulong obj, int component, int field,
-        string name, string type, string value)
+        string name, string type, string value, bool scriptParam = false)
     {
         _session = session;
         _object = obj;
@@ -88,6 +90,7 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
         Name = name;
         Type = type;
         _value = value;
+        _scriptParam = scriptParam;
     }
 
     public string Name { get; }
@@ -99,8 +102,8 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     // picker for the Script component's "class" field.
     public bool IsVec3 => Type == "Vec3";
     public bool IsBool => Type == "bool";
-    public bool IsMeshRef => Name == "mesh";
-    public bool IsScriptClass => Name == "class";
+    public bool IsMeshRef => !_scriptParam && Name == "mesh";
+    public bool IsScriptClass => !_scriptParam && Name == "class";
     public bool IsScalar => !IsVec3 && !IsBool && !IsMeshRef && !IsScriptClass;
 
     // --- Script class (managed ScriptComponent subclasses) ---
@@ -144,7 +147,10 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
             if (_value == value)
                 return;
             _value = value;
-            _session.SetComponentField(_object, _component, _field, value);
+            if (_scriptParam)
+                _session.SetScriptField(_object, _component, _field, value);
+            else
+                _session.SetComponentField(_object, _component, _field, value);
             Raise(nameof(Value));
         }
     }
@@ -609,6 +615,24 @@ public sealed class EditorSession : IDisposable
                     EngineInterop.sky_editor_component_field_value(_ctx, id, index, fi, b, n));
                 view.Fields.Add(new ComponentField(this, id, index, fi, fname, ftype, fvalue));
             }
+            // Script components also expose the managed class's serializable
+            // fields (public float/int/bool/string), Unity-style.
+            if (typeId == "sky.script")
+            {
+                var scriptFields = EngineInterop.sky_editor_script_field_count(_ctx, id, c);
+                for (var f = 0; f < scriptFields; ++f)
+                {
+                    var fi = f;
+                    var fname = EngineInterop.ReadString((b, n) =>
+                        EngineInterop.sky_editor_script_field_name(_ctx, id, index, fi, b, n));
+                    var ftype = EngineInterop.ReadString((b, n) =>
+                        EngineInterop.sky_editor_script_field_type(_ctx, id, index, fi, b, n));
+                    var fvalue = EngineInterop.ReadString((b, n) =>
+                        EngineInterop.sky_editor_script_field_value(_ctx, id, index, fi, b, n));
+                    view.Fields.Add(new ComponentField(this, id, index, fi, fname, ftype,
+                        fvalue, scriptParam: true));
+                }
+            }
             result.Add(view);
         }
         return result;
@@ -616,6 +640,9 @@ public sealed class EditorSession : IDisposable
 
     public void SetComponentField(ulong id, int component, int field, string value) =>
         EngineInterop.sky_editor_set_component_field(_ctx, id, component, field, value);
+
+    public void SetScriptField(ulong id, int component, int field, string value) =>
+        EngineInterop.sky_editor_set_script_field(_ctx, id, component, field, value);
 
     /// Reads the material library and each material's PBR fields.
     public List<MaterialView> ReadMaterials()

@@ -172,6 +172,106 @@ public static class Bootstrap
         }
     }
 
+    /// <summary>Writes the class's serializable script fields — public
+    /// instance fields of float/int/bool/string — as "name\ttype\tdefault"
+    /// lines (UTF-8) into the caller's buffer. Defaults come from a throwaway
+    /// instance, so the Inspector shows what the script author declared.</summary>
+    [UnmanagedCallersOnly]
+    public static int GetScriptFields(IntPtr classNameUtf8, IntPtr buffer, int capacity)
+    {
+        try
+        {
+            var typeName = Marshal.PtrToStringUTF8(classNameUtf8);
+            if (string.IsNullOrEmpty(typeName))
+            {
+                return 0;
+            }
+            var type = ResolveType(typeName);
+            if (type == null || !typeof(ScriptComponent).IsAssignableFrom(type) || type.IsAbstract)
+            {
+                return 0;
+            }
+            object? defaults = null;
+            try { defaults = Activator.CreateInstance(type); } catch { /* no defaults */ }
+            var text = new System.Text.StringBuilder();
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var kind = FieldKind(field.FieldType);
+                if (kind == null)
+                {
+                    continue;
+                }
+                var value = defaults != null ? field.GetValue(defaults) : null;
+                var defText = value switch
+                {
+                    float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    bool b => b ? "true" : "false",
+                    string s => s,
+                    _ => string.Empty,
+                };
+                text.Append(field.Name).Append('\t').Append(kind).Append('\t')
+                    .Append(defText).Append('\n');
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(text.ToString());
+            var length = Math.Min(bytes.Length, Math.Max(capacity - 1, 0));
+            Marshal.Copy(bytes, 0, buffer, length);
+            Marshal.WriteByte(buffer, length, 0);
+            return length;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Sets a serializable field on a live script instance from its
+    /// string form (authored in the Inspector, stored in the component).</summary>
+    [UnmanagedCallersOnly]
+    public static int SetScriptField(ulong id, IntPtr nameUtf8, IntPtr valueUtf8)
+    {
+        try
+        {
+            if (!Instances.TryGetValue(id, out var script))
+            {
+                return 0;
+            }
+            var name = Marshal.PtrToStringUTF8(nameUtf8);
+            var text = Marshal.PtrToStringUTF8(valueUtf8) ?? string.Empty;
+            if (string.IsNullOrEmpty(name))
+            {
+                return 0;
+            }
+            var field = script.GetType().GetField(name, BindingFlags.Public | BindingFlags.Instance);
+            if (field == null || FieldKind(field.FieldType) == null)
+            {
+                return 0;
+            }
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            object? parsed =
+                field.FieldType == typeof(float) ? float.Parse(text, culture) :
+                field.FieldType == typeof(int) ? (int)long.Parse(text, culture) :
+                field.FieldType == typeof(bool) ? text is "true" or "1" :
+                field.FieldType == typeof(string) ? text : null;
+            if (parsed == null)
+            {
+                return 0;
+            }
+            field.SetValue(script, parsed);
+            return 1;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static string? FieldKind(Type type) =>
+        type == typeof(float) ? "float" :
+        type == typeof(int) ? "int" :
+        type == typeof(bool) ? "bool" :
+        type == typeof(string) ? "string" : null;
+
     [UnmanagedCallersOnly]
     public static long GetProbe(ulong id)
     {

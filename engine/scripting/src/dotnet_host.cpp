@@ -49,6 +49,29 @@ using managed_set_object_id_fn = void (*)(std::uint64_t id, std::uint64_t object
 using managed_tick_frame_fn = void (*)(double totalSeconds, double deltaSeconds);
 using managed_get_script_classes_fn = std::int32_t (*)(char* buffer,
                                                        std::int32_t capacity);
+using managed_get_script_fields_fn = std::int32_t (*)(const char* className,
+                                                      char* buffer,
+                                                      std::int32_t capacity);
+using managed_set_script_field_fn = std::int32_t (*)(std::uint64_t id,
+                                                     const char* name,
+                                                     const char* value);
+
+/// Non-empty lines of a '\n'-separated managed string payload.
+std::vector<std::string> splitLines(const std::string& text) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        auto end = text.find('\n', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        if (end > start) {
+            lines.push_back(text.substr(start, end - start));
+        }
+        start = end + 1;
+    }
+    return lines;
+}
 
 std::filesystem::path discoverHostfxr() {
     std::vector<std::filesystem::path> roots;
@@ -140,6 +163,8 @@ public:
         resolve(managedSetObjectId_, "SetObjectId");
         resolve(managedTickFrame_, "TickFrame");
         resolve(managedGetScriptClasses_, "GetScriptClasses");
+        resolve(managedGetScriptFields_, "GetScriptFields");
+        resolve(managedSetScriptField_, "SetScriptField");
         return true;
     }
 
@@ -216,18 +241,47 @@ public:
         const auto length = managedGetScriptClasses_(
             buffer.data(), static_cast<std::int32_t>(buffer.size()));
         buffer.resize(length > 0 ? static_cast<std::size_t>(length) : 0);
-        std::size_t start = 0;
-        while (start < buffer.size()) {
-            auto end = buffer.find('\n', start);
-            if (end == std::string::npos) {
-                end = buffer.size();
-            }
-            if (end > start) {
-                names.emplace_back(buffer.substr(start, end - start));
-            }
-            start = end + 1;
+        for (const auto& line : splitLines(buffer)) {
+            names.push_back(line);
         }
         return names;
+    }
+
+    std::vector<ScriptFieldInfo> scriptFields(const std::string& className) override {
+        std::vector<ScriptFieldInfo> fields;
+        if (!started_ || managedGetScriptFields_ == nullptr) {
+            return fields;
+        }
+        std::string buffer(8192, '\0');
+        const auto length = managedGetScriptFields_(
+            className.c_str(), buffer.data(),
+            static_cast<std::int32_t>(buffer.size()));
+        buffer.resize(length > 0 ? static_cast<std::size_t>(length) : 0);
+        for (const auto& line : splitLines(buffer)) {
+            // "name\ttype\tdefault" (default may be empty).
+            const auto tab1 = line.find('\t');
+            if (tab1 == std::string::npos) {
+                continue;
+            }
+            const auto tab2 = line.find('\t', tab1 + 1);
+            ScriptFieldInfo info;
+            info.name = line.substr(0, tab1);
+            info.typeName = tab2 == std::string::npos
+                                ? line.substr(tab1 + 1)
+                                : line.substr(tab1 + 1, tab2 - tab1 - 1);
+            if (tab2 != std::string::npos) {
+                info.defaultValue = line.substr(tab2 + 1);
+            }
+            fields.push_back(std::move(info));
+        }
+        return fields;
+    }
+
+    bool setInstanceField(std::uint64_t managedInstanceId, const std::string& name,
+                          const std::string& value) override {
+        return started_ && managedSetScriptField_ != nullptr &&
+               managedSetScriptField_(managedInstanceId, name.c_str(),
+                                      value.c_str()) != 0;
     }
 
 private:
@@ -255,6 +309,8 @@ private:
     managed_set_object_id_fn managedSetObjectId_ = nullptr;
     managed_tick_frame_fn managedTickFrame_ = nullptr;
     managed_get_script_classes_fn managedGetScriptClasses_ = nullptr;
+    managed_get_script_fields_fn managedGetScriptFields_ = nullptr;
+    managed_set_script_field_fn managedSetScriptField_ = nullptr;
     bool started_ = false;
     std::vector<AssemblyRef> assemblies_;
 };
