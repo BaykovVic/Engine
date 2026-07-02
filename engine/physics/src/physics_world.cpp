@@ -100,6 +100,18 @@ public:
                                       float maxDistance) const override {
         std::optional<RaycastHit> best;
         for (const auto& [id, collider] : colliders_) {
+            if (collider.desc.shape == ColliderShape::TerrainHeightfield) {
+                float distance = 0.0f;
+                core::Vec3 point{};
+                core::Vec3 normal{};
+                if (rayVsHeightfield(ColliderHandle{id}, collider, origin,
+                                     direction, maxDistance, distance, point,
+                                     normal) &&
+                    (!best || distance < best->distance)) {
+                    best = RaycastHit{ColliderHandle{id}, point, normal, distance};
+                }
+                continue;
+            }
             const auto aabb = worldAabb(ColliderHandle{id}, collider);
             float distance = 0.0f;
             core::Vec3 normal{};
@@ -180,6 +192,62 @@ private:
         const float top = sample(x0, z0) * (1.0f - fx) + sample(x1, z0) * fx;
         const float bottom = sample(x0, z1) * (1.0f - fx) + sample(x1, z1) * fx;
         return (top * (1.0f - fz) + bottom * fz) * field.scale.y;
+    }
+
+    /// Ray vs heightfield: fixed-step march to the first sample below the
+    /// surface, then a short bisection refines the crossing. The normal comes
+    /// from the heightfield gradient at the hit.
+    bool rayVsHeightfield(ColliderHandle, const ColliderRecord& collider,
+                          const core::Vec3& origin, const core::Vec3& direction,
+                          float maxDistance, float& distance, core::Vec3& point,
+                          core::Vec3& normal) const {
+        const auto bodyIt = bodies_.find(collider.body.value);
+        if (bodyIt == bodies_.end()) {
+            return false;
+        }
+        const auto fieldOrigin = bodyIt->second.transform.position;
+        const auto& field = collider.desc.heightfield;
+        const auto heightAt = [&](const core::Vec3& p) {
+            return fieldOrigin.y + sampleHeightfield(field, p.x - fieldOrigin.x,
+                                                     p.z - fieldOrigin.z);
+        };
+        const auto above = [&](float t) {
+            const core::Vec3 p = origin + direction * t;
+            return p.y > heightAt(p);
+        };
+        if (!above(0.0f)) {
+            return false; // starting under the surface: no crossing to report
+        }
+        const float step = std::max(0.05f, std::min(0.5f, maxDistance / 256.0f));
+        float previous = 0.0f;
+        for (float t = step; t <= maxDistance; t += step) {
+            if (above(t)) {
+                previous = t;
+                continue;
+            }
+            // Crossed between `previous` and `t`: bisect to the surface.
+            float low = previous;
+            float high = t;
+            for (int i = 0; i < 16; ++i) {
+                const float mid = (low + high) * 0.5f;
+                (above(mid) ? low : high) = mid;
+            }
+            distance = (low + high) * 0.5f;
+            point = origin + direction * distance;
+            point.y = heightAt(point);
+            // Central differences of the surface height around the hit.
+            const float d = 0.25f;
+            const float hx1 = heightAt({point.x + d, 0.0f, point.z});
+            const float hx0 = heightAt({point.x - d, 0.0f, point.z});
+            const float hz1 = heightAt({point.x, 0.0f, point.z + d});
+            const float hz0 = heightAt({point.x, 0.0f, point.z - d});
+            core::Vec3 n{(hx0 - hx1) / (2.0f * d), 1.0f, (hz0 - hz1) / (2.0f * d)};
+            const float length =
+                std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+            normal = {n.x / length, n.y / length, n.z / length};
+            return true;
+        }
+        return false;
     }
 
     /// Keeps dynamic bodies above every heightfield collider in the world.

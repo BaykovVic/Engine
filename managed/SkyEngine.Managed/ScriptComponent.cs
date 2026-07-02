@@ -30,6 +30,41 @@ public abstract class ScriptComponent
     protected void SetLocalScale(float x, float y, float z) =>
         Engine.SetLocalScale?.Invoke(Handle.Value, x, y, z);
 
+    /// <summary>The object's world-space position.</summary>
+    protected (float X, float Y, float Z) GetWorldPosition()
+    {
+        float x = 0, y = 0, z = 0;
+        Engine.GetWorldPosition?.Invoke(Handle.Value, out x, out y, out z);
+        return (x, y, z);
+    }
+
+    /// <summary>Spawns a prefab (.skyprefab path or "assets://..." reference)
+    /// at a world position. Returns the new object's id (0 on failure). In
+    /// play mode the spawned object's own scripts start on the next frame.</summary>
+    protected ulong Instantiate(string prefabPath, float x, float y, float z) =>
+        Engine.Instantiate?.Invoke(prefabPath, x, y, z) ?? 0;
+
+    /// <summary>Destroys this script's object (with children).</summary>
+    protected void Destroy() => Destroy(Handle.Value);
+
+    /// <summary>Destroys a scene object by id (with children).</summary>
+    protected void Destroy(ulong objectId) =>
+        Engine.DestroyObject?.Invoke(objectId);
+
+    /// <summary>Sets the linear velocity of the object's rigid body (no-op
+    /// when the object has no physics body).</summary>
+    protected void SetVelocity(float x, float y, float z) =>
+        Engine.SetVelocity?.Invoke(Handle.Value, x, y, z);
+
+    /// <summary>The linear velocity of the object's rigid body (zero when
+    /// the object has no physics body).</summary>
+    protected (float X, float Y, float Z) GetVelocity()
+    {
+        float x = 0, y = 0, z = 0;
+        Engine.GetVelocity?.Invoke(Handle.Value, out x, out y, out z);
+        return (x, y, z);
+    }
+
     /// <summary>Called once right after the managed peer is created.</summary>
     public virtual void OnCreate() { }
 

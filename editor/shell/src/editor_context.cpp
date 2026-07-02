@@ -71,8 +71,71 @@ std::int32_t scriptIsKeyDown(std::int32_t key) {
     return g_scriptContext != nullptr && g_scriptContext->keyDown(key) ? 1 : 0;
 }
 
+void scriptGetWorldPosition(std::uint64_t obj, float* x, float* y, float* z) {
+    sky::core::Vec3 p{};
+    if (g_scriptObjects != nullptr) {
+        p = g_scriptObjects->worldTransform(sky::object::ObjectHandle{obj}).position;
+    }
+    if (x != nullptr) *x = p.x;
+    if (y != nullptr) *y = p.y;
+    if (z != nullptr) *z = p.z;
+}
+
+std::uint64_t scriptInstantiate(const char* path, float x, float y, float z) {
+    if (g_scriptContext == nullptr || path == nullptr) {
+        return 0;
+    }
+    return g_scriptContext->spawnPrefabAt(path, {x, y, z}).value;
+}
+
+void scriptDestroyObject(std::uint64_t obj) {
+    const sky::object::ObjectHandle handle{obj};
+    if (g_scriptContext != nullptr && g_scriptContext->objects->exists(handle)) {
+        g_scriptContext->destroyObject(handle);
+    }
+}
+
+void scriptSetVelocity(std::uint64_t obj, float x, float y, float z) {
+    if (g_scriptContext != nullptr) {
+        g_scriptContext->setObjectVelocity(sky::object::ObjectHandle{obj},
+                                           {x, y, z});
+    }
+}
+
+void scriptGetVelocity(std::uint64_t obj, float* x, float* y, float* z) {
+    sky::core::Vec3 v{};
+    if (g_scriptContext != nullptr) {
+        v = g_scriptContext->objectVelocity(sky::object::ObjectHandle{obj});
+    }
+    if (x != nullptr) *x = v.x;
+    if (y != nullptr) *y = v.y;
+    if (z != nullptr) *z = v.z;
+}
+
+std::int32_t scriptRaycast(float ox, float oy, float oz, float dx, float dy,
+                           float dz, float maxDistance, float* px, float* py,
+                           float* pz, float* nx, float* ny, float* nz,
+                           float* distance) {
+    if (g_scriptContext == nullptr) {
+        return 0;
+    }
+    const auto hit = g_scriptContext->physics->raycast({ox, oy, oz}, {dx, dy, dz},
+                                                       maxDistance);
+    if (!hit) {
+        return 0;
+    }
+    if (px != nullptr) *px = hit->point.x;
+    if (py != nullptr) *py = hit->point.y;
+    if (pz != nullptr) *pz = hit->point.z;
+    if (nx != nullptr) *nx = hit->normal.x;
+    if (ny != nullptr) *ny = hit->normal.y;
+    if (nz != nullptr) *nz = hit->normal.z;
+    if (distance != nullptr) *distance = hit->distance;
+    return 1;
+}
+
 /// Native function table handed to managed SkyEngine.Engine (layout must match
-/// the managed Api struct: six cdecl pointers).
+/// the managed Api struct: twelve cdecl pointers).
 struct SkyScriptApi {
     void* setLocalPosition;
     void* setLocalEuler;
@@ -80,13 +143,25 @@ struct SkyScriptApi {
     void* log;
     void* getLocalPosition;
     void* isKeyDown;
+    void* getWorldPosition;
+    void* instantiate;
+    void* destroyObject;
+    void* setVelocity;
+    void* getVelocity;
+    void* raycast;
 };
 SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptSetLocalEuler),
                          reinterpret_cast<void*>(&scriptSetLocalScale),
                          reinterpret_cast<void*>(&scriptLogMessage),
                          reinterpret_cast<void*>(&scriptGetLocalPosition),
-                         reinterpret_cast<void*>(&scriptIsKeyDown)};
+                         reinterpret_cast<void*>(&scriptIsKeyDown),
+                         reinterpret_cast<void*>(&scriptGetWorldPosition),
+                         reinterpret_cast<void*>(&scriptInstantiate),
+                         reinterpret_cast<void*>(&scriptDestroyObject),
+                         reinterpret_cast<void*>(&scriptSetVelocity),
+                         reinterpret_cast<void*>(&scriptGetVelocity),
+                         reinterpret_cast<void*>(&scriptRaycast)};
 
 /// Resolves an "assets://" VFS reference against the Assets root; plain
 /// filesystem paths pass through unchanged.
@@ -490,14 +565,23 @@ void EditorContext::startPlayScripts() {
     }
     g_scriptObjects = objects.get(); // this context owns scripting while playing
     g_scriptContext = this;
-    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    for (const auto root : roots_) {
+        startScriptsFor(root);
+    }
+}
+
+void EditorContext::startScriptsFor(object::ObjectHandle object) {
+    if (scriptHost == nullptr) {
+        return;
+    }
+    std::vector<object::ObjectHandle> stack{object};
     while (!stack.empty()) {
-        const auto object = stack.back();
+        const auto current = stack.back();
         stack.pop_back();
-        for (const auto child : objects->childrenOf(object)) {
+        for (const auto child : objects->childrenOf(current)) {
             stack.push_back(child);
         }
-        for (const auto comp : components->componentsOf(object)) {
+        for (const auto comp : components->componentsOf(current)) {
             if (components->descriptorOf(comp).typeId != "sky.script") {
                 continue;
             }
@@ -514,7 +598,7 @@ void EditorContext::startPlayScripts() {
             if (mid == 0) {
                 continue;
             }
-            scriptHost->setInstanceObjectId(mid, object.value);
+            scriptHost->setInstanceObjectId(mid, current.value);
             // Authored field values (Inspector edits stored on the component)
             // reach the instance before any lifecycle runs, Unity-style.
             for (const auto& [name, value] : components->fields(comp)) {
@@ -545,7 +629,7 @@ void EditorContext::startPlayScripts() {
             }
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnCreate, 0.0);
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnStart, 0.0);
-            playScripts_.emplace_back(mid, object.value);
+            playScripts_.emplace_back(mid, current.value);
         }
     }
 }
@@ -556,9 +640,29 @@ void EditorContext::tickScripts(double deltaSeconds) {
     }
     playTime_ += deltaSeconds;
     scriptHost->beginFrame(playTime_, deltaSeconds);
-    for (const auto& [mid, objectId] : playScripts_) {
+    // By index with a size snapshot: a script may Instantiate (appending to
+    // playScripts_) or Destroy objects mid-loop. Freshly spawned scripts get
+    // their first OnUpdate next frame.
+    const std::size_t liveCount = playScripts_.size();
+    for (std::size_t i = 0; i < liveCount; ++i) {
+        const auto [mid, objectId] = playScripts_[i];
+        if (!objects->exists(object::ObjectHandle{objectId})) {
+            continue; // destroyed earlier this frame; swept below
+        }
         scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnUpdate,
                                     deltaSeconds);
+    }
+    // Sweep instances whose object died (script Destroy or an editor delete
+    // during play): OnDestroy fires, then the managed peer goes away.
+    for (auto it = playScripts_.begin(); it != playScripts_.end();) {
+        if (objects->exists(object::ObjectHandle{it->second})) {
+            ++it;
+            continue;
+        }
+        scriptHost->invokeLifecycle(it->first,
+                                    scripting::ScriptLifecycleEvent::OnDestroy, 0.0);
+        scriptHost->destroyInstance(it->first);
+        it = playScripts_.erase(it);
     }
 }
 
@@ -874,6 +978,50 @@ object::ObjectHandle EditorContext::instantiatePrefab(const std::string& path) {
         return object::ObjectHandle::invalid();
     }
     return restoreObject(snapshot, object::ObjectHandle::invalid());
+}
+
+object::ObjectHandle EditorContext::spawnPrefabAt(const std::string& path,
+                                                  core::Vec3 position) {
+    const auto object = instantiatePrefab(path);
+    if (!object.isValid()) {
+        return object;
+    }
+    auto local = objects->localTransform(object); // spawned at root: local = world
+    local.position = position;
+    objects->setLocalTransform(object, local);
+    // Re-seat the subtree's physics bodies at the new pose, no residual motion.
+    std::vector<object::ObjectHandle> stack{object};
+    while (!stack.empty()) {
+        const auto current = stack.back();
+        stack.pop_back();
+        for (const auto child : objects->childrenOf(current)) {
+            stack.push_back(child);
+        }
+        if (const auto it = bodies_.find(current.value); it != bodies_.end()) {
+            physics->setBodyTransform(it->second, objects->worldTransform(current));
+            physics->setBodyVelocity(it->second, {0.0f, 0.0f, 0.0f});
+        }
+    }
+    if (playMode != nullptr && playMode->state() == PlayModeState::Playing) {
+        startScriptsFor(object);
+    }
+    return object;
+}
+
+bool EditorContext::setObjectVelocity(object::ObjectHandle object,
+                                      core::Vec3 velocity) {
+    const auto it = bodies_.find(object.value);
+    if (it == bodies_.end()) {
+        return false;
+    }
+    physics->setBodyVelocity(it->second, velocity);
+    return true;
+}
+
+core::Vec3 EditorContext::objectVelocity(object::ObjectHandle object) const {
+    const auto it = bodies_.find(object.value);
+    return it != bodies_.end() ? physics->bodyVelocity(it->second)
+                               : core::Vec3{0.0f, 0.0f, 0.0f};
 }
 
 ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const {

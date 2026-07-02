@@ -37,9 +37,13 @@ if(SKY_DOTNET)
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Debug.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Time.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Input.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Physics.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spinner.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Rotator.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/WasdMover.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spawner.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/SelfDestruct.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/GroundProbe.cs
         COMMENT "Building managed assemblies")
     add_custom_target(sky_managed ALL
         DEPENDS ${SKY_MANAGED_DIR}/SkyEngine.Managed.dll)

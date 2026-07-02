@@ -563,6 +563,123 @@ void testBridgePrefabs() {
     std::filesystem::remove_all(path.parent_path(), cleanup);
 }
 
+#ifdef SKY_TEST_MANAGED
+// Attaches a sky.script with the given class to an object and returns the
+// component index (asserts on failure).
+int32_t attachScript(SkyEditorContext* ctx, SkyObjectId object,
+                     const char* className) {
+    sky_editor_add_component(ctx, object, "sky.script");
+    int32_t script = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+    sky_editor_set_component_field(ctx, object, script, 0, className);
+    return script;
+}
+
+// Index of a serializable script field by name (asserts when absent) —
+// reflection order is an implementation detail, so tests look fields up.
+int32_t scriptFieldIndex(SkyEditorContext* ctx, SkyObjectId object,
+                         int32_t component, const char* fieldName) {
+    for (int32_t i = 0; i < sky_editor_script_field_count(ctx, object, component);
+         ++i) {
+        char name[64] = {0};
+        sky_editor_script_field_name(ctx, object, component, i, name, sizeof(name));
+        if (std::strcmp(name, fieldName) == 0) {
+            return i;
+        }
+    }
+    CHECK(false);
+    return -1;
+}
+#endif
+
+// Gameplay engine API from scripts: Instantiate spawns prefabs during play
+// (their own scripts start too), Destroy removes the script's object, and
+// Physics.Raycast sees the world. All driven end-to-end through managed code.
+void testBridgeScriptEngineApi() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    // A prefab to spawn: a plain crate saved from the demo scene.
+    SkyObjectId crate = 0;
+    for (int32_t i = 0; i < sky_editor_root_count(ctx) && crate == 0; ++i) {
+        const SkyObjectId root = sky_editor_root_at(ctx, i);
+        if (nameOf(ctx, root) == "Crate A") {
+            crate = root;
+        }
+    }
+    CHECK(crate != 0);
+    const auto prefab = std::filesystem::temp_directory_path() /
+                        "sky_engine_tests" / "bridge_script_api" /
+                        "crate.skyprefab";
+    std::filesystem::create_directories(prefab.parent_path());
+    CHECK(sky_editor_save_prefab(ctx, crate, prefab.string().c_str()) == 1);
+
+    // Spawner: 4 spawns over a simulated second (t=0, .3, .6, .9).
+    const SkyObjectId spawner =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "SpawnerRig");
+    const int32_t spawnerScript =
+        attachScript(ctx, spawner, "SkyEngine.Tests.Spawner");
+    sky_editor_set_script_field(
+        ctx, spawner, spawnerScript,
+        scriptFieldIndex(ctx, spawner, spawnerScript, "PrefabPath"),
+        prefab.string().c_str());
+    sky_editor_set_script_field(
+        ctx, spawner, spawnerScript,
+        scriptFieldIndex(ctx, spawner, spawnerScript, "Interval"), "0.3");
+
+    // SelfDestruct: gone after 0.5 simulated seconds.
+    const SkyObjectId doomed =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Doomed");
+    attachScript(ctx, doomed, "SkyEngine.Tests.SelfDestruct");
+
+    // GroundProbe: raycasts down onto the terrain and logs the hit. Placed
+    // away from the demo crates so the ray sees bare terrain (world y = 0).
+    const SkyObjectId probe =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Probe");
+    sky_editor_set_position(ctx, probe, 10.0f, 0.0f, 10.0f);
+    attachScript(ctx, probe, "SkyEngine.Tests.GroundProbe");
+
+    const int32_t rootsBefore = sky_editor_root_count(ctx);
+    CHECK(sky_editor_play(ctx) == 1);
+    for (int i = 0; i < 60; ++i) {
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+
+    // 4 crates spawned, one object self-destructed.
+    CHECK(sky_editor_root_count(ctx) == rootsBefore + 4 - 1);
+    CHECK(sky_editor_object_exists(ctx, doomed) == 0);
+
+    // The probe hit the terrain (world y = 0) via the physics raycast.
+    bool probeHit = false;
+    for (int32_t i = 0; i < sky_editor_log_count(ctx) && !probeHit; ++i) {
+        char buffer[256] = {0};
+        sky_editor_log_text(ctx, i, buffer, sizeof(buffer));
+        probeHit = std::strstr(buffer, "GroundProbe hit y=0") != nullptr;
+    }
+    if (!probeHit) { // dump the console on failure — the probe's log says why
+        for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+            char buffer[256] = {0};
+            sky_editor_log_text(ctx, i, buffer, sizeof(buffer));
+            std::printf("LOG[%d]: %s\n", i, buffer);
+        }
+    }
+    CHECK(probeHit);
+
+    sky_editor_stop(ctx);
+    sky_editor_destroy(ctx);
+    std::error_code cleanup;
+    std::filesystem::remove_all(prefab.parent_path(), cleanup);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -576,5 +693,6 @@ int main() {
     testBridgeScriptFields();
     testBridgeUserScripts();
     testBridgePrefabs();
+    testBridgeScriptEngineApi();
     return sky::test::summary("editor_bridge_tests");
 }

@@ -139,6 +139,16 @@ public:
     bool savePrefab(object::ObjectHandle object, const std::string& path);
     object::ObjectHandle instantiatePrefab(const std::string& path);
 
+    /// Instantiates a prefab at a world position and re-seats its physics
+    /// bodies there. In play mode the subtree's scripts start on the next
+    /// frame — the script-facing spawn path.
+    object::ObjectHandle spawnPrefabAt(const std::string& path, core::Vec3 position);
+
+    /// Linear velocity of an object's rigid body. Setter/getter are no-ops
+    /// (zero) for objects without a body.
+    bool setObjectVelocity(object::ObjectHandle object, core::Vec3 velocity);
+    [[nodiscard]] core::Vec3 objectVelocity(object::ObjectHandle object) const;
+
     [[nodiscard]] ObjectSnapshot snapshotObject(object::ObjectHandle object) const;
     /// Rebuilds an object subtree from a snapshot (invalid parent = root).
     object::ObjectHandle restoreObject(const ObjectSnapshot& snapshot,
@@ -208,6 +218,9 @@ private:
     void initScripting();
     void startPlayScripts();
     void stopPlayScripts();
+    /// Creates managed instances for every sky.script in a subtree, pushes
+    /// the authored field values and runs OnCreate/OnStart.
+    void startScriptsFor(object::ObjectHandle object);
     object::ObjectHandle cloneSubtree(object::ObjectHandle source,
                                       object::ObjectHandle parent);
     void attachCrateBody(object::ObjectHandle object);
