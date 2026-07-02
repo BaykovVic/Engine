@@ -41,6 +41,10 @@ public:
     /// Publishes frame timing to the managed side (SkyEngine.Time). Call once
     /// per play frame, before dispatching the frame's lifecycle events.
     virtual void beginFrame(double totalSeconds, double deltaSeconds) = 0;
+
+    /// Full names of every instantiable ScriptComponent subclass in the
+    /// loaded assemblies — the editor's script-class picker.
+    [[nodiscard]] virtual std::vector<std::string> scriptClassNames() = 0;
 };
 
 /// Returns nullptr when hostfxr cannot be located on this machine.

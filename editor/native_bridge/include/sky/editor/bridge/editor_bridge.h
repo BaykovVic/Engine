@@ -136,6 +136,12 @@ SKY_BRIDGE_API int32_t sky_editor_available_type_name(SkyEditorContext* ctx,
 SKY_BRIDGE_API int32_t sky_editor_available_type_category(SkyEditorContext* ctx,
                                                           int32_t index, char* buffer,
                                                           int32_t capacity);
+/* Managed script classes (ScriptComponent subclasses in the loaded
+ * assemblies) — the choices for a sky.script component's "class" field. */
+SKY_BRIDGE_API int32_t sky_editor_script_class_count(SkyEditorContext* ctx);
+SKY_BRIDGE_API int32_t sky_editor_script_class_name(SkyEditorContext* ctx,
+                                                    int32_t index, char* buffer,
+                                                    int32_t capacity);
 /* Attach a component type / detach the component at an index (both undoable). */
 SKY_BRIDGE_API void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
                                              const char* type_id);

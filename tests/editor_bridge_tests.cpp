@@ -326,6 +326,33 @@ void testBridgeScriptInput() {
 #endif
 }
 
+// The script-class list (reflection over the loaded managed assemblies)
+// surfaces every ScriptComponent subclass for the Inspector's picker.
+void testBridgeScriptClasses() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    const int32_t count = sky_editor_script_class_count(ctx);
+    CHECK(count >= 3); // Rotator, Spinner, WasdMover at minimum
+    bool foundRotator = false;
+    for (int32_t i = 0; i < count; ++i) {
+        char buffer[128] = {0};
+        sky_editor_script_class_name(ctx, i, buffer, sizeof(buffer));
+        if (std::strcmp(buffer, "SkyEngine.Tests.Rotator") == 0) {
+            foundRotator = true;
+        }
+    }
+    CHECK(foundRotator);
+    // Out of range reads back as empty.
+    char overflow[8] = {0};
+    sky_editor_script_class_name(ctx, count, overflow, sizeof(overflow));
+    CHECK(overflow[0] == '\0');
+
+    sky_editor_destroy(ctx);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -335,5 +362,6 @@ int main() {
     testBridgeViewport();
     testBridgeScriptLog();
     testBridgeScriptInput();
+    testBridgeScriptClasses();
     return sky::test::summary("editor_bridge_tests");
 }

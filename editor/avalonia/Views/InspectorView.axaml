@@ -61,6 +61,10 @@
                         <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}" IsVisible="{Binding IsScalar}"/>
                         <!-- bool -->
                         <CheckBox Grid.Column="1" IsChecked="{Binding BoolValue, Mode=TwoWay}" IsVisible="{Binding IsBool}"/>
+                        <!-- managed script class (reflection over loaded assemblies) -->
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsScriptClass}"
+                                  ItemsSource="{Binding ScriptClassOptions}" SelectedItem="{Binding SelectedScriptClass, Mode=TwoWay}"
+                                  PlaceholderText="Select script..."/>
                         <!-- mesh reference (Unity-style asset picker) -->
                         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsMeshRef}"
                                   ItemsSource="{Binding MeshOptions}" SelectedItem="{Binding SelectedMesh, Mode=TwoWay}">

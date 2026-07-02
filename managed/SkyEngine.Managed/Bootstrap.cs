@@ -137,6 +137,41 @@ public static class Bootstrap
         }
     }
 
+    /// <summary>Writes the full names of all instantiable ScriptComponent
+    /// subclasses (newline-separated, UTF-8) into the caller's buffer, for the
+    /// editor's script-class picker. Returns the byte length written.</summary>
+    [UnmanagedCallersOnly]
+    public static int GetScriptClasses(IntPtr buffer, int capacity)
+    {
+        try
+        {
+            var names = new List<string>();
+            var assemblies = new List<Assembly>(LoadedAssemblies) { typeof(Bootstrap).Assembly };
+            foreach (var assembly in assemblies)
+            {
+                foreach (var type in assembly.GetTypes())
+                {
+                    if (typeof(ScriptComponent).IsAssignableFrom(type) &&
+                        !type.IsAbstract && type.FullName != null)
+                    {
+                        names.Add(type.FullName);
+                    }
+                }
+            }
+            names.Sort(StringComparer.Ordinal);
+            var joined = string.Join('\n', names);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(joined);
+            var length = Math.Min(bytes.Length, Math.Max(capacity - 1, 0));
+            Marshal.Copy(bytes, 0, buffer, length);
+            Marshal.WriteByte(buffer, length, 0);
+            return length;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     [UnmanagedCallersOnly]
     public static long GetProbe(ulong id)
     {

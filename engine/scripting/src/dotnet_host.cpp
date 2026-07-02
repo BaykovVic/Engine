@@ -47,6 +47,8 @@ using managed_get_probe_fn = std::int64_t (*)(std::uint64_t id);
 using managed_initialize_fn = void (*)(void* apiTable);
 using managed_set_object_id_fn = void (*)(std::uint64_t id, std::uint64_t objectId);
 using managed_tick_frame_fn = void (*)(double totalSeconds, double deltaSeconds);
+using managed_get_script_classes_fn = std::int32_t (*)(char* buffer,
+                                                       std::int32_t capacity);
 
 std::filesystem::path discoverHostfxr() {
     std::vector<std::filesystem::path> roots;
@@ -137,6 +139,7 @@ public:
         resolve(managedInitialize_, "Initialize");
         resolve(managedSetObjectId_, "SetObjectId");
         resolve(managedTickFrame_, "TickFrame");
+        resolve(managedGetScriptClasses_, "GetScriptClasses");
         return true;
     }
 
@@ -204,6 +207,29 @@ public:
         }
     }
 
+    std::vector<std::string> scriptClassNames() override {
+        std::vector<std::string> names;
+        if (!started_ || managedGetScriptClasses_ == nullptr) {
+            return names;
+        }
+        std::string buffer(8192, '\0');
+        const auto length = managedGetScriptClasses_(
+            buffer.data(), static_cast<std::int32_t>(buffer.size()));
+        buffer.resize(length > 0 ? static_cast<std::size_t>(length) : 0);
+        std::size_t start = 0;
+        while (start < buffer.size()) {
+            auto end = buffer.find('\n', start);
+            if (end == std::string::npos) {
+                end = buffer.size();
+            }
+            if (end > start) {
+                names.emplace_back(buffer.substr(start, end - start));
+            }
+            start = end + 1;
+        }
+        return names;
+    }
+
 private:
     template <typename Fn>
     bool resolve(Fn& slot, const char* methodName) {
@@ -228,6 +254,7 @@ private:
     managed_initialize_fn managedInitialize_ = nullptr;
     managed_set_object_id_fn managedSetObjectId_ = nullptr;
     managed_tick_frame_fn managedTickFrame_ = nullptr;
+    managed_get_script_classes_fn managedGetScriptClasses_ = nullptr;
     bool started_ = false;
     std::vector<AssemblyRef> assemblies_;
 };

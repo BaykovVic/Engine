@@ -32,6 +32,21 @@ internal static class Program
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
+        // --select <name>: select a scene object by name, so captures can show
+        // its Inspector (components, script class picker, ...).
+        var cmdArgs = Environment.GetCommandLineArgs();
+        var selectIndex = Array.IndexOf(cmdArgs, "--select");
+        if (selectIndex >= 0 && selectIndex + 1 < cmdArgs.Length &&
+            window.DataContext is MainViewModel svm)
+        {
+            var found = FindByName(svm.Roots, cmdArgs[selectIndex + 1]);
+            if (found != null)
+            {
+                svm.SelectedObject = found;
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
         // Exercise the editing path: create a cube and move it, so the capture
         // shows it both in the Hierarchy and in the live viewport.
         if (demo && window.DataContext is MainViewModel vm)
@@ -65,5 +80,18 @@ internal static class Program
         frame.Save(path);
         Console.WriteLine($"wrote {path}");
         return 0;
+    }
+
+    private static Engine.SkyObject? FindByName(
+        System.Collections.Generic.IEnumerable<Engine.SkyObject> nodes, string name)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Name == name)
+                return node;
+            if (FindByName(node.Children, name) is { } hit)
+                return hit;
+        }
+        return null;
     }
 }

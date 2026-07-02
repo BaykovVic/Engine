@@ -94,12 +94,28 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     public string Type { get; }
 
     // Field-type presentation, so the inspector renders like Unity: a plain box
-    // for scalars/strings, X/Y/Z boxes for Vec3, a checkbox for bool, and a
-    // mesh-reference picker for the Mesh Renderer's "mesh" field.
+    // for scalars/strings, X/Y/Z boxes for Vec3, a checkbox for bool, a
+    // mesh-reference picker for the Mesh Renderer's "mesh" field, and a class
+    // picker for the Script component's "class" field.
     public bool IsVec3 => Type == "Vec3";
     public bool IsBool => Type == "bool";
     public bool IsMeshRef => Name == "mesh";
-    public bool IsScalar => !IsVec3 && !IsBool && !IsMeshRef;
+    public bool IsScriptClass => Name == "class";
+    public bool IsScalar => !IsVec3 && !IsBool && !IsMeshRef && !IsScriptClass;
+
+    // --- Script class (managed ScriptComponent subclasses) ---
+    public System.Collections.Generic.List<string> ScriptClassOptions =>
+        _session.ScriptClasses(_value);
+
+    public string? SelectedScriptClass
+    {
+        get => string.IsNullOrEmpty(_value) ? null : _value;
+        set
+        {
+            if (!string.IsNullOrEmpty(value)) Value = value;
+            Raise(nameof(SelectedScriptClass));
+        }
+    }
 
     // --- Mesh reference (Unity-style asset picker) ---
     public System.Collections.Generic.List<MeshOption> MeshOptions =>
@@ -449,6 +465,26 @@ public sealed class EditorSession : IDisposable
 
     public void AddComponent(ulong id, string typeId) =>
         EngineInterop.sky_editor_add_component(_ctx, id, typeId);
+
+    /// Managed script classes for the Script component's class picker.
+    /// `current` stays listed even if its assembly is gone, so the field
+    /// never silently loses its value.
+    public List<string> ScriptClasses(string current)
+    {
+        var list = new List<string>();
+        var count = EngineInterop.sky_editor_script_class_count(_ctx);
+        for (var i = 0; i < count; ++i)
+        {
+            var idx = i;
+            var name = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_script_class_name(_ctx, idx, b, n));
+            if (!string.IsNullOrEmpty(name))
+                list.Add(name);
+        }
+        if (!string.IsNullOrEmpty(current) && !list.Contains(current))
+            list.Add(current);
+        return list;
+    }
 
     public void RemoveComponent(ulong id, int component) =>
         EngineInterop.sky_editor_remove_component(_ctx, id, component);

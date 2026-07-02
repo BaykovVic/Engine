@@ -45,6 +45,9 @@ struct BridgeSession {
         std::make_unique<sky::editor::UndoStack>(context);
     // Ring buffer of log lines shown in the Console panel.
     std::vector<LogEntry> logs;
+    // Managed script classes (lazy; refreshed if assemblies ever reload).
+    std::vector<std::string> scriptClasses;
+    bool scriptClassesLoaded = false;
     // Active package ids (managed via the Packages panel).
     std::vector<std::string> activePackageIds;
     // Coalesces a stream of transform edits (e.g. a gizmo drag) into a single
@@ -107,6 +110,17 @@ void logMsg(BridgeSession* session, sky::core::LogLevel level, const char* categ
     if (session->logs.size() > kMaxLogs) {
         session->logs.erase(session->logs.begin());
     }
+}
+
+/// The managed script-class list, fetched from the .NET host on first use.
+const std::vector<std::string>& scriptClasses(BridgeSession* session) {
+    if (!session->scriptClassesLoaded) {
+        if (session->context.scriptHost != nullptr) {
+            session->scriptClasses = session->context.scriptHost->scriptClassNames();
+        }
+        session->scriptClassesLoaded = true;
+    }
+    return session->scriptClasses;
 }
 
 /// Commits a coalesced transform edit into the undo stack (no-op if the
@@ -356,6 +370,19 @@ int32_t sky_editor_available_type_category(SkyEditorContext* ctx, int32_t index,
         return copyString("", buffer, capacity);
     }
     return copyString(types[std::size_t(index)].category, buffer, capacity);
+}
+
+int32_t sky_editor_script_class_count(SkyEditorContext* ctx) {
+    return static_cast<int32_t>(scriptClasses(self(ctx)).size());
+}
+
+int32_t sky_editor_script_class_name(SkyEditorContext* ctx, int32_t index,
+                                     char* buffer, int32_t capacity) {
+    const auto& classes = scriptClasses(self(ctx));
+    if (index < 0 || std::size_t(index) >= classes.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(classes[std::size_t(index)], buffer, capacity);
 }
 
 void sky_editor_add_component(SkyEditorContext* ctx, SkyObjectId object,
