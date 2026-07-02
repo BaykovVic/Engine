@@ -14,17 +14,22 @@ public static class Engine
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void SetVec3Fn(ulong objectId, float x, float y, float z);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void LogFn(int level, [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
+
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
+    internal static LogFn? Log;
 
-    /// Layout must match the native SkyScriptApi struct (three cdecl pointers).
+    /// Layout must match the native SkyScriptApi struct (four cdecl pointers).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
     {
         public IntPtr SetLocalPosition;
         public IntPtr SetLocalEuler;
         public IntPtr SetLocalScale;
+        public IntPtr Log;
     }
 
     internal static void Install(IntPtr apiPtr)
@@ -37,5 +42,7 @@ public static class Engine
             SetLocalEuler = Marshal.GetDelegateForFunctionPointer<SetVec3Fn>(api.SetLocalEuler);
         if (api.SetLocalScale != IntPtr.Zero)
             SetLocalScale = Marshal.GetDelegateForFunctionPointer<SetVec3Fn>(api.SetLocalScale);
+        if (api.Log != IntPtr.Zero)
+            Log = Marshal.GetDelegateForFunctionPointer<LogFn>(api.Log);
     }
 }

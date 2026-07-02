@@ -9,6 +9,11 @@ public class Rotator : SkyEngine.ScriptComponent
 {
     private float _angle;
 
+    public override void OnStart()
+    {
+        SkyEngine.Debug.Log($"Rotator started on object {Handle.Value}");
+    }
+
     public override void OnUpdate(double deltaSeconds)
     {
         _angle += (float)(deltaSeconds * 90.0);

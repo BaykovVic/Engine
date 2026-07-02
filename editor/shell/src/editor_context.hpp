@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -167,6 +168,11 @@ public:
     terrain::TerrainHandle terrainHandle;
     object::ObjectHandle terrainObject;
     TerrainBrush brush;
+
+    /// Sink for managed Debug.Log output (level is a sky::core::LogLevel
+    /// value). Defaults to stdout/stderr; the editor bridge redirects it into
+    /// the Console panel's log buffer.
+    std::function<void(int level, const std::string& message)> scriptLog;
 
 private:
     void buildDemoScene();

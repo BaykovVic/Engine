@@ -34,6 +34,7 @@ if(SKY_DOTNET)
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/ScriptComponent.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/NativeHandle.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Engine.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Debug.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spinner.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Rotator.cs
         COMMENT "Building managed assemblies")

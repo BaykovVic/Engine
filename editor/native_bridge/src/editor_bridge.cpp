@@ -256,6 +256,10 @@ extern "C" {
 
 SkyEditorContext* sky_editor_create(void) {
     auto* session = new BridgeSession();
+    // Managed Debug.Log output goes to the Console panel, like everything else.
+    session->context.scriptLog = [session](int level, const std::string& message) {
+        logMsg(session, static_cast<sky::core::LogLevel>(level), "Script", message);
+    };
     logMsg(session, sky::core::LogLevel::Info, "Editor", "Sky Engine editor ready");
     return reinterpret_cast<SkyEditorContext*>(session);
 }

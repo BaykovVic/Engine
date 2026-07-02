@@ -84,6 +84,10 @@ target_link_libraries(undo_tests PRIVATE sky::viewport_bridge sky::sky_rendering
 # Exercises the native C ABI the Avalonia editor will P/Invoke.
 sky_add_test(editor_bridge_tests)
 target_link_libraries(editor_bridge_tests PRIVATE sky::editor_bridge sky::engine)
+if(TARGET sky_managed)
+    # The bridge hosts .NET in this build: the script-log case can run.
+    target_compile_definitions(editor_bridge_tests PRIVATE SKY_TEST_MANAGED)
+endif()
 find_package(X11 QUIET)
 if(X11_FOUND)
     target_link_libraries(editor_bridge_tests PRIVATE X11::X11)

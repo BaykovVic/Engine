@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 
@@ -15,6 +16,7 @@ namespace {
 // active EditorContext owns scripting at a time, so its object hierarchy is
 // exposed through this file-scope pointer, set in initScripting().
 sky::object::IObjectHierarchyAccess* g_scriptObjects = nullptr;
+sky::editor::EditorContext* g_scriptContext = nullptr;
 
 void scriptSetLocalPosition(std::uint64_t obj, float x, float y, float z) {
     if (g_scriptObjects == nullptr) return;
@@ -46,16 +48,25 @@ void scriptSetLocalScale(std::uint64_t obj, float x, float y, float z) {
     g_scriptObjects->setLocalTransform(handle, t);
 }
 
+/// Managed Debug.Log lands here; `level` carries a sky::core::LogLevel value.
+void scriptLogMessage(std::int32_t level, const char* message) {
+    if (g_scriptContext != nullptr && g_scriptContext->scriptLog) {
+        g_scriptContext->scriptLog(level, message != nullptr ? message : "");
+    }
+}
+
 /// Native function table handed to managed SkyEngine.Engine (layout must match
-/// the managed Api struct: three cdecl pointers).
+/// the managed Api struct: four cdecl pointers).
 struct SkyScriptApi {
     void* setLocalPosition;
     void* setLocalEuler;
     void* setLocalScale;
+    void* log;
 };
 SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptSetLocalEuler),
-                         reinterpret_cast<void*>(&scriptSetLocalScale)};
+                         reinterpret_cast<void*>(&scriptSetLocalScale),
+                         reinterpret_cast<void*>(&scriptLogMessage)};
 
 /// Populates a Unity-like demo Assets folder so the Project browser has
 /// realistic content (textures, materials, scenes) under a stable root.
@@ -315,6 +326,12 @@ void EditorContext::endPlay() {
 }
 
 void EditorContext::initScripting() {
+    // Default sink: plain process output. The editor bridge replaces this to
+    // route script logs into the Console panel.
+    scriptLog = [](int level, const std::string& message) {
+        std::fprintf(level >= 4 ? stderr : stdout, "[script] %s\n",
+                     message.c_str());
+    };
 #ifdef SKY_MANAGED_DIR
     const std::filesystem::path managedDir = SKY_MANAGED_DIR;
     scripting::DotNetHostConfig config;
@@ -327,6 +344,7 @@ void EditorContext::initScripting() {
     scriptHost->loadAssembly(
         {"SkyEngine.TestScripts", managedDir / "SkyEngine.TestScripts.dll"});
     g_scriptObjects = objects.get();
+    g_scriptContext = this;
     scriptHost->installEngineApi(&g_scriptApi);
 #endif
 }
@@ -337,6 +355,7 @@ void EditorContext::startPlayScripts() {
         return;
     }
     g_scriptObjects = objects.get(); // this context owns scripting while playing
+    g_scriptContext = this;
     std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
     while (!stack.empty()) {
         const auto object = stack.back();

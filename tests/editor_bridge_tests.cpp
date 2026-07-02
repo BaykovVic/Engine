@@ -259,6 +259,29 @@ void testBridgeViewport()
 
 } // namespace
 
+// Managed Debug.Log routes into the Console log buffer: entering play starts
+// the demo Rotator script, whose OnStart logs through the reverse boundary.
+// Compiled only when the build carries the managed assemblies.
+void testBridgeScriptLog() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+    CHECK(sky_editor_play(ctx) == 1);
+
+    bool found = false;
+    const int32_t count = sky_editor_log_count(ctx);
+    for (int32_t i = 0; i < count && !found; ++i) {
+        char buffer[256] = {0};
+        sky_editor_log_text(ctx, i, buffer, sizeof(buffer));
+        found = std::strstr(buffer, "Script: Rotator started") != nullptr;
+    }
+    CHECK(found);
+
+    sky_editor_stop(ctx);
+    sky_editor_destroy(ctx);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -266,5 +289,6 @@ int main() {
     testBridgeTransformSpaces();
     testBridgeComponentFields();
     testBridgeViewport();
+    testBridgeScriptLog();
     return sky::test::summary("editor_bridge_tests");
 }
