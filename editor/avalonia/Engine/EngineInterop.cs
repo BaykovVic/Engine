@@ -101,6 +101,7 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_package_active(IntPtr ctx, int index);
     [DllImport(Lib)] public static extern void sky_editor_package_set_active(IntPtr ctx, int index, int active);
     [DllImport(Lib)] public static extern int sky_editor_package_refresh(IntPtr ctx);
+    [DllImport(Lib)] public static extern int sky_editor_package_install(IntPtr ctx, string source);
     [DllImport(Lib)] public static extern void sky_editor_set_object_enabled(IntPtr ctx, ulong obj, int enabled);
     [DllImport(Lib)] public static extern int sky_editor_object_enabled(IntPtr ctx, ulong obj);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_rename_object(IntPtr ctx, ulong obj, string name);

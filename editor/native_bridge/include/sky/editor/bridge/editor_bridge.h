@@ -210,6 +210,12 @@ SKY_BRIDGE_API int32_t sky_editor_package_active(SkyEditorContext* ctx, int32_t 
 SKY_BRIDGE_API void sky_editor_package_set_active(SkyEditorContext* ctx, int32_t index,
                                                   int32_t active);
 SKY_BRIDGE_API int32_t sky_editor_package_refresh(SkyEditorContext* ctx);
+/* Installs a package from a source: a local package directory, a tarball
+ * (.tar/.tar.gz/.tgz) or a git URL/path ("url#tag" pins a tag). The package
+ * goes through the global version-addressed cache into the project's
+ * Packages directory; the list refreshes. 1 on success. */
+SKY_BRIDGE_API int32_t sky_editor_package_install(SkyEditorContext* ctx,
+                                                  const char* source);
 
 SKY_BRIDGE_API void sky_editor_new_scene(SkyEditorContext* ctx);
 SKY_BRIDGE_API int32_t sky_editor_save_scene(SkyEditorContext* ctx, const char* path);

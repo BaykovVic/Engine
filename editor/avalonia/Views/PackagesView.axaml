@@ -9,6 +9,14 @@
         <Button Grid.Column="1" Classes="chip" Content="Refresh" Click="OnRefresh"/>
       </Grid>
     </Border>
+    <!-- Install from a folder, tarball or git URL (#tag pins a tag). -->
+    <Border DockPanel.Dock="Top" Padding="10,7">
+      <Grid ColumnDefinitions="*,8,Auto">
+        <TextBox Name="InstallSource" Classes="field"
+                 Watermark="Folder, .tar.gz or git URL (#tag)"/>
+        <Button Grid.Column="2" Classes="chip" Content="Install" Click="OnInstall"/>
+      </Grid>
+    </Border>
     <!-- Column header -->
     <Border DockPanel.Dock="Top" Classes="table-header">
       <Grid ColumnDefinitions="*,90,90,110">

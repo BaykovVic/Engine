@@ -15,6 +15,11 @@ constexpr serialization::SchemaVersion kPackageSchemaVersion{1, 0};
 
 std::optional<PackageManifest> readManifest(serialization::ISerializationBackend& storage,
                                             const std::filesystem::path& packageDir) {
+    return loadPackageManifest(storage, packageDir);
+}
+
+std::optional<PackageManifest> readManifestImpl(serialization::ISerializationBackend& storage,
+                                                const std::filesystem::path& packageDir) {
     const auto blob = storage.read(packageDir / kPackageFileName);
     if (!blob || blob->schemaId != kPackageSchemaId ||
         blob->version != kPackageSchemaVersion) {
@@ -350,6 +355,12 @@ std::optional<std::vector<LockedPackage>> loadPackageLock(
         packages.push_back({*id, *version, *checksum, *active != 0});
     }
     return packages;
+}
+
+std::optional<PackageManifest> loadPackageManifest(
+    serialization::ISerializationBackend& storage,
+    const std::filesystem::path& packageDir) {
+    return readManifestImpl(storage, packageDir);
 }
 
 bool savePackageManifest(serialization::ISerializationBackend& storage,

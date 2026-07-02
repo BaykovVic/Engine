@@ -106,7 +106,8 @@ sky_add_module(sky_physics physics
     physics/src/physics_world.cpp)
 
 sky_add_module(sky_package package
-    package/src/package_world.cpp)
+    package/src/package_world.cpp
+    package/src/package_installer.cpp)
 
 sky_add_module(sky_rendering rendering
     rendering/src/null_renderer.cpp

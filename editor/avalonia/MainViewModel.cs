@@ -96,6 +96,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Packages.Clear();
         foreach (var p in _session.ReadPackages()) Packages.Add(p);
     }
+    /// Installs a package from a folder, tarball or git URL; refreshes the
+    /// table on success.
+    public bool InstallPackage(string source)
+    {
+        var ok = _session.InstallPackage(source);
+        if (ok) RefreshPackages();
+        return ok;
+    }
+
     public void TogglePackage(PackageInfo? p)
     {
         if (p == null) return;

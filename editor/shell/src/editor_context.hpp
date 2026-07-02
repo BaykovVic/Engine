@@ -149,6 +149,12 @@ public:
     bool setObjectVelocity(object::ObjectHandle object, core::Vec3 velocity);
     [[nodiscard]] core::Vec3 objectVelocity(object::ObjectHandle object) const;
 
+    /// Installs a package from a source — local package directory, tarball
+    /// (.tar/.tar.gz/.tgz) or git URL ("url#tag" pins a tag) — through the
+    /// global version-addressed cache into the project's Packages, then
+    /// rediscovers. False on any failure.
+    bool installPackage(const std::string& source);
+
     /// Package activation with persistence. Activating resolves the package's
     /// dependency graph (dependencies activate first); the resulting state is
     /// written to Packages/sky.lock and re-applied on the next startup.
@@ -189,6 +195,7 @@ public:
     std::unique_ptr<rendering::IRendererRegistry> renderers;
     std::unique_ptr<package::PackageWorld> packages;
     std::filesystem::path packagesRoot;
+    std::filesystem::path packageCacheRoot;
     std::filesystem::path assetsRoot;
     std::unique_ptr<serialization::ISerializationBackend> storage;
     std::unique_ptr<object::ObjectWorld> objects;

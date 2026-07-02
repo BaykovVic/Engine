@@ -542,6 +542,8 @@ public sealed class EditorSession : IDisposable
     public void SetPackageActive(int index, bool active) =>
         EngineInterop.sky_editor_package_set_active(_ctx, index, active ? 1 : 0);
     public void RefreshPackages() => EngineInterop.sky_editor_package_refresh(_ctx);
+    public bool InstallPackage(string source) =>
+        EngineInterop.sky_editor_package_install(_ctx, source) == 1;
 
     public void NewScene()
     {

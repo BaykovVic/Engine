@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "sky/package/package_system.hpp"
 #include "sky/platform/file_system.hpp"
@@ -36,5 +37,11 @@ std::unique_ptr<PackageWorld> createPackageWorld(platform::IFileSystem& fileSyst
 /// becomes discoverable. Used by tooling and tests.
 bool savePackageManifest(serialization::ISerializationBackend& storage,
                          const PackageManifest& manifest);
+
+/// Reads the manifest of the package at `packageDir` (nullopt when missing
+/// or from a foreign schema). rootPath is set to `packageDir`.
+std::optional<PackageManifest> loadPackageManifest(
+    serialization::ISerializationBackend& storage,
+    const std::filesystem::path& packageDir);
 
 } // namespace sky::package

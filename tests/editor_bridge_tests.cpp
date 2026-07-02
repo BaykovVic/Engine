@@ -12,7 +12,10 @@
 #include <X11/Xutil.h>
 
 #include "sky/editor/bridge/editor_bridge.h"
+#include "sky/package/package_world.hpp"
+#include "sky/platform/platform_services.hpp"
 #include "sky/platform/x11_window_system.hpp"
+#include "sky/serialization/backends.hpp"
 #include "sky_test.hpp"
 
 namespace {
@@ -739,6 +742,51 @@ void testBridgePackagePersistence() {
     std::filesystem::remove(lockPath, stale);
 }
 
+// Installing a package through the ABI: a local source directory lands in
+// the project's Packages via the global cache and shows up in the list.
+void testBridgePackageInstall() {
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    // Author a source package outside the project.
+    const auto base = std::filesystem::temp_directory_path() /
+                      "sky_engine_tests" / "bridge_pkg_install";
+    {
+        // Reuse the engine's own manifest writer through a tiny local blob:
+        // the bridge has no manifest-authoring ABI (by design), so the test
+        // shells through the C++ helper linked into this binary.
+        std::filesystem::create_directories(base / "pkg.extra");
+    }
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const auto storage =
+        sky::serialization::createFileSerializationBackend(*fileSystem);
+    sky::package::PackageManifest manifest;
+    manifest.packageId = "pkg.extra";
+    manifest.version = "0.9.0";
+    manifest.displayName = "Extra";
+    manifest.rootPath = base / "pkg.extra";
+    CHECK(sky::package::savePackageManifest(*storage, manifest));
+
+    const int32_t before = sky_editor_package_count(ctx);
+    CHECK(sky_editor_package_install(ctx, manifest.rootPath.string().c_str()) == 1);
+    CHECK(sky_editor_package_count(ctx) == before + 1);
+    CHECK(sky_editor_package_install(ctx, "/nonexistent") == 0);
+
+    sky_editor_destroy(ctx);
+    // Shared demo roots: leave no installed copy, cache or lock behind.
+    std::error_code cleanup;
+    std::filesystem::remove_all(base, cleanup);
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                    "sky_editor_packages" / "pkg.extra-0.9.0",
+                                cleanup);
+    std::filesystem::remove(std::filesystem::temp_directory_path() /
+                                "sky_editor_packages" / "sky.lock",
+                            cleanup);
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                    "sky_editor_pkg_cache",
+                                cleanup);
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -754,5 +802,6 @@ int main() {
     testBridgePrefabs();
     testBridgeScriptEngineApi();
     testBridgePackagePersistence();
+    testBridgePackageInstall();
     return sky::test::summary("editor_bridge_tests");
 }

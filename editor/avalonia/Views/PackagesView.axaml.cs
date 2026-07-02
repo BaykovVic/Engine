@@ -19,4 +19,14 @@ public partial class PackagesView : UserControl
         if (sender is Control { DataContext: PackageInfo package })
             Vm?.TogglePackage(package);
     }
+
+    private void OnInstall(object? sender, RoutedEventArgs e)
+    {
+        var box = this.FindControl<TextBox>("InstallSource");
+        var source = box?.Text?.Trim();
+        if (string.IsNullOrEmpty(source))
+            return;
+        if (Vm?.InstallPackage(source) == true && box != null)
+            box.Text = string.Empty;
+    }
 }

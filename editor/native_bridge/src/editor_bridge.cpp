@@ -1022,6 +1022,18 @@ int32_t sky_editor_package_refresh(SkyEditorContext* ctx) {
     return static_cast<int32_t>(count);
 }
 
+int32_t sky_editor_package_install(SkyEditorContext* ctx, const char* source) {
+    if (source == nullptr || source[0] == '\0') {
+        return 0;
+    }
+    const bool ok = ec(ctx).installPackage(source);
+    logMsg(self(ctx), ok ? sky::core::LogLevel::Info : sky::core::LogLevel::Error,
+           "Packages",
+           ok ? "Installed from " + std::string(source)
+              : "Install failed: " + std::string(source));
+    return ok ? 1 : 0;
+}
+
 int32_t sky_editor_attach_viewport(SkyEditorContext* ctx, void* x11Display,
                                    uint64_t x11Window, uint32_t width,
                                    uint32_t height) {

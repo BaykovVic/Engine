@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "sky/package/package_installer.hpp"
 #include "sky/package/package_lock.hpp"
 #include "sky/rendering_opengl/opengl_backend.hpp"
 #include "sky/serialization/byte_stream.hpp"
@@ -262,6 +263,8 @@ EditorContext::EditorContext() {
     // discovered exactly like user packages and mounted into the VFS.
     packages = package::createPackageWorld(*fileSystem, *storage);
     packagesRoot = std::filesystem::temp_directory_path() / "sky_editor_packages";
+    packageCacheRoot =
+        std::filesystem::temp_directory_path() / "sky_editor_pkg_cache";
     {
         package::PackageManifest noise;
         noise.packageId = "sky.noise-lib";
@@ -1009,6 +1012,16 @@ object::ObjectHandle EditorContext::spawnPrefabAt(const std::string& path,
         startScriptsFor(object);
     }
     return object;
+}
+
+bool EditorContext::installPackage(const std::string& source) {
+    package::PackageInstaller installer(*storage, packageCacheRoot);
+    if (!installer.install(source, packagesRoot)) {
+        return false;
+    }
+    packages->discoverPackages(packagesRoot);
+    writePackageLock(); // the newcomer appears in the lock (inactive)
+    return true;
 }
 
 bool EditorContext::setPackageActive(const std::string& packageId, bool active) {

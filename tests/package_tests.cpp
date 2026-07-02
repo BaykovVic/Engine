@@ -1,5 +1,9 @@
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 
+#include "sky/package/package_installer.hpp"
 #include "sky/package/package_lock.hpp"
 #include "sky/package/package_world.hpp"
 #include "sky/package/semver.hpp"
@@ -213,6 +217,93 @@ void testLockRoundTrip() {
                                 "sky_engine_tests" / "package");
 }
 
+void testInstaller() {
+    // Shells out to tar and git; skip cleanly where they are absent.
+    if (std::system("tar --version > /dev/null 2>&1") != 0 ||
+        std::system("git --version > /dev/null 2>&1") != 0) {
+        std::puts("package_tests: no tar/git, skipping installer case");
+        return;
+    }
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const auto storage = sky::serialization::createFileSerializationBackend(*fileSystem);
+    const auto base = std::filesystem::temp_directory_path() / "sky_engine_tests" /
+                      "package" / "installer";
+    const auto cache = base / "cache";
+    const auto project = base / "Packages";
+    std::filesystem::create_directories(project);
+
+    // Source package: a directory with a manifest and a payload file.
+    sky::package::PackageManifest manifest;
+    manifest.packageId = "pkg.dist";
+    manifest.version = "1.1.0";
+    manifest.displayName = "Distributed";
+    manifest.rootPath = base / "src" / "pkg.dist";
+    CHECK(sky::package::savePackageManifest(*storage, manifest));
+    {
+        std::ofstream payload(manifest.rootPath / "readme.txt");
+        payload << "hello";
+    }
+
+    sky::package::PackageInstaller installer(*storage, cache);
+
+    // 1) Directory install: lands in the cache and in the project.
+    const auto fromDir = installer.install(manifest.rootPath.string(), project);
+    CHECK(fromDir.has_value());
+    CHECK(fromDir->packageId == "pkg.dist");
+    CHECK(fromDir->rootPath == project / "pkg.dist-1.1.0");
+    CHECK(std::filesystem::exists(project / "pkg.dist-1.1.0" / "readme.txt"));
+    CHECK(std::filesystem::exists(cache / "pkg.dist" / "1.1.0" / "readme.txt"));
+
+    // The installed copy is discoverable and resolvable.
+    const auto packages = sky::package::createPackageWorld(*fileSystem, *storage);
+    CHECK(packages->discoverPackages(project) == 1);
+    CHECK(packages->resolve({"pkg.dist@^1"}).size() == 1);
+
+    // 2) Tarball install (a second version, packed with tar).
+    auto v2 = manifest;
+    v2.version = "2.0.0";
+    v2.rootPath = base / "src" / "pkg.dist-2";
+    CHECK(sky::package::savePackageManifest(*storage, v2));
+    const auto tarball = base / "pkg.dist-2.tar.gz";
+    CHECK(std::system(("tar -czf \"" + tarball.string() + "\" -C \"" +
+                       v2.rootPath.parent_path().string() + "\" pkg.dist-2 " +
+                       "> /dev/null 2>&1")
+                          .c_str()) == 0);
+    const auto fromTar = installer.install(tarball.string(), project);
+    CHECK(fromTar.has_value());
+    CHECK(fromTar->version == "2.0.0");
+    CHECK(std::filesystem::exists(project / "pkg.dist-2.0.0"));
+    CHECK(packages->discoverPackages(project) == 2); // both versions side by side
+
+    // 3) Git install from a local bare repository, pinned to a tag.
+    const auto work = base / "gitwork";
+    auto v3 = manifest;
+    v3.version = "3.0.0";
+    v3.rootPath = work;
+    CHECK(sky::package::savePackageManifest(*storage, v3));
+    const auto bare = base / "pkg.dist.git";
+    const std::string gitBase =
+        "git -C \"" + work.string() + "\" -c user.email=t@t -c user.name=t ";
+    CHECK(std::system((gitBase + "init -q").c_str()) == 0);
+    CHECK(std::system((gitBase + "add .").c_str()) == 0);
+    CHECK(std::system((gitBase + "commit -q -m pkg").c_str()) == 0);
+    CHECK(std::system((gitBase + "tag v3.0.0").c_str()) == 0);
+    CHECK(std::system(("git clone -q --bare \"" + work.string() + "\" \"" +
+                       bare.string() + "\" > /dev/null 2>&1")
+                          .c_str()) == 0);
+    const auto fromGit = installer.install(bare.string() + "#v3.0.0", project);
+    CHECK(fromGit.has_value());
+    CHECK(fromGit->version == "3.0.0");
+    CHECK(!std::filesystem::exists(project / "pkg.dist-3.0.0" / ".git"));
+
+    // A bogus source fails without touching the project.
+    CHECK(!installer.install("/nonexistent/thing.tar.gz", project).has_value());
+    CHECK(!installer.install(base.string(), project).has_value()); // no manifest
+
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                "sky_engine_tests" / "package");
+}
+
 } // namespace
 
 int main() {
@@ -221,5 +312,6 @@ int main() {
     testCycleDetection();
     testMinimalVersionSelection();
     testLockRoundTrip();
+    testInstaller();
     return sky::test::summary("package_tests");
 }
