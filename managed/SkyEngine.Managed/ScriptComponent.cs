@@ -38,6 +38,23 @@ public abstract class ScriptComponent
         return (x, y, z);
     }
 
+    /// <summary>World-space position of any object by id — e.g. one this
+    /// script spawned via Instantiate.</summary>
+    protected static (float X, float Y, float Z) GetWorldPosition(ulong objectId)
+    {
+        float x = 0, y = 0, z = 0;
+        Engine.GetWorldPosition?.Invoke(objectId, out x, out y, out z);
+        return (x, y, z);
+    }
+
+    /// <summary>Sets the local position of any object by id.</summary>
+    protected static void SetLocalPosition(ulong objectId, float x, float y, float z) =>
+        Engine.SetLocalPosition?.Invoke(objectId, x, y, z);
+
+    /// <summary>Sets the rigid-body velocity of any object by id.</summary>
+    protected static void SetVelocity(ulong objectId, float x, float y, float z) =>
+        Engine.SetVelocity?.Invoke(objectId, x, y, z);
+
     /// <summary>Spawns a prefab (.skyprefab path or "assets://..." reference)
     /// at a world position. Returns the new object's id (0 on failure). In
     /// play mode the spawned object's own scripts start on the next frame.</summary>

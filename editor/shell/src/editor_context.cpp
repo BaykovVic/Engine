@@ -1377,6 +1377,24 @@ void EditorContext::buildDemoScene() {
     components->setField(cameraComponent, "fieldOfView", 60.0f);
     components->setField(cameraComponent, "nearPlane", 0.1f);
     components->setField(cameraComponent, "farPlane", 1000.0f);
+
+    // Demo prefabs under Assets/Prefabs: a physics crate (from Crate A) and
+    // a WASD-driven player pawn — the CrateRain demo game spawns both, and
+    // the Project panel shows them as draggable assets.
+    if (!roots_.empty()) {
+        for (const auto root : roots_) {
+            if (objects->nameOf(root) == "Crate A") {
+                savePrefab(root, "assets://Prefabs/crate.skyprefab");
+                break;
+            }
+        }
+        const auto pawn = createPrimitive(scene::PrimitiveKind::Cube, "Player");
+        const auto mover = components->attach(pawn, "sky.script");
+        components->setField(mover, "class",
+                             std::string("SkyEngine.Tests.WasdMover"));
+        savePrefab(pawn, "assets://Prefabs/player.skyprefab");
+        destroyObject(pawn); // only the prefab file remains
+    }
 }
 
 } // namespace sky::editor

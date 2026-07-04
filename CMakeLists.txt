@@ -44,6 +44,7 @@ if(SKY_DOTNET)
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spawner.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/SelfDestruct.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/GroundProbe.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/CrateRain.cs
         COMMENT "Building managed assemblies")
     add_custom_target(sky_managed ALL
         DEPENDS ${SKY_MANAGED_DIR}/SkyEngine.Managed.dll)

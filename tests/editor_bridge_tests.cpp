@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -877,6 +878,50 @@ void testBridgePackageCode() {
 #endif
 }
 
+// The CrateRain demo game runs end to end on the scripting API: the director
+// spawns the player pawn and rains crates from prefabs, reads other objects'
+// positions, destroys landed crates and keeps score in the Console.
+void testBridgeCrateRain() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    const SkyObjectId director =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Game Director");
+    const int32_t script = attachScript(ctx, director, "SkyEngine.Tests.CrateRain");
+    sky_editor_set_script_field(
+        ctx, director, script,
+        scriptFieldIndex(ctx, director, script, "Interval"), "0.4");
+
+    // Optional demo-authoring hook: save the ready game scene for the player.
+    if (const char* out = std::getenv("SKY_SAVE_GAME_SCENE")) {
+        CHECK(sky_editor_save_scene(ctx, out) == 1);
+    }
+
+    const int32_t rootsBefore = sky_editor_root_count(ctx);
+    CHECK(sky_editor_play(ctx) == 1);
+    for (int i = 0; i < 120; ++i) { // две simulated-секунды
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+    // Пешка игрока + хотя бы один живой ящик в полёте.
+    CHECK(sky_editor_root_count(ctx) >= rootsBefore + 2);
+
+    bool started = false, resolved = false;
+    for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+        char buffer[256] = {0};
+        sky_editor_log_text(ctx, i, buffer, sizeof(buffer));
+        started = started || std::strstr(buffer, "CrateRain: dodge") != nullptr;
+        resolved = resolved || std::strstr(buffer, "CrateRain: dodged") != nullptr ||
+                   std::strstr(buffer, "CrateRain: HIT") != nullptr;
+    }
+    CHECK(started);
+    CHECK(resolved); // первый ящик успел упасть и разрешиться за 2 секунды
+
+    sky_editor_stop(ctx);
+    sky_editor_destroy(ctx);
+#endif
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -894,5 +939,6 @@ int main() {
     testBridgePackagePersistence();
     testBridgePackageInstall();
     testBridgePackageCode();
+    testBridgeCrateRain();
     return sky::test::summary("editor_bridge_tests");
 }
