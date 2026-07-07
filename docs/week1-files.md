@@ -288,3 +288,7 @@
 
 Каждый файл — с тестом на его суставе; ворота недели считаются взятыми,
 когда весь `ctest` зелёный в CI и `triangle.png` лежит артефактом.
+
+---
+
+Продолжение: [week2-files.md](week2-files.md) · [weeks3-4-files.md](weeks3-4-files.md) · [weeks5-6-files.md](weeks5-6-files.md) · [weeks7-8-files.md](weeks7-8-files.md)
