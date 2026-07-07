@@ -71,5 +71,15 @@
 #### `[B] .github/workflows/ci.yml` (дополнить)
 - шаг «player smoke»: `sky_player --headless player-smoke.png --frames 60` + артефакт.
 
+## E6 · Многопоточное исполнение систем
+
+#### `[H] engine/core/include/sky/core/job_scheduler.hpp` (использовать заготовку)
+- `class IJobScheduler { JobHandle schedule(Job); scheduleAfter(JobHandle, Job); wait(JobHandle); }`
+
+#### `[S] engine/ecs/src/ecs_world.cpp` (дополнить)
+- `tick` раскладывает независимые системы по `schedule`, зависимые — через `scheduleAfter`; барьер `wait` перед `pull`.
+
+**На выходе:** независимые системы исполняются параллельно; результат детерминирован и совпадает с однопоточным (тест эквивалентности).
+
 **Ворота M3:** C#-скрипт на объекте работает и в Play редактора, и в
 standalone-плеере (проверка точная: 90°/с × 1 с = 45°).

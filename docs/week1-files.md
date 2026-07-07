@@ -259,6 +259,30 @@
 #### `[B] editor/native_bridge/CMakeLists.txt`
 - `add_library(sky_editor_bridge SHARED ...)`, visibility hidden, алиас `sky::editor_bridge`.
 
+## E6 · Data-oriented системы (ECS) — **обязательно к 17 июля**
+
+### ECS-мир и планировщик систем
+
+#### `[H] engine/ecs/include/sky/ecs/ecs.hpp`
+- `struct EntityId { uint32_t index; uint32_t generation; }` — сущность с поколением.
+- `class IEcsComponentStore { componentType(); has(EntityId); remove(EntityId); count(); }`
+- `template<T> class TypedComponentStore : IEcsComponentStore { set(EntityId,T); get(EntityId)→T*; }`
+- `struct EcsTransform { core::Transform value; }` — базовый компонент.
+- `class IEcsSystem { name(); update(double dt); }`
+- `class IEcsWorld { createEntity(); destroyEntity(id); isAlive(id); store(type_index); }`
+- `class IEcsSystemScheduler { registerSystem; unregisterSystem; tick(dt); }`
+- `class IEcsQueryService { entitiesWith(set<type_index>); }`
+
+#### `[H] engine/ecs/include/sky/ecs/ecs_world.hpp`
+- `class EcsWorld : IEcsWorld, IEcsSystemScheduler, IEcsQueryService { template<T> TypedComponentStore<T>& storeFor(); StoreMap& stores(); }`
+- `std::unique_ptr<EcsWorld> createEcsWorld();`
+
+#### `[S] engine/ecs/src/ecs_world.cpp`
+- пул сущностей с поколениями; типизированные хранилища; планировщик (однопоточный tick); запрос по набору типов.
+
+#### `[T] tests/runtime_tests.cpp`, `integrity_tests.cpp`
+- система, удваивающая координату, меняет только сущности с нужным компонентом; `storeFor<EcsTransform>().get(...)` возвращает обновлённое значение.
+
 ---
 
 ## Порядок создания файлов (кратчайший путь к зелёному CI)

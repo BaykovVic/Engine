@@ -74,5 +74,19 @@
 #### `[T] tests/scene_tests.cpp`, `tests/runtime_tests.cpp`
 - сцена: добавить рут, перечислить, round-trip заглушки; runtime: `FrameBuilder.build` возвращает непустой поток команд на демо-сцене.
 
+## E6 · Синхронизация ECS с объектным миром — **обязательно к 17 июля**
+
+#### `[H] engine/ecs/include/sky/ecs/object_sync.hpp`
+- `class IEcsObjectSync { EntityId bind(ObjectHandle); unbind(ObjectHandle); entityOf(ObjectHandle); objectOf(EntityId); pushAuthoringState(); pullEcsResults(); }`
+- `std::unique_ptr<IEcsObjectSync> createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&);`
+
+#### `[S] engine/ecs/src/object_sync.cpp`
+- привязка пары объект↔сущность; `push` переносит `localTransform` объекта в `EcsTransform`, `pull` — обратно.
+
+#### `[S] engine/scene/src/scene_world.cpp` (совместно с E1)
+- в такте: `ecsSync->pushAuthoringState()` → `ecsScheduler->tick(dt)` → `ecsSync->pullEcsResults()`.
+
+**На выходе:** объект, обработанный ECS-системой, получает изменённый трансформ в объектном мире; при паузе состояние не меняется (`runtime_tests`).
+
 **Ворота M1:** редактор открывается, демо-сцена видна во вьюпорт-панели,
 Hierarchy живая; `sky_player --headless` пишет PNG; всё зелёное в CI.
