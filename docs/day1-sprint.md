@@ -228,5 +228,4 @@ distance}`, `CollisionEvent{first,second}`.
 день 1 — заголовок `core/math.hpp` (E1→E2 и E1→E4: `RenderCommand` и типы физики
 держат `core::Vec3`/`core::Transform`) и `engine/CMakeLists.txt` (E5 включает
 модули по мере их появления). Полные пути следующих фич — в
-`docs/role-E1.md` … `docs/role-E6.md`; кросс-срез по неделям — в
-`docs/weeks-overview.md`.
+`docs/role-E1.md` … `docs/role-E6.md`.
