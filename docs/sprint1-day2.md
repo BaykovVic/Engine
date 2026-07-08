@@ -118,7 +118,10 @@ class ObjectPhysicsSync : IPhysicsSyncContract — добавляет функц
 - `virtual void pushKinematicState() = 0` — до шага переносит трансформы объектов в тела.
 - `virtual void pullSimulationResults() = 0` — после шага переносит результат обратно.
 - `std::unique_ptr<ObjectPhysicsSync> createObjectPhysicsSync(PhysicsWorld&, object::IObjectHierarchyAccess&)` — фабрика.
-В методах должна быть реализована логика: связка тело↔объект; push до шага, pull после шага.
+В методах должна быть реализована логика:
+- bind/unbind — вести карту связей тело↔объект.
+- pushKinematicState() — до шага для каждой связи записать мировой трансформ объекта в тело.
+- pullSimulationResults() — после шага записать трансформ тела обратно в локальный трансформ объекта.
 
 Сделай файл tests/physics_tests.cpp
 В файле должны быть проверки: падение ≈4.9 м/с, куб на полу, тело на heightfield, синхронизация объекта.

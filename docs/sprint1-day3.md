@@ -36,7 +36,11 @@ class ObjectWorld : IObjectFactory, IObjectHierarchyAccess, IObjectQueryService 
 - `std::unique_ptr<ObjectWorld> createObjectWorld()` — Возвращает: реализацию мира объектов.
 
 Сделай файл engine/object/src/object_world.cpp
-В методах должна быть реализована логика: хранилище id → {локальный трансформ, родитель, дети, имя}; worldTransform = compose вверх; destroyObject рекурсивно удаляет поддерево.
+Реализация ObjectWorld (скрытый класс) и фабрика createObjectWorld(). В методах должна быть реализована логика:
+- хранилище id → {локальный трансформ, родитель, дети, имя}.
+- createObject — завести объект; destroyObject — рекурсивно удалить объект и всё его поддерево.
+- setParent — сменить родителя (обновить списки детей); worldTransform(object) — свернуть локальные трансформы вверх по цепочке родителей через compose.
+- setLocalTransform/localTransform, renameObject, exists/nameOf/findByName — доступ к состоянию объекта.
 
 На выходе должно получиться:
 - engine/object/include/sky/object/object_model.hpp

@@ -75,10 +75,17 @@ class IRendererRegistry — реестр бэкендов рендера:
 В файле должен быть пустой рендерер (считает кадры/команды, ничего не рисует) — для тестов контракта.
 
 Сделай файл engine/rendering/src/null_renderer.cpp
-В методах должна быть реализована логика: пустой рендерер — подсчёт кадров и команд без реальной отрисовки.
+Реализация пустого рендерера (скрытый класс) и фабрики createNullRenderer, createOffscreenSurface. В методах должна быть реализована логика:
+- submit(commands) — дописать команды во внутренний буфер.
+- renderFrame() — запомнить число команд в буфере (commandsInLastFrame), очистить буфер, увеличить счётчик кадров (frameCount), вызвать present() у привязанной поверхности.
+- createMeshFromData / createTextureFromData — проверить вход и завести хэндл ресурса (учитывается в множестве живых); destroy — убрать ресурс.
+- frameCount / commandsInLastFrame / liveResourceCount — чтение счётчиков.
 
 Сделай файл engine/rendering/src/renderer_registry.cpp
-В методах должна быть реализована логика: реестр бэкендов — registerBackend (хранение фабрик по имени), create (создание рендерера по имени), createRendererRegistry.
+Реализация реестра (скрытый класс) и фабрика createRendererRegistry(). В методах должна быть реализована логика:
+- конструктор реестра предрегистрирует бэкенд "null".
+- registerBackend(name, factory) — сохранить фабрику по имени; отклонить пустое имя, пустую фабрику и дубликат.
+- create(name, init) — найти фабрику по имени и создать рендерер; для неизвестного имени вернуть nullptr.
 
 На выходе должно получиться:
 - engine/rendering/include/sky/rendering/rendering.hpp
@@ -151,7 +158,13 @@ class PhysicsWorld : IPhysicsWorld, IPhysicsQueryService — добавляет 
 - `std::unique_ptr<PhysicsWorld> createPhysicsWorld()` — фабрика.
 
 Сделай файл engine/physics/src/physics_world.cpp
-В методах должна быть реализована логика: интегрирование гравитации в step; detectAndResolve (расталкивание AABB, сбор CollisionEvent); sampleHeightfield/resolveHeightfields (удержание на террейне); raycast по коллайдерам и высотной поверхности.
+Реализация PhysicsWorld (скрытый класс) и фабрика createPhysicsWorld(). В методах должна быть реализована логика:
+- createBody / destroyBody / attachCollider / detachCollider — ведут хранилища тел и коллайдеров (id с 1); destroyBody каскадно удаляет коллайдеры тела.
+- step(fixedDeltaSeconds) — для каждого Dynamic-тела: к скорости прибавить gravity·dt, затем к позиции прибавить velocity·dt (явный Эйлер); Static/Kinematic не двигать. После движения вызвать resolveHeightfields() и detectAndResolve().
+- detectAndResolve() — построить осевую коробку (AABB) каждого коллайдера (позиция тела ± halfExtents); для пар РАЗНЫХ тел, чьи коробки пересеклись, записать CollisionEvent и, если одно тело Dynamic, а другое — нет, вытолкнуть Dynamic по оси наименьшего проникновения и обнулить его скорость вдоль этой оси.
+- resolveHeightfields() — удержание Dynamic-тел над террейном: под телом взять высоту heightfield; если низ тела ниже поверхности — поднять тело на поверхность и обнулить отрицательную вертикальную скорость, добавить CollisionEvent.
+- sampleHeightfield(field, x, z) — билинейная выборка высоты heightfield в точке (x, z).
+- raycast(origin, direction, maxDistance) — для каждого коллайдера пересечь луч с AABB (метод слэбов) либо с heightfield (марш с бисекцией); вернуть ближайшее попадание в пределах maxDistance, нормаль — грань оси входа.
 
 На выходе должно получиться:
 - engine/physics/include/sky/physics/physics.hpp
@@ -224,7 +237,13 @@ class EcsWorld : IEcsWorld, IEcsSystemScheduler, IEcsQueryService — добав
 - `std::unique_ptr<EcsWorld> createEcsWorld()` — фабрика.
 
 Сделай файл engine/ecs/src/ecs_world.cpp
-В методах должна быть реализована логика: учёт живых сущностей; destroyEntity удаляет компоненты во всех хранилищах; tick прогоняет системы; entitiesWith отбирает сущности со всеми указанными компонентами.
+Реализация EcsWorld (скрытый класс) и фабрика createEcsWorld(). В методах должна быть реализована логика:
+- createEntity() — выдать id (с 1) и пометить сущность живой.
+- destroyEntity(entity) — убрать из живых и удалить её компоненты во всех хранилищах.
+- isAlive(entity) — проверить, жива ли сущность.
+- store(type) — вернуть хранилище типа (бросить, если тип не зарегистрирован).
+- registerSystem/unregisterSystem — вести список систем; tick(dt) — вызвать update у всех систем по порядку.
+- entitiesWith(types) — вернуть живые сущности, у которых есть все указанные компоненты.
 
 На выходе должно получиться:
 - engine/ecs/include/sky/ecs/ecs.hpp
