@@ -13,16 +13,18 @@
 | Контур | Фича | Файлы (создаются) | Зависимости на день 1 |
 |---|---|---|---|
 | **E1** Ядро/данные | `feature/math-and-handles` | `core/math.hpp`, `core/handle.hpp` | нет — стартует первым |
-| **E2** Рендеринг | `feature/render-contract` | `rendering/rendering.hpp`, `renderer_registry.hpp`, `null_renderer.*` | нет |
+| **E2** Рендеринг | `feature/render-contract` | `rendering/rendering.hpp`, `renderer_registry.hpp`, `null_renderer.*` | нужны `core::Vec3/Transform` из E1 (`RenderCommand`) |
 | **E3** Редактор(.NET) | `feature/editor-shell` | `SkyEditor.csproj`, `Program.cs`, `App.axaml.cs`, `MainWindow.axaml.cs` | нет (C-интерфейс нужен только со 2-й фичи) |
-| **E4** Рантайм/скриптинг | `feature/physics-world` | `physics/physics.hpp`, `physics_world.{hpp,cpp}` | нужен `core::Vec3/Transform` из E1 (заголовок) |
+| **E4** Рантайм/скриптинг | `feature/physics-world` | `physics/physics.hpp`, `physics_world.{hpp,cpp}` | нужны `core::Vec3/Transform` из E1 (заголовок) |
 | **E5** Пайплайн/пакеты | `feature/build-system` | `CMakeLists.txt`, `engine/CMakeLists.txt`, `tests/CMakeLists.txt` | нет — включает модули по мере готовности |
 | **E6** Data-oriented(ECS) | `feature/ecs-core` | `ecs/ecs.hpp`, `ecs_world.{hpp,cpp}` | нет |
 
-**Полностью независимы в день 1:** E1, E2, E5, E6. **E3** стартует независимо
-(каркас окна), C-интерфейс подключается лишь со второй фичи. **E4** использует
-математические типы E1 — согласуйте `core/math.hpp` первым же коммитом (E1 отдаёт
-заголовок в первую очередь).
+**Полностью независимы в день 1:** E1, E5, E6. **E3** стартует независимо
+(каркас окна), C-интерфейс подключается лишь со второй фичи. **E2 и E4 зависят
+от математики E1:** `RenderCommand` (E2) и типы физики (E4) держат `core::Vec3`/
+`core::Transform`. Поэтому E1 первым же коммитом отдаёт заголовок
+`engine/core/include/sky/core/math.hpp` — по нему E2 и E4 стартуют, не дожидаясь
+остальной части фичи E1.
 
 ---
 
@@ -106,6 +108,8 @@ rotation, scale}` объявляются здесь же.
 
 **Проверка фичи:** null-рендерер регистрируется в реестре и создаётся по имени;
 `submit` + `renderFrame` увеличивают счётчики кадров/команд.
+Зависимость: `core::Vec3`/`core::Transform` из фичи E1 `feature/math-and-handles`
+(поля `RenderCommand`).
 
 ---
 
@@ -221,7 +225,8 @@ distance}`, `CollisionEvent{first,second}`.
 Шесть параллельных веток `feature/*`, каждая — контракт своего слоя:
 `core::Vec3/Quat/Transform` (E1), поток команд рендера (E2), окно редактора (E3),
 физический мир (E4), скелет сборки (E5), ECS-мир (E6). Точки соприкосновения на
-день 1 — только заголовок `core/math.hpp` (E1→E4) и `engine/CMakeLists.txt`
-(E5 включает модули по мере их появления). Полные пути следующих фич — в
+день 1 — заголовок `core/math.hpp` (E1→E2 и E1→E4: `RenderCommand` и типы физики
+держат `core::Vec3`/`core::Transform`) и `engine/CMakeLists.txt` (E5 включает
+модули по мере их появления). Полные пути следующих фич — в
 `docs/role-E1.md` … `docs/role-E6.md`; кросс-срез по неделям — в
 `docs/weeks-overview.md`.
