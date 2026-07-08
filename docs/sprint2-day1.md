@@ -92,398 +92,481 @@
 
 ---
 
-## feature/vulkan-mesh-lighting
+## feature/editor-camera
 
 - **Исполнитель:** E2 (Рендеринг)
 - **Порядок реализации:** 2
-- **Зависимости:** `feature/render-contract`, `feature/vulkan-offscreen` (Спринт 1); `core::Transform`/`core::Vec3`
+- **Зависимости:** `core::Vec3`/`core::Transform` из `feature/math-and-handles`
 
-**Цель фичи:** отрисовка мешей с матрицами, камера и освещение в Vulkan-рендерере.
+**Цель фичи:** камера редактора (орбита/зум/панорамирование/снап к оси, поза и орто-высота).
 
-**Описание фичи:** дополнение Vulkan-рендерера — загрузка мешей, накопление команд кадра, разбор потока `RenderCommand` (камера, свет, меши) и матричные помощники. Начало Этапа 2 контура E2.
+**Описание фичи:** часть Этапа 3 (выбор объекта, проекция, небо) — камера редактора. Выбор объекта лучом (`pick`) и проекция мира в экран (`project`) реализуются в мосте контура E5 поверх этой камеры (совместная фича).
 
 **Общий порядок реализации фичи:**
-1. Реализовать `createMeshFromData` и `submit`.
-2. Реализовать разбор потока в `renderFrame` (`SetCamera`, `AddLight`, `DrawMesh`).
-3. Реализовать матричные помощники.
+1. Объявить `EditorCamera` и его методы в `editor_camera.hpp`.
+2. Реализовать управление камерой и вычисление позы.
 
 **Файлы фичи:**
-1. `engine/rendering_vulkan/src/vulkan_renderer.cpp`
+1. `editor/shell/src/editor_camera.hpp`
 
-### Файл: `engine/rendering_vulkan/src/vulkan_renderer.cpp`
+### Файл: `editor/shell/src/editor_camera.hpp`
 
-**Назначение файла:** дополнение реализации Vulkan-рендерера мешами, камерой и светом.
+**Назначение файла:** камера редактора.
 
 **Пошаговое описание действий:**
-1. Реализовать `createMeshFromData(std::span<const float>)` — загрузку меша.
-2. Реализовать `submit(std::span<const RenderCommand>)` — накопление команд кадра.
-3. В `renderFrame` разобрать поток: `SetCamera`, `AddLight`, `DrawMesh`.
-4. Реализовать матричные помощники `perspective`, `orthographic`, `fromTransform`, `viewFromCameraPose`.
+1. Объявить структуру `EditorCamera`.
+2. Объявить методы управления и запросов камеры.
 
 **Что должно быть в файле:**
 
 *Структуры / классы / enum:*
-- `FrameUbo` (до 4 источников света).
+- `struct EditorCamera { float yawDegrees; float pitchDegrees; float distance; core::Vec3 target; float fovDegrees; bool orthographic; … }`
 
 *Функции / методы:*
-- `createMeshFromData(std::span<const float>)`
-- `submit(std::span<const RenderCommand>)`
-- `renderFrame` (разбор потока)
-- `perspective(fov,aspect,near,far)`, `orthographic(...)`, `fromTransform(Transform)`, `viewFromCameraPose(...)`
+- `void orbit(float deltaYawDegrees, float deltaPitchDegrees)`
+- `void zoom(float factor)`
+- `void pan(float deltaRight, float deltaUp)`
+- `void lookAlong(int axis)`
+- `core::Transform pose() const`
+- `float orthoHeight() const`
 
 *Логика функций / методов:*
-- `createMeshFromData(std::span<const float>)` — загрузка меша (реализация уже объявленного контракта). Возвращает: хэндл.
-- `submit(std::span<const RenderCommand>)` — накопление команд кадра.
-- в `renderFrame` — разбор потока: `SetCamera` (матрицы вида/проекции: `perspective`/`orthographic`), `AddLight` (до 4 источников в `FrameUbo`), `DrawMesh` (модельная матрица и материал в push-константах).
-- матричные помощники `perspective(fov,aspect,near,far)`, `orthographic(...)`, `fromTransform(Transform)`, `viewFromCameraPose(...)`.
+- `orbit(deltaYawDegrees, deltaPitchDegrees)` — вращает камеру вокруг цели. Параметры: приращения углов в градусах. Возвращает: ничего.
+- `zoom(factor)` — приближает/отдаляет. Параметры: `factor` — коэффициент. Возвращает: ничего.
+- `pan(deltaRight, deltaUp)` — сдвигает цель. Параметры: смещения. Возвращает: ничего.
+- `lookAlong(axis)` — снапит вид к оси. Параметры: `axis` (0=+X,1=−X,2=+Y,3=−Y,…). Возвращает: ничего.
+- `pose()` — Возвращает: мировую позу камеры.
+- `orthoHeight()` — Возвращает: высоту орто-проекции (0 = перспектива).
 
-**Результат по файлу:** рендерер рисует освещённые меши с камерой.
+**Результат по файлу:** управляемая камера редактора.
 
 **Критерий правильности по файлу:**
-1. Кадр демо-сцены содержит освещённые меши.
+1. Заголовок компилируется; `orbit`/`zoom`/`pan`/`lookAlong` меняют позу камеры.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `engine/rendering_vulkan/src/vulkan_renderer.cpp` (дополнено мешами, камерой, светом)
+1. `editor/shell/src/editor_camera.hpp`
 
 **Общий критерий правильности:**
-1. Кадр демо-сцены содержит освещённые меши.
+1. центральный луч кадрированной камеры попадает в объект; проекция origin объекта близка к центру экрана.
 
 ---
 
-## feature/vulkan-viewport
+## feature/gizmos
 
 - **Исполнитель:** E3 (Редактор .NET)
 - **Порядок реализации:** 3
-- **Зависимости:** `feature/engine-bridge` (`EditorSession`, `sky_editor_create`) из Этапа 1 контура E3
+- **Зависимости:** C-интерфейс `sky_editor_*` (мост контура E5); `VulkanViewport`/`MainWindow` из Этапа 2
 
-**Цель фичи:** панель вьюпорта, показывающая кадр движка.
+**Цель фичи:** манипуляторы (гизмо) перемещения/поворота/масштаба и операции модели представления.
 
-**Описание фичи:** `VulkanViewport : Control` держит `WriteableBitmap` и таймер кадров, дёргает нативный offscreen-рендер и блитит пиксели; `SceneView` хостит вьюпорт. Начало Этапа 2 контура E3.
+**Описание фичи:** часть Этапа 3 (гизмо, инспектор, панели данных) — манипуляторы поверх кадра и связанные операции `MainViewModel`.
 
 **Общий порядок реализации фичи:**
-1. Реализовать `VulkanViewport : Control` с `WriteableBitmap` и таймером кадров.
-2. Реализовать `SetContext` и `RenderOnce`.
-3. Собрать `SceneView`, хостящий вьюпорт.
+1. Дополнить `VulkanViewport.cs` свойствами и рисованием гизмо, обработкой драга.
+2. Реализовать `MainViewModel.cs` с инструментом, операциями и свойствами трансформа.
 
 **Файлы фичи:**
 1. `editor/avalonia/Controls/VulkanViewport.cs`
-2. `editor/avalonia/Views/SceneView.axaml.cs`
+2. `editor/avalonia/MainViewModel.cs`
 
 ### Файл: `editor/avalonia/Controls/VulkanViewport.cs`
 
-**Назначение файла:** элемент вьюпорта, рисующий кадр движка.
+**Назначение файла:** рисование и обработка манипуляторов поверх кадра.
 
 **Пошаговое описание действий:**
-1. Объявить `class VulkanViewport : Control` с `WriteableBitmap` и таймером кадров.
-2. Реализовать `SetContext(IntPtr context)`.
-3. Реализовать `RenderOnce()`.
+1. Добавить свойства выделения и инструмента.
+2. Добавить рисование гизмо.
+3. Добавить драг осей.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:*
-- `class VulkanViewport : Control` (держит `WriteableBitmap` и таймер кадров)
+*Структуры / классы / enum:* нет (дополнение класса `VulkanViewport`).
 
 *Функции / методы:*
-- `public void SetContext(IntPtr context)`
-- `public void RenderOnce()`
+- свойства `public ulong SelectedId`, `public bool LocalSpace`, `public GizmoTool Tool`.
+- `DrawMoveGizmo`, `DrawRotateGizmo`, `DrawScaleGizmo`, `DrawSceneGizmo`.
+- `OnPointerPressed/Moved/Released`.
 
 *Логика функций / методов:*
-- `SetContext(context)` — привязывает сессию движка. Параметры: `context`.
-- `RenderOnce()` — рисует один кадр (дёргает нативный offscreen-рендер и блитит пиксели).
+- `DrawMoveGizmo`/`DrawRotateGizmo`/`DrawScaleGizmo`/`DrawSceneGizmo` — рисование манипуляторов поверх кадра.
+- `OnPointerPressed/Moved/Released` — драг осей (перемещение/поворот/масштаб через C-интерфейс).
 
-**Результат по файлу:** элемент вьюпорта, отображающий кадр движка.
+**Результат по файлу:** вьюпорт с гизмо.
 
 **Критерий правильности по файлу:**
-1. `RenderOnce()` выводит непустой кадр в `WriteableBitmap`.
+1. Гизмо move/rotate/scale отрисовываются и реагируют на драг.
 
-### Файл: `editor/avalonia/Views/SceneView.axaml.cs`
+### Файл: `editor/avalonia/MainViewModel.cs`
 
-**Назначение файла:** панель сцены, хостящая вьюпорт.
+**Назначение файла:** модель представления с инструментом, операциями и свойствами трансформа.
 
 **Пошаговое описание действий:**
-1. Разместить `VulkanViewport` внутри `SceneView`.
+1. Объявить `GizmoTool` и активный инструмент.
+2. Реализовать операции создания/отмены/повтора/дублирования/удаления.
+3. Завести двусторонние свойства трансформа.
 
 **Что должно быть в файле:**
 
 *Структуры / классы / enum:*
-- `class SceneView` (хостит `VulkanViewport`)
+- `enum GizmoTool { Hand, Move, Rotate, Scale }`
 
-*Функции / методы:* нет (композиция вью).
+*Функции / методы:*
+- свойство `public GizmoTool Tool` (хоткеи Q/W/E/R).
+- `public void CreateCube()`, `public void Undo()`, `public void Redo()`, `DuplicateSelected()`, `DeleteSelected()`.
+- свойства трансформа `PositionX/Y/Z`, `RotationX/Y/Z`, `ScaleX/Y/Z` (двусторонние).
 
 *Логика функций / методов:*
-- `SceneView` — хостит `VulkanViewport`.
+- `Tool` — активный инструмент, переключается хоткеями Q/W/E/R.
+- `CreateCube`/`Undo`/`Redo`/`DuplicateSelected`/`DeleteSelected` — операции над сценой через C-интерфейс.
+- `PositionX/Y/Z`, `RotationX/Y/Z`, `ScaleX/Y/Z` — двусторонние свойства трансформа выделенного объекта.
 
-**Результат по файлу:** панель сцены с вьюпортом.
+**Результат по файлу:** модель представления гизмо и операций.
 
 **Критерий правильности по файлу:**
-1. Панель вьюпорта показывает демо-сцену.
+1. Активный инструмент синхронизирован; операции применяются к движку.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
 1. `editor/avalonia/Controls/VulkanViewport.cs`
-2. `editor/avalonia/Views/SceneView.axaml.cs`
+2. `editor/avalonia/MainViewModel.cs`
 
 **Общий критерий правильности:**
-1. Панель вьюпорта показывает демо-сцену.
+1. гизмо move/rotate/scale работают; активный инструмент синхронизирован.
 
 ---
 
-## feature/player-runtime
+## feature/dotnet-host
 
 - **Исполнитель:** E4 (Рантайм и физика)
 - **Порядок реализации:** 4
-- **Зависимости:** `EditorContext` (`feature/editor-context`), рендерер (`feature/vulkan-offscreen`), построитель кадра (`feature/frame-builder`)
+- **Зависимости:** нет (хостинг .NET; требует hostfxr в системе)
 
-**Цель фичи:** автономный проигрыватель с собственным циклом и режимами запуска.
+**Цель фичи:** хостинг .NET внутри нативного процесса — контракт хоста скриптов и его реализация через hostfxr.
 
-**Описание фичи:** проигрыватель с точкой входа, безоконным и оконным режимами, разбором аргументов и переносимым кодом клавиш. Этап 2 контура E4.
+**Описание фичи:** первая фича Этапа 4 контура E4 — контракт `IScriptHost` и реализация `DotNetScriptHost`, запускающая среду .NET, загружающая сборки и управляющая жизненным циклом инстансов скриптов.
 
 **Общий порядок реализации фичи:**
-1. Реализовать `main` с разбором `--frames N`, `--headless out.png`, `--scene path`.
-2. Реализовать `runHeadless` (цикл `tickFrame → build → renderFrame`, сохранение PNG).
-3. Реализовать `runWindowed` и `mapPlatformKey`.
+1. Объявить граничные типы `ScriptLifecycleEvent`/`AssemblyRef`.
+2. Объявить контракт `IScriptHost`.
+3. Объявить `DotNetScriptHost` и фабрику `createDotNetScriptHost`.
+4. Реализовать хост через hostfxr в `.cpp`.
 
 **Файлы фичи:**
-1. `player/src/main.cpp`
+1. `engine/scripting/include/sky/scripting/scripting_boundary.hpp`
+2. `engine/scripting/include/sky/scripting/script_host.hpp`
+3. `engine/scripting/include/sky/scripting/dotnet_host.hpp`
+4. `engine/scripting/src/dotnet_host.cpp`
 
-### Файл: `player/src/main.cpp`
+### Файл: `engine/scripting/include/sky/scripting/scripting_boundary.hpp`
 
-**Назначение файла:** точка входа и цикл автономного проигрывателя.
+**Назначение файла:** граничные типы managed↔native.
 
 **Пошаговое описание действий:**
-1. Реализовать `int main(int argc, char** argv)` — разбор `--frames N`, `--headless out.png`, `--scene path`.
-2. Реализовать `int runHeadless(EditorContext&, int frames, const char* screenshotPath)`.
-3. Реализовать `int runWindowed(EditorContext&, int frameLimit)`.
-4. Реализовать `int mapPlatformKey(std::int32_t keysym)`.
+1. Объявить `ScriptLifecycleEvent`.
+2. Объявить `AssemblyRef`.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:* нет.
+*Структуры / классы / enum:*
+- `enum class ScriptLifecycleEvent { OnCreate, OnStart, OnUpdate, OnFixedUpdate, OnDestroy }`
+- `struct AssemblyRef { name; path; }`
 
-*Функции / методы:*
-- `int main(int argc, char** argv)`
-- `int runHeadless(EditorContext& context, int frames, const char* screenshotPath)`
-- `int runWindowed(EditorContext& context, int frameLimit)`
-- `int mapPlatformKey(std::int32_t keysym)`
+*Функции / методы:* нет.
 
 *Логика функций / методов:*
-- `main` — точка входа; разбирает `--frames N`, `--headless out.png`, `--scene path`. Возвращает: код выхода.
-- `runHeadless` — безоконный прогон — цикл `tickFrame → build → renderFrame`, сохранение PNG. Параметры: `context`, `frames` — число кадров, `screenshotPath` — файл. Возвращает: код выхода.
-- `runWindowed` — оконный прогон (окно X11/Cocoa + swapchain-рендерер). Параметры: `context`, `frameLimit`. Возвращает: код выхода.
-- `mapPlatformKey` — переводит платформенный код клавиши в переносимый (общий с C#). Возвращает: переносимый код или 0.
+- `ScriptLifecycleEvent` — событие жизненного цикла скрипта.
+- `AssemblyRef` — ссылка на сборку (имя и путь).
 
-**Результат по файлу:** бинарь `sky_player`; безоконный режим пишет PNG.
+**Результат по файлу:** граничные типы скриптинга зафиксированы.
 
 **Критерий правильности по файлу:**
-1. `sky_player --headless out.png` формирует изображение кадра.
+1. Заголовок компилируется.
+
+### Файл: `engine/scripting/include/sky/scripting/script_host.hpp`
+
+**Назначение файла:** контракт хоста скриптов.
+
+**Пошаговое описание действий:**
+1. Объявить `IScriptHost`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class IScriptHost`
+
+*Функции / методы:*
+- `virtual bool start() = 0`
+- `virtual bool loadAssembly(const AssemblyRef& assembly) = 0`
+- `virtual std::uint64_t createInstance(const std::string& managedTypeName) = 0`
+- `virtual void destroyInstance(std::uint64_t managedInstanceId) = 0`
+- `virtual bool invokeLifecycle(std::uint64_t id, ScriptLifecycleEvent event, double dt) = 0`
+
+*Логика функций / методов:*
+- `start()` — запускает среду .NET. Возвращает: успех.
+- `loadAssembly(assembly)` — загружает сборку. Возвращает: успех.
+- `createInstance(managedTypeName)` — создаёт managed-инстанс класса. Параметры: `managedTypeName` — полное имя класса. Возвращает: id инстанса (0 при ошибке).
+- `destroyInstance(managedInstanceId)` — уничтожает инстанс.
+- `invokeLifecycle(id, event, dt)` — вызывает событие жизненного цикла. Параметры: `id`, `event`, `dt` — шаг времени. Возвращает: успех.
+
+**Результат по файлу:** контракт хоста скриптов зафиксирован.
+
+**Критерий правильности по файлу:**
+1. Заголовок компилируется.
+
+### Файл: `engine/scripting/include/sky/scripting/dotnet_host.hpp`
+
+**Назначение файла:** реализация-контракт хоста через hostfxr.
+
+**Пошаговое описание действий:**
+1. Объявить `DotNetScriptHost`, наследующий `IScriptHost`.
+2. Объявить фабрику `createDotNetScriptHost`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class DotNetScriptHost : IScriptHost`
+
+*Функции / методы:*
+- `virtual void installEngineApi(const void* apiTable) = 0`
+- `virtual void setInstanceObjectId(std::uint64_t id, std::uint64_t objectId) = 0`
+- `virtual void beginFrame(double totalSeconds, double deltaSeconds) = 0`
+- `virtual std::vector<std::string> scriptClassNames() = 0`
+- `std::unique_ptr<DotNetScriptHost> createDotNetScriptHost(const DotNetHostConfig&)`
+
+*Логика функций / методов:*
+- `installEngineApi(apiTable)` — передаёт managed-стороне таблицу нативных функций (обратный API).
+- `setInstanceObjectId(id, objectId)` — связывает инстанс скрипта с объектом.
+- `beginFrame(totalSeconds, deltaSeconds)` — публикует время кадра managed-стороне.
+- `scriptClassNames()` — Возвращает: имена классов-наследников ScriptComponent.
+- `createDotNetScriptHost(config)` — фабрика (nullptr, если hostfxr не найден).
+
+**Результат по файлу:** контракт реализации хоста зафиксирован.
+
+**Критерий правильности по файлу:**
+1. Заголовок компилируется.
+
+### Файл: `engine/scripting/src/dotnet_host.cpp`
+
+**Назначение файла:** реализация хоста через hostfxr.
+
+**Пошаговое описание действий:**
+1. Реализовать запуск среды .NET через hostfxr.
+2. Реализовать загрузку сборок и управление инстансами.
+3. Реализовать обратный API, время кадра и перечень классов.
+4. Реализовать фабрику.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- скрытый класс-реализация `DotNetScriptHost`.
+
+*Функции / методы:*
+- `start`, `loadAssembly`, `createInstance`, `destroyInstance`, `invokeLifecycle`, `installEngineApi`, `setInstanceObjectId`, `beginFrame`, `scriptClassNames`, `createDotNetScriptHost`.
+
+*Логика функций / методов:*
+- `start` — запускает среду .NET через hostfxr.
+- `loadAssembly`/`createInstance`/`destroyInstance`/`invokeLifecycle` — загрузка сборки и управление жизненным циклом инстансов.
+- `installEngineApi`/`setInstanceObjectId`/`beginFrame`/`scriptClassNames` — обратный API, связывание с объектом, время кадра, перечень классов-скриптов.
+- `createDotNetScriptHost(config)` — фабрика; возвращает nullptr, если hostfxr не найден.
+
+**Результат по файлу:** рабочий хост скриптов .NET.
+
+**Критерий правильности по файлу:**
+1. Хост запускает среду .NET, загружает сборку и создаёт инстанс.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `player/src/main.cpp`
-2. бинарь `sky_player`; безоконный режим пишет PNG.
+1. `engine/scripting/include/sky/scripting/scripting_boundary.hpp`
+2. `engine/scripting/include/sky/scripting/script_host.hpp`
+3. `engine/scripting/include/sky/scripting/dotnet_host.hpp`
+4. `engine/scripting/src/dotnet_host.cpp`
 
 **Общий критерий правильности:**
-1. `sky_player --headless out.png` формирует изображение кадра.
+1. Хост запускает среду .NET, загружает сборку, создаёт инстанс и вызывает события жизненного цикла.
+2. Тест `dotnet_host_tests` зелёный (проверяется в фиче `feature/scripting-integration`).
 
 ---
 
-## feature/ci-screenshot
+## feature/importers-obj-png
 
 - **Исполнитель:** E5 (Пайплайн и QA)
 - **Порядок реализации:** 5
-- **Зависимости:** `feature/build-system`, `feature/test-harness`, `feature/c-abi-seed` (CI), `feature/editor-shell` (`Program.cs`)
+- **Зависимости:** `IAssetImporter` из `feature/asset-database`; `platform::IFileSystem`
 
-**Цель фичи:** сборка редактора и скриншот-артефакт в CI; первые модульные тесты.
+**Цель фичи:** импортёры OBJ и PNG (декодирование/кодирование).
 
-**Описание фичи:** ветка `--screenshot` в headless-Avalonia, шаг сборки редактора в CI с публикацией PNG-артефакта и тест продвижения рантайма. Этап 2 контура E5.
+**Описание фичи:** часть Этапа 3 (импортёры, виртуальная ФС, тесты интерфейса) — импортёр OBJ и декодер/кодер PNG.
 
 **Общий порядок реализации фичи:**
-1. Добавить ветку `--screenshot path` в `Program.cs`.
-2. Добавить шаг сборки редактора и публикации PNG в `ci.yml`.
-3. Написать `runtime_tests.cpp` (play-режим продвигает рантайм).
+1. Объявить и реализовать импортёр OBJ.
+2. Объявить и реализовать декодер/кодер PNG и импортёр PNG.
 
 **Файлы фичи:**
-1. `editor/avalonia/Program.cs`
-2. `.github/workflows/ci.yml`
-3. `tests/runtime_tests.cpp`
+1. `engine/asset/include/sky/asset/obj_importer.hpp`
+2. `engine/asset/src/obj_importer.cpp`
+3. `engine/asset/include/sky/asset/png_decoder.hpp`
+4. `engine/asset/src/png_decoder.cpp`
 
-### Файл: `editor/avalonia/Program.cs`
+### Файл: `engine/asset/include/sky/asset/obj_importer.hpp`
 
-**Назначение файла:** дополнение точки входа режимом скриншота.
+**Назначение файла:** контракт импортёра OBJ.
 
 **Пошаговое описание действий:**
-1. Добавить ветку `--screenshot path` — headless Avalonia, рендер нескольких кадров, `window.CaptureRenderedFrame().Save(path)`.
+1. Объявить `createObjImporter`.
 
 **Что должно быть в файле:**
 
 *Структуры / классы / enum:* нет.
 
 *Функции / методы:*
-- ветка `--screenshot path` в `Main`.
+- `std::unique_ptr<IAssetImporter> createObjImporter(...)`
 
 *Логика функций / методов:*
-- ветка `--screenshot path` — headless Avalonia, рендер нескольких кадров, `window.CaptureRenderedFrame().Save(path)`.
+- `createObjImporter(...)` — импортёр OBJ (парсинг v/vn/vt/f).
 
-**Результат по файлу:** редактор умеет снимать скриншот в headless-режиме.
+**Результат по файлу:** объявление импортёра OBJ.
 
 **Критерий правильности по файлу:**
-1. `--screenshot path` сохраняет PNG.
+1. Заголовок компилируется.
 
-### Файл: `.github/workflows/ci.yml`
+### Файл: `engine/asset/src/obj_importer.cpp`
 
-**Назначение файла:** дополнение CI сборкой редактора и артефактом-скриншотом.
+**Назначение файла:** реализация импортёра OBJ.
 
 **Пошаговое описание действий:**
-1. Добавить шаг `dotnet build editor/avalonia` (ошибка C# валит задачу).
-2. Добавить публикацию PNG-артефакта.
+1. Реализовать парсинг v/vn/vt/f.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:* нет.
+*Структуры / классы / enum:*
+- скрытый класс-реализация импортёра OBJ.
 
-*Функции / методы:* нет (декларативный CI).
+*Функции / методы:*
+- `createObjImporter`, `supports`, `import`.
 
 *Логика функций / методов:*
-- шаг `dotnet build editor/avalonia` (ошибка C# валит задачу) + публикация PNG-артефакта.
+- импортёр OBJ (парсинг v/vn/vt/f).
 
-**Результат по файлу:** CI собирает редактор и публикует скриншот.
+**Результат по файлу:** рабочий импортёр OBJ.
 
 **Критерий правильности по файлу:**
-1. Артефакт-PNG доступен из прогона CI; ошибка C# останавливает сборку.
+1. OBJ импортируется (v/vn/vt/f разбираются).
 
-### Файл: `tests/runtime_tests.cpp`
+### Файл: `engine/asset/include/sky/asset/png_decoder.hpp`
 
-**Назначение файла:** тест продвижения рантайма в play-режиме.
+**Назначение файла:** декодер/кодер PNG и импортёр PNG.
 
 **Пошаговое описание действий:**
-1. Проверить, что play-режим действительно продвигает рантайм (ECS-система крутит объект).
+1. Объявить `ImageData`.
+2. Объявить `decodePng`, `encodePngRgba`, `createPngImporter`.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:* нет.
+*Структуры / классы / enum:*
+- `struct ImageData { std::uint32_t width, height; std::vector<std::uint8_t> pixels; }`
 
-*Функции / методы:* тестовые функции.
+*Функции / методы:*
+- `std::optional<ImageData> decodePng(const std::vector<std::byte>& bytes)`
+- `std::vector<std::byte> encodePngRgba(const ImageData& image)`
+- `std::unique_ptr<IAssetImporter> createPngImporter(platform::IFileSystem& fileSystem)`
 
 *Логика функций / методов:*
-- проверяет, что play-режим действительно продвигает рантайм (ECS-система крутит объект).
+- `decodePng(bytes)` — декодирует PNG. Возвращает: изображение или `nullopt`.
+- `encodePngRgba(image)` — кодирует RGBA в PNG. Возвращает: байты файла.
+- `createPngImporter(fileSystem)` — импортёр PNG.
 
-**Результат по файлу:** зелёный тест `runtime_tests`.
+**Результат по файлу:** контракт PNG зафиксирован.
 
 **Критерий правильности по файлу:**
-1. Play-режим продвигает рантайм (объект вращается ECS-системой).
+1. Заголовок компилируется.
+
+### Файл: `engine/asset/src/png_decoder.cpp`
+
+**Назначение файла:** реализация декодера/кодера PNG и импортёра PNG.
+
+**Пошаговое описание действий:**
+1. Реализовать `decodePng`/`encodePngRgba`.
+2. Реализовать импортёр PNG.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- скрытый класс-реализация импортёра PNG.
+
+*Функции / методы:*
+- `decodePng`, `encodePngRgba`, `createPngImporter`.
+
+*Логика функций / методов:*
+- `decodePng` — декодирует байты PNG в `ImageData` или `nullopt`; `encodePngRgba` — кодирует RGBA в байты PNG; `createPngImporter(fileSystem)` — импортёр PNG.
+
+**Результат по файлу:** рабочие декодер/кодер PNG и импортёр.
+
+**Критерий правильности по файлу:**
+1. `decodePng(encodePngRgba(image))` восстанавливает изображение.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `editor/avalonia/Program.cs` (ветка `--screenshot`)
-2. `.github/workflows/ci.yml` (сборка редактора + PNG-артефакт)
-3. `tests/runtime_tests.cpp`
+1. `engine/asset/include/sky/asset/obj_importer.hpp`
+2. `engine/asset/src/obj_importer.cpp`
+3. `engine/asset/include/sky/asset/png_decoder.hpp`
+4. `engine/asset/src/png_decoder.cpp`
 
 **Общий критерий правильности:**
-1. Артефакт-PNG доступен из прогона CI.
-2. Ошибка C# останавливает сборку.
+1. OBJ/PNG импортируются; `asset_project_tests` зелёный.
 
 ---
 
-## feature/ecs-object-sync
+## feature/ecs-profiling
 
 - **Исполнитель:** E6 (Data-oriented / ECS)
 - **Порядок реализации:** 6
-- **Зависимости:** `feature/ecs-core` (Спринт 1), `feature/object-model`; интеграция в `scene_world.cpp`
+- **Зависимости:** планировщик систем ECS (`tick`) из этапов контура E6; C-интерфейс (E5) и панель редактора (E3) — совместно
 
-**Цель фичи:** явный контракт синхронизации ECS с объектным миром.
+**Цель фичи:** покадровые тайминги систем и вывод в редактор (совместно с E3/E5).
 
-**Описание фичи:** `IEcsObjectSync` связывает объекты и сущности и переносит трансформ вокруг такта (push до, pull после), без неявного двойного владения. Этап 2 контура E6.
+**Описание фичи:** измерение длительности `update` каждой системы за такт и накопление таймингов; совместно с E3/E5 — C-интерфейс выдачи таймингов и панель профилировщика в редакторе.
 
 **Общий порядок реализации фичи:**
-1. Объявить `EcsTransform` и `IEcsObjectSync` в `object_sync.hpp`.
-2. Объявить фабрику `createEcsObjectSync`.
-3. Реализовать привязку и двустороннюю синхронизацию в `object_sync.cpp`.
+1. Добавить измерение и накопление таймингов систем в `ecs_world.cpp`.
+2. Совместно с E3/E5 — C-интерфейс выдачи таймингов и панель профилировщика в редакторе.
 
 **Файлы фичи:**
-1. `engine/ecs/include/sky/ecs/object_sync.hpp`
-2. `engine/ecs/src/object_sync.cpp`
+1. `engine/ecs/src/ecs_world.cpp`
 
-### Файл: `engine/ecs/include/sky/ecs/object_sync.hpp`
+### Файл: `engine/ecs/src/ecs_world.cpp`
 
-**Назначение файла:** контракт синхронизации ECS↔объектный мир.
+**Назначение файла:** дополнение реализации ECS-мира измерением таймингов систем.
 
 **Пошаговое описание действий:**
-1. Объявить `struct EcsTransform { core::Transform value; }`.
-2. Объявить `class IEcsObjectSync` с методами связывания и синхронизации.
-3. Объявить фабрику `createEcsObjectSync`.
+1. Измерять длительность `update` каждой системы за такт.
+2. Накапливать тайминги для выдачи наружу.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:*
-- `struct EcsTransform { core::Transform value; }`
-- `class IEcsObjectSync`
+*Структуры / классы / enum:* нет (дополнение реализации `EcsWorld`).
 
 *Функции / методы:*
-- `virtual EntityId bind(object::ObjectHandle object) = 0`
-- `virtual void unbind(object::ObjectHandle object) = 0`
-- `virtual EntityId entityOf(object::ObjectHandle object) const = 0`
-- `virtual object::ObjectHandle objectOf(EntityId entity) const = 0`
-- `virtual void pushAuthoringState() = 0`
-- `virtual void pullEcsResults() = 0`
-- `std::unique_ptr<IEcsObjectSync> createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)`
+- дополнение `tick` — измерение и накопление таймингов.
 
 *Логика функций / методов:*
-- `EcsTransform` — базовый компонент трансформа.
-- `bind(object)` — связывает объект с сущностью. Возвращает: сущность.
-- `unbind(object)` — разрывает связь.
-- `entityOf(object)` — Возвращает: сущность по объекту.
-- `objectOf(entity)` — Возвращает: объект по сущности.
-- `pushAuthoringState()` — до такта переносит трансформ объекта в `EcsTransform`.
-- `pullEcsResults()` — после такта переносит результат обратно в объектный мир.
-- `createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)` — фабрика.
+- измерение длительности `update` каждой системы за такт; накопление таймингов.
 
-**Результат по файлу:** контракт синхронизации зафиксирован.
+**Результат по файлу:** покадровые тайминги систем измеряются и доступны.
 
 **Критерий правильности по файлу:**
-1. Заголовок компилируется; использует `EntityId` и `object::ObjectHandle`.
-
-### Файл: `engine/ecs/src/object_sync.cpp`
-
-**Назначение файла:** реализация синхронизации ECS↔объектный мир.
-
-**Пошаговое описание действий:**
-1. Реализовать привязку сущность↔объект (`bind`/`unbind`/`entityOf`/`objectOf`).
-2. Реализовать `pushAuthoringState` и `pullEcsResults`.
-3. Дать фабрику `createEcsObjectSync`; точка интеграции — цикл такта в `scene_world.cpp` (`pushAuthoringState()` → `tick(dt)` → `pullEcsResults()`).
-
-**Что должно быть в файле:**
-
-*Структуры / классы / enum:*
-- скрытый класс-реализация `IEcsObjectSync`.
-
-*Функции / методы:*
-- `bind`, `unbind`, `entityOf`, `objectOf`, `pushAuthoringState`, `pullEcsResults`, `createEcsObjectSync`.
-
-*Логика функций / методов:*
-- `bind(object)` — создаёт/находит сущность для объекта, ведёт двустороннее отображение; возвращает сущность.
-- `unbind(object)` — убирает связь объекта и сущности.
-- `entityOf`/`objectOf` — читают отображение в обе стороны.
-- `pushAuthoringState()` — до такта переносит трансформ объекта в `EcsTransform`.
-- `pullEcsResults()` — после такта переносит результат обратно в объектный мир.
-- `createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)` — создаёт реализацию; интегрируется в цикл такта `scene_world.cpp` (совместно с E1): `pushAuthoringState()` → `tick(dt)` → `pullEcsResults()`.
-
-**Результат по файлу:** рабочая двусторонняя синхронизация вокруг такта.
-
-**Критерий правильности по файлу:**
-1. Объект, обработанный ECS-системой, получает изменённый трансформ в объектном мире; при паузе не меняется.
+1. Длительность такта каждой системы доступна редактору и отображается.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `engine/ecs/include/sky/ecs/object_sync.hpp`
-2. `engine/ecs/src/object_sync.cpp`
-3. привязка сущность↔объект; двусторонняя синхронизация вокруг такта; тест в `integrity_tests`.
+1. `engine/ecs/src/ecs_world.cpp` (дополнение: измерение таймингов систем)
+2. Совместно с E3/E5: C-интерфейс выдачи таймингов систем; панель профилировщика в редакторе.
 
 **Общий критерий правильности:**
-1. Объект, обработанный ECS-системой, получает изменённый трансформ в объектном мире.
-2. При паузе трансформ не меняется.
+1. Тайминги систем измеряются; панель профилировщика в редакторе.
+2. Длительность такта каждой системы доступна редактору и отображается.

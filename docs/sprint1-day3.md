@@ -253,10 +253,70 @@
 
 ---
 
+## feature/player-runtime
+
+- **Исполнитель:** E4 (Рантайм и физика)
+- **Порядок реализации:** 4
+- **Зависимости:** `EditorContext` (`feature/editor-context`), рендерер (`feature/vulkan-offscreen`), построитель кадра (`feature/frame-builder`)
+
+**Цель фичи:** автономный проигрыватель с собственным циклом и режимами запуска.
+
+**Описание фичи:** проигрыватель с точкой входа, безоконным и оконным режимами, разбором аргументов и переносимым кодом клавиш. Этап 2 контура E4.
+
+**Общий порядок реализации фичи:**
+1. Реализовать `main` с разбором `--frames N`, `--headless out.png`, `--scene path`.
+2. Реализовать `runHeadless` (цикл `tickFrame → build → renderFrame`, сохранение PNG).
+3. Реализовать `runWindowed` и `mapPlatformKey`.
+
+**Файлы фичи:**
+1. `player/src/main.cpp`
+
+### Файл: `player/src/main.cpp`
+
+**Назначение файла:** точка входа и цикл автономного проигрывателя.
+
+**Пошаговое описание действий:**
+1. Реализовать `int main(int argc, char** argv)` — разбор `--frames N`, `--headless out.png`, `--scene path`.
+2. Реализовать `int runHeadless(EditorContext&, int frames, const char* screenshotPath)`.
+3. Реализовать `int runWindowed(EditorContext&, int frameLimit)`.
+4. Реализовать `int mapPlatformKey(std::int32_t keysym)`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:* нет.
+
+*Функции / методы:*
+- `int main(int argc, char** argv)`
+- `int runHeadless(EditorContext& context, int frames, const char* screenshotPath)`
+- `int runWindowed(EditorContext& context, int frameLimit)`
+- `int mapPlatformKey(std::int32_t keysym)`
+
+*Логика функций / методов:*
+- `main` — точка входа; разбирает `--frames N`, `--headless out.png`, `--scene path`. Возвращает: код выхода.
+- `runHeadless` — безоконный прогон — цикл `tickFrame → build → renderFrame`, сохранение PNG. Параметры: `context`, `frames` — число кадров, `screenshotPath` — файл. Возвращает: код выхода.
+- `runWindowed` — оконный прогон (окно X11/Cocoa + swapchain-рендерер). Параметры: `context`, `frameLimit`. Возвращает: код выхода.
+- `mapPlatformKey` — переводит платформенный код клавиши в переносимый (общий с C#). Возвращает: переносимый код или 0.
+
+**Результат по файлу:** бинарь `sky_player`; безоконный режим пишет PNG.
+
+**Критерий правильности по файлу:**
+1. `sky_player --headless out.png` формирует изображение кадра.
+
+### На выходе должно получиться
+
+**Список артефактов фичи:**
+1. `player/src/main.cpp`
+2. бинарь `sky_player`; безоконный режим пишет PNG.
+
+**Общий критерий правильности:**
+1. `sky_player --headless out.png` формирует изображение кадра.
+
+---
+
 ## feature/c-abi-seed
 
 - **Исполнитель:** E5 (Пайплайн и QA, совместно с E1)
-- **Порядок реализации:** 4
+- **Порядок реализации:** 5
 - **Зависимости:** модуль `object` (`feature/object-model`) для перечисления корней
 
 **Цель фичи:** первичный плоский C-интерфейс движка `sky_editor_*`.
@@ -335,3 +395,104 @@
 **Общий критерий правильности:**
 1. Красный CI блокирует слияние; сломанный тест краснеет.
 2. Редактор E3 вызывает `sky_editor_create` и получает не-null сессию.
+
+---
+
+## feature/ecs-object-sync
+
+- **Исполнитель:** E6 (Data-oriented / ECS)
+- **Порядок реализации:** 6
+- **Зависимости:** `feature/ecs-core` (Спринт 1), `feature/object-model`; интеграция в `scene_world.cpp`
+
+**Цель фичи:** явный контракт синхронизации ECS с объектным миром.
+
+**Описание фичи:** `IEcsObjectSync` связывает объекты и сущности и переносит трансформ вокруг такта (push до, pull после), без неявного двойного владения. Этап 2 контура E6.
+
+**Общий порядок реализации фичи:**
+1. Объявить `EcsTransform` и `IEcsObjectSync` в `object_sync.hpp`.
+2. Объявить фабрику `createEcsObjectSync`.
+3. Реализовать привязку и двустороннюю синхронизацию в `object_sync.cpp`.
+
+**Файлы фичи:**
+1. `engine/ecs/include/sky/ecs/object_sync.hpp`
+2. `engine/ecs/src/object_sync.cpp`
+
+### Файл: `engine/ecs/include/sky/ecs/object_sync.hpp`
+
+**Назначение файла:** контракт синхронизации ECS↔объектный мир.
+
+**Пошаговое описание действий:**
+1. Объявить `struct EcsTransform { core::Transform value; }`.
+2. Объявить `class IEcsObjectSync` с методами связывания и синхронизации.
+3. Объявить фабрику `createEcsObjectSync`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `struct EcsTransform { core::Transform value; }`
+- `class IEcsObjectSync`
+
+*Функции / методы:*
+- `virtual EntityId bind(object::ObjectHandle object) = 0`
+- `virtual void unbind(object::ObjectHandle object) = 0`
+- `virtual EntityId entityOf(object::ObjectHandle object) const = 0`
+- `virtual object::ObjectHandle objectOf(EntityId entity) const = 0`
+- `virtual void pushAuthoringState() = 0`
+- `virtual void pullEcsResults() = 0`
+- `std::unique_ptr<IEcsObjectSync> createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)`
+
+*Логика функций / методов:*
+- `EcsTransform` — базовый компонент трансформа.
+- `bind(object)` — связывает объект с сущностью. Возвращает: сущность.
+- `unbind(object)` — разрывает связь.
+- `entityOf(object)` — Возвращает: сущность по объекту.
+- `objectOf(entity)` — Возвращает: объект по сущности.
+- `pushAuthoringState()` — до такта переносит трансформ объекта в `EcsTransform`.
+- `pullEcsResults()` — после такта переносит результат обратно в объектный мир.
+- `createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)` — фабрика.
+
+**Результат по файлу:** контракт синхронизации зафиксирован.
+
+**Критерий правильности по файлу:**
+1. Заголовок компилируется; использует `EntityId` и `object::ObjectHandle`.
+
+### Файл: `engine/ecs/src/object_sync.cpp`
+
+**Назначение файла:** реализация синхронизации ECS↔объектный мир.
+
+**Пошаговое описание действий:**
+1. Реализовать привязку сущность↔объект (`bind`/`unbind`/`entityOf`/`objectOf`).
+2. Реализовать `pushAuthoringState` и `pullEcsResults`.
+3. Дать фабрику `createEcsObjectSync`; точка интеграции — цикл такта в `scene_world.cpp` (`pushAuthoringState()` → `tick(dt)` → `pullEcsResults()`).
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- скрытый класс-реализация `IEcsObjectSync`.
+
+*Функции / методы:*
+- `bind`, `unbind`, `entityOf`, `objectOf`, `pushAuthoringState`, `pullEcsResults`, `createEcsObjectSync`.
+
+*Логика функций / методов:*
+- `bind(object)` — создаёт/находит сущность для объекта, ведёт двустороннее отображение; возвращает сущность.
+- `unbind(object)` — убирает связь объекта и сущности.
+- `entityOf`/`objectOf` — читают отображение в обе стороны.
+- `pushAuthoringState()` — до такта переносит трансформ объекта в `EcsTransform`.
+- `pullEcsResults()` — после такта переносит результат обратно в объектный мир.
+- `createEcsObjectSync(EcsWorld&, object::IObjectHierarchyAccess&)` — создаёт реализацию; интегрируется в цикл такта `scene_world.cpp` (совместно с E1): `pushAuthoringState()` → `tick(dt)` → `pullEcsResults()`.
+
+**Результат по файлу:** рабочая двусторонняя синхронизация вокруг такта.
+
+**Критерий правильности по файлу:**
+1. Объект, обработанный ECS-системой, получает изменённый трансформ в объектном мире; при паузе не меняется.
+
+### На выходе должно получиться
+
+**Список артефактов фичи:**
+1. `engine/ecs/include/sky/ecs/object_sync.hpp`
+2. `engine/ecs/src/object_sync.cpp`
+3. привязка сущность↔объект; двусторонняя синхронизация вокруг такта; тест в `integrity_tests`.
+
+**Общий критерий правильности:**
+1. Объект, обработанный ECS-системой, получает изменённый трансформ в объектном мире.
+2. При паузе трансформ не меняется.

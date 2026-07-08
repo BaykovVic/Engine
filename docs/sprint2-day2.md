@@ -79,189 +79,529 @@
 
 ---
 
-## feature/frame-builder
+## feature/sky-backdrop
 
 - **Исполнитель:** E2 (Рендеринг)
 - **Порядок реализации:** 2
-- **Зависимости:** `feature/render-contract`, `feature/vulkan-mesh-lighting`, `feature/scene-world`; `EditorContext`
+- **Зависимости:** `feature/render-contract` (`RenderCommandType::SetSky`); Vulkan-бэкенд
 
-**Цель фичи:** построитель кадра, обходящий сцену и формирующий поток команд отрисовки.
+**Цель фичи:** отрисовка неба (купол горизонт→зенит с диском солнца).
 
-**Описание фичи:** `FrameBuilder` привязан к `EditorContext` и фабрике ресурсов, обходит сцену и даёт непустой поток `RenderCommand`; плюс Qt-free фасад вьюпорта. Вторая фича Этапа 2 контура E2.
+**Описание фичи:** часть Этапа 3 (выбор объекта, проекция, небо) — обработка команды `SetSky` в Vulkan-рендерере.
 
 **Общий порядок реализации фичи:**
-1. Объявить `FrameBuilder` с конструктором, `setCamera` и `build` в `frame_builder.hpp`.
-2. Реализовать обход сцены и формирование потока команд.
-3. Объявить Qt-free фасад вьюпорта в `viewport_bridge.hpp`.
+1. Дополнить `vulkan_renderer.cpp` обработкой команды `SetSky`.
 
 **Файлы фичи:**
-1. `editor/shell/src/frame_builder.hpp`
-2. `editor/viewport_bridge/include/sky/editor/viewport/viewport_bridge.hpp`
+1. `engine/rendering_vulkan/src/vulkan_renderer.cpp`
 
-### Файл: `editor/shell/src/frame_builder.hpp`
+### Файл: `engine/rendering_vulkan/src/vulkan_renderer.cpp`
 
-**Назначение файла:** построитель потока команд отрисовки из сцены.
+**Назначение файла:** отрисовка неба в Vulkan-рендерере.
 
 **Пошаговое описание действий:**
-1. Объявить `FrameBuilder(EditorContext&, rendering::IRenderResourceFactory&)`.
-2. Объявить `setCamera(std::optional<core::Transform> pose, float orthoHeight = 0.0f)`.
-3. Объявить `build(std::uint32_t width, std::uint32_t height)`.
+1. Обработать команду `RenderCommandType::SetSky`.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:*
-- `class FrameBuilder`
+*Структуры / классы / enum:* нет (дополнение рендерера).
 
 *Функции / методы:*
-- `FrameBuilder(EditorContext& context, rendering::IRenderResourceFactory& factory)`
-- `void setCamera(std::optional<core::Transform> pose, float orthoHeight = 0.0f)`
-- `std::vector<rendering::RenderCommand> build(std::uint32_t width, std::uint32_t height)`
+- обработка команды `RenderCommandType::SetSky`.
 
 *Логика функций / методов:*
-- `FrameBuilder(context, factory)` — конструктор — привязывает построитель к контексту и фабрике ресурсов. Параметры: `context`, `factory`.
-- `setCamera(pose, orthoHeight)` — задаёт камеру кадра. Параметры: `pose` — поза камеры (nullopt = камера сцены), `orthoHeight` — высота орто-проекции (0 = перспектива).
-- `build(width, height)` — обходит сцену и формирует поток команд отрисовки. Параметры: `width`, `height` — размер кадра. Возвращает: список команд.
+- обработка команды `RenderCommandType::SetSky` — купол-небо: горизонт (`color`) → зенит (`emissive`), диск солнца от направленного света. Реализуется как большой куб, приклеенный к камере, с флагом «небо» в push-константах.
 
-**Результат по файлу:** построитель кадра, дающий поток `RenderCommand`.
+**Результат по файлу:** небо отрисовано.
 
 **Критерий правильности по файлу:**
-1. `build` даёт непустой поток команд для демо-сцены.
-
-### Файл: `editor/viewport_bridge/include/sky/editor/viewport/viewport_bridge.hpp`
-
-**Назначение файла:** Qt-free фасад вьюпорта, общий для редактора и плеера.
-
-**Пошаговое описание действий:**
-1. Объявить `IPlayModeController` и `IRuntimePreviewHost`.
-
-**Что должно быть в файле:**
-
-*Структуры / классы / enum:*
-- `IPlayModeController`
-- `IRuntimePreviewHost`
-
-*Функции / методы:* контракты фасада вьюпорта.
-
-*Логика функций / методов:*
-- Qt-free фасад вьюпорта (`IPlayModeController`, `IRuntimePreviewHost`), общий для редактора и плеера.
-
-**Результат по файлу:** общий фасад вьюпорта.
-
-**Критерий правильности по файлу:**
-1. Заголовок компилируется без зависимости от Qt.
+1. Команда `SetSky` рисует купол-небо с диском солнца.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `editor/shell/src/frame_builder.hpp`
-2. `editor/viewport_bridge/include/sky/editor/viewport/viewport_bridge.hpp`
+1. `engine/rendering_vulkan/src/vulkan_renderer.cpp`
 
 **Общий критерий правильности:**
-1. Демо-сцена рендерится с освещением.
-2. `FrameBuilder` даёт непустой поток команд (`RenderCommand` не пуст).
+1. небо отрисовано; центральный луч кадрированной камеры попадает в объект; проекция origin объекта близка к центру экрана.
 
 ---
 
-## feature/hierarchy-tree
+## feature/inspector
 
 - **Исполнитель:** E3 (Редактор .NET)
 - **Порядок реализации:** 3
-- **Зависимости:** `feature/engine-bridge`, `feature/vulkan-viewport`; C-интерфейс (реализация — в мосте контура E5)
+- **Зависимости:** C-интерфейс `sky_editor_*` (мост контура E5); `EditorSession` из Этапа 2
 
-**Цель фичи:** дерево объектов на живых данных через C-интерфейс.
+**Цель фичи:** инспектор полей компонентов (чтение/запись, добавление/удаление компонентов).
 
-**Описание фичи:** дополнение P/Invoke иерархии и трансформа, перечитывание иерархии в `ObservableCollection<SkyObject>` и `TreeView` по корням. Вторая фича Этапа 2 контура E3.
+**Описание фичи:** часть Этапа 3 (гизмо, инспектор, панели данных) — дополнение `EditorSession` и панель инспектора с шаблонами полей.
 
 **Общий порядок реализации фичи:**
-1. Добавить P/Invoke иерархии и трансформа в `EngineInterop.cs`.
-2. Реализовать `Reload`, `Load`, `Transform` в `EditorSession.cs`.
-3. Собрать `HierarchyView` (`TreeView` по `Roots`).
+1. Дополнить `EditorSession.cs` чтением/записью компонентов и классами полей.
+2. Реализовать `InspectorView.axaml.cs`.
 
 **Файлы фичи:**
-1. `editor/avalonia/Engine/EngineInterop.cs`
-2. `editor/avalonia/Engine/EditorSession.cs`
-3. `editor/avalonia/Views/HierarchyView.axaml.cs`
+1. `editor/avalonia/Engine/EditorSession.cs`
+2. `editor/avalonia/Views/InspectorView.axaml.cs`
 
-### Файл: `editor/avalonia/Engine/EngineInterop.cs`
+### Файл: `editor/avalonia/Engine/EditorSession.cs`
 
-**Назначение файла:** дополнение P/Invoke иерархии и трансформа.
+**Назначение файла:** доступ к компонентам и их полям через C-интерфейс.
 
 **Пошаговое описание действий:**
-1. Объявить P/Invoke иерархии и трансформа (реализация — в мосте контура E5).
+1. Добавить чтение компонентов и типов.
+2. Добавить запись поля и операции с компонентами.
+3. Завести классы `ComponentView`, `ComponentField`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class ComponentView`
+- `class ComponentField : INotifyPropertyChanged` (свойства `IsScalar/IsBool/IsVec3/IsMeshRef`, `Value`, `X/Y/Z`, `BoolValue`)
+
+*Функции / методы:*
+- `public List<ComponentView> ReadComponents(ulong id)`
+- `public void SetComponentField(ulong id, int component, int field, string value)`
+- `public List<ComponentType> AvailableTypes()`
+- `public void AddComponent(ulong id, string typeId)`
+- `public void RemoveComponent(ulong id, int component)`
+
+*Логика функций / методов:*
+- `ReadComponents(id)` — Возвращает: компоненты объекта с их полями.
+- `SetComponentField(id, component, field, value)` — записывает поле через C-интерфейс.
+- `AvailableTypes()` — Возвращает: типы для меню Add Component.
+- `AddComponent(id, typeId)`/`RemoveComponent(id, component)` — добавляет/снимает компонент.
+
+**Результат по файлу:** данные компонентов доступны инспектору.
+
+**Критерий правильности по файлу:**
+1. Изменение поля через `SetComponentField` применяется к движку.
+
+### Файл: `editor/avalonia/Views/InspectorView.axaml.cs`
+
+**Назначение файла:** панель инспектора.
+
+**Пошаговое описание действий:**
+1. Собрать карточки компонентов.
+2. Задать шаблоны полей.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class InspectorView`
+
+*Функции / методы:* обработчики полей и добавления/удаления компонентов.
+
+*Логика функций / методов:*
+- карточки компонентов, шаблоны полей.
+
+**Результат по файлу:** панель инспектора на живых данных.
+
+**Критерий правильности по файлу:**
+1. Инспектор редактирует поля компонентов.
+
+### На выходе должно получиться
+
+**Список артефактов фичи:**
+1. `editor/avalonia/Engine/EditorSession.cs`
+2. `editor/avalonia/Views/InspectorView.axaml.cs`
+
+**Общий критерий правильности:**
+1. изменение поля в инспекторе применяется к движку и отменяемо.
+
+---
+
+## feature/managed-runtime
+
+- **Исполнитель:** E4 (Рантайм и физика)
+- **Порядок реализации:** 4
+- **Зависимости:** `feature/dotnet-host` (точки входа вызываются хостом, обратный API)
+
+**Цель фичи:** управляемый рантайм скриптинга на C# — точки входа, базовый класс скрипта и вспомогательные службы.
+
+**Описание фичи:** вторая фича Этапа 4 контура E4 — managed-сборка `SkyEngine.Managed`: `UnmanagedCallersOnly`-точки входа, базовый класс `ScriptComponent`, обёртка над id объекта, таблица обратного API и службы Debug/Time/Input.
+
+**Общий порядок реализации фичи:**
+1. Реализовать точки входа `Bootstrap.cs`.
+2. Реализовать базовый класс `ScriptComponent`.
+3. Реализовать `NativeHandle`, `Engine`, `Debug`, `Time`, `Input`.
+
+**Файлы фичи:**
+1. `managed/SkyEngine.Managed/Bootstrap.cs`
+2. `managed/SkyEngine.Managed/ScriptComponent.cs`
+3. `managed/SkyEngine.Managed/NativeHandle.cs`
+4. `managed/SkyEngine.Managed/Engine.cs`
+5. `managed/SkyEngine.Managed/Debug.cs`
+6. `managed/SkyEngine.Managed/Time.cs`
+7. `managed/SkyEngine.Managed/Input.cs`
+
+### Файл: `managed/SkyEngine.Managed/Bootstrap.cs`
+
+**Назначение файла:** точки входа, вызываемые из C++.
+
+**Пошаговое описание действий:**
+1. Объявить `[UnmanagedCallersOnly]` точки входа.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `static class Bootstrap`
+
+*Функции / методы:*
+- `LoadAssembly`, `CreateInstance`, `DestroyInstance`, `InvokeLifecycle`, `Initialize`, `SetObjectId`, `TickFrame` (все `[UnmanagedCallersOnly]`).
+
+*Логика функций / методов:*
+- `[UnmanagedCallersOnly]` точки входа, вызываемые из C++: `LoadAssembly`, `CreateInstance`, `DestroyInstance`, `InvokeLifecycle`, `Initialize` (ставит обратный API), `SetObjectId`, `TickFrame`.
+
+**Результат по файлу:** managed-точки входа доступны из C++.
+
+**Критерий правильности по файлу:**
+1. Точки входа вызываются хостом напрямую (без обёрток).
+
+### Файл: `managed/SkyEngine.Managed/ScriptComponent.cs`
+
+**Назначение файла:** базовый класс скрипта (аналог MonoBehaviour).
+
+**Пошаговое описание действий:**
+1. Объявить события жизненного цикла и защищённые методы трансформа.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class ScriptComponent`
+
+*Функции / методы:*
+- `OnCreate/OnStart/OnUpdate/OnFixedUpdate/OnDestroy`, защищённые `SetLocalPosition/SetLocalEuler/SetLocalScale`, свойство `Handle`.
+
+*Логика функций / методов:*
+- базовый класс скрипта: события жизненного цикла; защищённые `SetLocalPosition/SetLocalEuler/SetLocalScale`; свойство `Handle`.
+
+**Результат по файлу:** базовый класс скрипта доступен пользователям.
+
+**Критерий правильности по файлу:**
+1. Класс-наследник переопределяет события жизненного цикла и меняет трансформ.
+
+### Файл: `managed/SkyEngine.Managed/NativeHandle.cs`
+
+**Назначение файла:** обёртка над id объекта.
+
+**Пошаговое описание действий:**
+1. Объявить обёртку над id объекта.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `struct NativeHandle`
+
+*Функции / методы:* доступ к id объекта.
+
+*Логика функций / методов:*
+- обёртка над id объекта.
+
+**Результат по файлу:** id объекта представлен типобезопасно.
+
+**Критерий правильности по файлу:**
+1. Файл компилируется.
+
+### Файл: `managed/SkyEngine.Managed/Engine.cs`
+
+**Назначение файла:** таблица делегатов обратного API.
+
+**Пошаговое описание действий:**
+1. Объявить таблицу делегатов нативных функций движка.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `static class Engine`
+
+*Функции / методы:* делегаты обратного API.
+
+*Логика функций / методов:*
+- таблица делегатов обратного API (нативные функции движка).
+
+**Результат по файлу:** managed-сторона вызывает нативные функции движка.
+
+**Критерий правильности по файлу:**
+1. Таблица делегатов ставится через `Initialize`.
+
+### Файл: `managed/SkyEngine.Managed/Debug.cs`
+
+**Назначение файла:** логирование в консоль редактора.
+
+**Пошаговое описание действий:**
+1. Реализовать `Debug.Log/LogWarning/LogError`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `static class Debug`
+
+*Функции / методы:*
+- `Debug.Log/LogWarning/LogError`
+
+*Логика функций / методов:*
+- `Debug.Log/LogWarning/LogError` — вывод в консоль редактора.
+
+**Результат по файлу:** скрипты пишут в консоль редактора.
+
+**Критерий правильности по файлу:**
+1. `Debug.Log` попадает в консоль редактора.
+
+### Файл: `managed/SkyEngine.Managed/Time.cs`
+
+**Назначение файла:** время кадра.
+
+**Пошаговое описание действий:**
+1. Объявить `Time.TotalTime/DeltaTime`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `static class Time`
+
+*Функции / методы:*
+- `Time.TotalTime`, `Time.DeltaTime`
+
+*Логика функций / методов:*
+- `Time.TotalTime/DeltaTime` — время кадра, публикуемое хостом.
+
+**Результат по файлу:** время кадра доступно скриптам.
+
+**Критерий правильности по файлу:**
+1. `Time.DeltaTime` отражает шаг кадра.
+
+### Файл: `managed/SkyEngine.Managed/Input.cs`
+
+**Назначение файла:** ввод.
+
+**Пошаговое описание действий:**
+1. Объявить `Input.GetKey(KeyCode)`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `static class Input`
+
+*Функции / методы:*
+- `Input.GetKey(KeyCode)`
+
+*Логика функций / методов:*
+- `Input.GetKey(KeyCode)` — состояние клавиши, читается скриптами.
+
+**Результат по файлу:** ввод доступен скриптам.
+
+**Критерий правильности по файлу:**
+1. `Input.GetKey` отражает нажатую клавишу.
+
+### На выходе должно получиться
+
+**Список артефактов фичи:**
+1. `managed/SkyEngine.Managed/Bootstrap.cs`
+2. `managed/SkyEngine.Managed/ScriptComponent.cs`
+3. `managed/SkyEngine.Managed/NativeHandle.cs`
+4. `managed/SkyEngine.Managed/Engine.cs`
+5. `managed/SkyEngine.Managed/Debug.cs`
+6. `managed/SkyEngine.Managed/Time.cs`
+7. `managed/SkyEngine.Managed/Input.cs`
+
+**Общий критерий правильности:**
+1. Базовый класс `ScriptComponent` со всеми событиями жизненного цикла доступен.
+2. `Debug.Log` пишет в консоль редактора; `Time`/`Input` доступны скриптам.
+
+---
+
+## feature/vfs-and-bridge-tests
+
+- **Исполнитель:** E5 (Пайплайн и QA)
+- **Порядок реализации:** 5
+- **Зависимости:** `feature/asset-database`, `feature/importers-obj-png`; C-интерфейс `sky_editor_*` (`feature/c-abi-seed`)
+
+**Цель фичи:** файловая система, виртуальная ФС (`assets://…`) и тесты C-интерфейса, импорта и VFS.
+
+**Описание фичи:** часть Этапа 3 (импортёры, виртуальная ФС, тесты интерфейса) — `IFileSystem`, `IVirtualFileSystem` и тесты на каждую группу.
+
+**Общий порядок реализации фичи:**
+1. Объявить `IFileSystem` и `IVirtualFileSystem`.
+2. Реализовать стандартную и виртуальную ФС.
+3. Написать тесты C-интерфейса, импорта и VFS.
+
+**Файлы фичи:**
+1. `engine/platform/include/sky/platform/file_system.hpp`
+2. `engine/platform/include/sky/platform/virtual_file_system.hpp`
+3. `engine/platform/src/std_file_system.cpp`
+4. `engine/platform/src/virtual_file_system.cpp`
+5. `tests/editor_bridge_tests.cpp`
+6. `tests/asset_project_tests.cpp`
+7. `tests/vfs_tests.cpp`
+
+### Файл: `engine/platform/include/sky/platform/file_system.hpp`
+
+**Назначение файла:** контракт файловой системы.
+
+**Пошаговое описание действий:**
+1. Объявить `IFileSystem`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class IFileSystem`
+
+*Функции / методы:*
+- `exists`, `isDirectory`, `readAll`, `writeAll`, `list`.
+
+*Логика функций / методов:*
+- `IFileSystem` — файловая система (exists/isDirectory/readAll/writeAll/list).
+
+**Результат по файлу:** контракт файловой системы зафиксирован.
+
+**Критерий правильности по файлу:**
+1. Заголовок компилируется.
+
+### Файл: `engine/platform/include/sky/platform/virtual_file_system.hpp`
+
+**Назначение файла:** контракт виртуальной ФС.
+
+**Пошаговое описание действий:**
+1. Объявить `IVirtualFileSystem`.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- `class IVirtualFileSystem`
+
+*Функции / методы:*
+- `void mount(const std::string& scheme, std::unique_ptr<IVfsMount> mount, int priority)`
+- `std::optional<std::vector<std::byte>> readAll(const std::string& ref)`
+- `std::vector<...> list(const std::string& dir)`
+
+*Логика функций / методов:*
+- `mount(scheme, mount, priority)` — монтирует схему (напр. `assets`).
+- `readAll(ref)` — читает по ссылке `assets://…`. Возвращает: байты или `nullopt`.
+- `list(dir)` — Возвращает: содержимое каталога.
+
+**Результат по файлу:** контракт VFS зафиксирован.
+
+**Критерий правильности по файлу:**
+1. Заголовок компилируется.
+
+### Файл: `engine/platform/src/std_file_system.cpp`
+
+**Назначение файла:** реализация стандартной файловой системы.
+
+**Пошаговое описание действий:**
+1. Реализовать `IFileSystem` над реальной ФС.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- скрытый класс-реализация `IFileSystem`.
+
+*Функции / методы:*
+- `exists`, `isDirectory`, `readAll`, `writeAll`, `list`.
+
+*Логика функций / методов:*
+- стандартная файловая система: exists/isDirectory/readAll/writeAll/list над реальными путями.
+
+**Результат по файлу:** рабочая стандартная ФС.
+
+**Критерий правильности по файлу:**
+1. `writeAll` + `readAll` дают одинаковые байты.
+
+### Файл: `engine/platform/src/virtual_file_system.cpp`
+
+**Назначение файла:** реализация виртуальной ФС.
+
+**Пошаговое описание действий:**
+1. Реализовать монтирование схем и разрешение ссылок.
+
+**Что должно быть в файле:**
+
+*Структуры / классы / enum:*
+- скрытый класс-реализация `IVirtualFileSystem`.
+
+*Функции / методы:*
+- `mount`, `readAll`, `list`.
+
+*Логика функций / методов:*
+- `mount(scheme, mount, priority)` — монтирует схему; `readAll(ref)` — разрешает ссылку `assets://…` в байты или `nullopt`; `list(dir)` — содержимое каталога.
+
+**Результат по файлу:** рабочая VFS.
+
+**Критерий правильности по файлу:**
+1. Ссылка `assets://…` разрешается через смонтированную схему.
+
+### Файл: `tests/editor_bridge_tests.cpp`
+
+**Назначение файла:** тесты C-интерфейса движка.
+
+**Пошаговое описание действий:**
+1. Проверить группы C-интерфейса.
 
 **Что должно быть в файле:**
 
 *Структуры / классы / enum:* нет.
 
-*Функции / методы:*
-- P/Invoke: `sky_editor_root_count`, `sky_editor_root_at`, `sky_editor_child_count`, `sky_editor_child_at`, `sky_editor_object_name`, `sky_editor_get_transform`, `sky_editor_render_offscreen`, `sky_editor_viewport_orbit`, `sky_editor_viewport_zoom`.
+*Функции / методы:* тестовые функции.
 
-*Логика функций / методов:*
-- P/Invoke иерархии и трансформа (реализация — в мосте контура E5): `sky_editor_root_count`, `sky_editor_root_at`, `sky_editor_child_count`, `sky_editor_child_at`, `sky_editor_object_name`, `sky_editor_get_transform`, `sky_editor_render_offscreen`, `sky_editor_viewport_orbit`, `sky_editor_viewport_zoom`.
+*Логика функций / методов:* тест на каждую группу C-интерфейса.
 
-**Результат по файлу:** объявлены вызовы C-интерфейса иерархии/трансформа/вьюпорта.
+**Результат по файлу:** зелёный тест `editor_bridge_tests`.
 
 **Критерий правильности по файлу:**
-1. P/Invoke-объявления компилируются и резолвятся в мосте.
+1. `editor_bridge_tests` зелёный.
 
-### Файл: `editor/avalonia/Engine/EditorSession.cs`
+### Файл: `tests/asset_project_tests.cpp`
 
-**Назначение файла:** дополнение сессии перечитыванием иерархии и трансформов.
+**Назначение файла:** тесты импорта ассетов.
 
 **Пошаговое описание действий:**
-1. Реализовать `Reload()` — перечитывание иерархии в `ObservableCollection<SkyObject> Roots`.
-2. Реализовать `Load(ulong id)` — рекурсивное построение узла.
-3. Реализовать `Transform(ulong id)`.
+1. Проверить импорт OBJ/PNG и базу ассетов.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:*
-- `ObservableCollection<SkyObject> Roots`
+*Структуры / классы / enum:* нет.
 
-*Функции / методы:*
-- `public void Reload()`
-- `private SkyObject Load(ulong id)`
-- `public (float[] position, float[] rotation, float[] scale) Transform(ulong id)`
+*Функции / методы:* тестовые функции.
 
-*Логика функций / методов:*
-- `Reload()` — перечитывает иерархию через C-интерфейс в `ObservableCollection<SkyObject> Roots`.
-- `Load(id)` — рекурсивно строит узел дерева.
-- `Transform(id)` — читает трансформ объекта. Параметры: `id`. Возвращает: позицию (3), кватернион (4), масштаб (3).
+*Логика функций / методов:* тест на импорт (OBJ/PNG, база ассетов).
 
-**Результат по файлу:** сессия отдаёт живое дерево объектов и трансформы.
+**Результат по файлу:** зелёный тест `asset_project_tests`.
 
 **Критерий правильности по файлу:**
-1. `Reload()` наполняет `Roots` именами и вложенностью объектов движка.
+1. `asset_project_tests` зелёный.
 
-### Файл: `editor/avalonia/Views/HierarchyView.axaml.cs`
+### Файл: `tests/vfs_tests.cpp`
 
-**Назначение файла:** панель дерева объектов.
+**Назначение файла:** тесты виртуальной ФС.
 
 **Пошаговое описание действий:**
-1. Собрать `TreeView` по `Roots`.
+1. Проверить разрешение ссылок `assets://…` и `list`.
 
 **Что должно быть в файле:**
 
-*Структуры / классы / enum:*
-- `class HierarchyView` (`TreeView` по `Roots`)
+*Структуры / классы / enum:* нет.
 
-*Функции / методы:* нет (композиция вью).
+*Функции / методы:* тестовые функции.
 
-*Логика функций / методов:*
-- `HierarchyView` — `TreeView` по `Roots`.
+*Логика функций / методов:* тест на VFS (разрешение `assets://…`).
 
-**Результат по файлу:** панель с деревом объектов сцены.
+**Результат по файлу:** зелёный тест `vfs_tests`.
 
 **Критерий правильности по файлу:**
-1. В дереве — имена и вложенность объектов движка.
+1. `vfs_tests` зелёный.
 
 ### На выходе должно получиться
 
 **Список артефактов фичи:**
-1. `editor/avalonia/Engine/EngineInterop.cs` (P/Invoke иерархии/трансформа)
-2. `editor/avalonia/Engine/EditorSession.cs` (`Reload`/`Load`/`Transform`)
-3. `editor/avalonia/Views/HierarchyView.axaml.cs`
+1. `engine/platform/include/sky/platform/file_system.hpp`
+2. `engine/platform/include/sky/platform/virtual_file_system.hpp`
+3. `engine/platform/src/std_file_system.cpp`
+4. `engine/platform/src/virtual_file_system.cpp`
+5. `tests/editor_bridge_tests.cpp`
+6. `tests/asset_project_tests.cpp`
+7. `tests/vfs_tests.cpp`
 
 **Общий критерий правильности:**
-1. Дерево объектов отражает сцену.
-2. В дереве — имена и вложенность объектов движка.
+1. ссылки `assets://` разрешаются; `asset_project_tests`, `vfs_tests`, `editor_bridge_tests` зелёные.
