@@ -7,12 +7,29 @@ feature/math-and-handles
 Цель фичи: математика и типобезопасные идентификаторы — фундамент, от которого зависят все.
 Описание фичи (для чего): Vec3/Quat/Transform и Handle используют все модули; заголовок math.hpp отдаётся первым коммитом — по нему стартуют E2 и E4.
 Пошаговое описание действий:
+
 Сделай файл engine/core/include/sky/core/math.hpp
-В файле engine/core/include/sky/core/math.hpp должны быть структуры Vec3{x,y,z}, Quat{x,y,z,w}, Transform{position,rotation,scale} и функции constexpr Vec3 operator+(const Vec3& a, const Vec3& b), constexpr Vec3 operator*(const Vec3& a, float s), constexpr Quat operator*(const Quat& a, const Quat& b), constexpr Vec3 rotate(const Quat& q, const Vec3& v), constexpr Transform compose(const Transform& parent, const Transform& child), constexpr Quat conjugate(const Quat& q), constexpr Transform invCompose(const Transform& parent, const Transform& world)
-В методах должна быть реализована логика: покомпонентное сложение векторов; масштабирование вектора числом; композиция двух поворотов (сначала b, потом a); rotate поворачивает вектор кватернионом; compose переводит локальный трансформ ребёнка в систему координат родителя; conjugate — сопряжённый кватернион; invCompose — обратная к compose (мировой трансформ в локальный относительно родителя).
+Свободные функции над векторами, кватернионами и трансформами (все constexpr). Структуры Vec3{x,y,z}, Quat{x,y,z,w}, Transform{position, rotation, scale} объявляются здесь же. В файле должны быть функции/методы:
+- `constexpr Vec3 operator+(const Vec3& a, const Vec3& b)`
+  Что делает: покомпонентное сложение векторов. Параметры: a, b — слагаемые. Возвращает: сумму {a.x+b.x, …}.
+- `constexpr Vec3 operator*(const Vec3& a, float s)`
+  Что делает: масштабирование вектора числом. Параметры: a — вектор, s — множитель. Возвращает: {a.x*s, …}.
+- `constexpr Quat operator*(const Quat& a, const Quat& b)`
+  Что делает: композиция двух поворотов (сначала b, потом a). Параметры: a, b — кватернионы. Возвращает: результирующий поворот.
+- `constexpr Vec3 rotate(const Quat& q, const Vec3& v)`
+  Что делает: поворачивает вектор кватернионом. Параметры: q — поворот, v — исходный вектор. Возвращает: повёрнутый вектор.
+- `constexpr Transform compose(const Transform& parent, const Transform& child)`
+  Что делает: переводит локальный трансформ ребёнка в систему координат родителя (нужно для мирового трансформа). Параметры: parent — трансформ родителя, child — локальный трансформ ребёнка. Возвращает: трансформ ребёнка в системе родителя.
+- `constexpr Quat conjugate(const Quat& q)`
+  Что делает: сопряжённый кватернион (обратный поворот для единичного). Параметры: q — поворот. Возвращает: {-q.x,-q.y,-q.z,q.w}.
+- `constexpr Transform invCompose(const Transform& parent, const Transform& world)`
+  Что делает: обратная к compose — переводит мировой трансформ в локальный относительно родителя (нужно при смене родителя). Параметры: parent — трансформ родителя, world — мировой трансформ объекта. Возвращает: локальный трансформ относительно родителя.
+
 Сделай файл engine/core/include/sky/core/handle.hpp
-В файле engine/core/include/sky/core/handle.hpp должен быть template <typename Tag> struct Handle { std::uint64_t value; … } с методами isValid(), invalid(), operator==
-В методах должна быть реализована логика: типобезопасный идентификатор — разные теги (ObjectTag, ComponentTag) дают несовместимые типы.
+В файле должны быть функции/методы:
+- `template <typename Tag> struct Handle { std::uint64_t value; … }`
+  Что делает: типобезопасный идентификатор. Разные теги (ObjectTag, ComponentTag) дают несовместимые типы — нельзя перепутать хэндл объекта с хэндлом компонента. Содержит isValid(), статический invalid(), operator==.
+
 На выходе должно получиться:
 - engine/core/include/sky/core/math.hpp
 - engine/core/include/sky/core/handle.hpp
@@ -23,30 +40,53 @@ feature/math-and-handles
 feature/render-contract
 
 Цель фичи: общий (не только Vulkan) контракт рендера — поток команд и интерфейс рендерера.
-Описание фичи (для чего): единый контракт, от которого зависят все бэкенды; остальные фичи опираются на интерфейсы, а не на реализацию.
+Описание фичи (для чего): единый контракт, от которого зависят все бэкенды; остальные фичи опираются на интерфейсы, а не на реализацию. Зависимость: core::Vec3/core::Transform из feature/math-and-handles.
 Пошаговое описание действий:
+
 Сделай файл engine/rendering/include/sky/rendering/rendering.hpp
-В файле engine/rendering/include/sky/rendering/rendering.hpp должны быть enum class RenderCommandType { BeginFrame, SetViewport, SetCamera, AddLight, SetSky, BindPipeline, DrawMesh, EndFrame }, enum class LightType { Directional = 0, Point = 1 }, struct RenderCommand { RenderCommandType type; core::Transform transform; core::Vec3 color; float fovDegrees; float orthoHeight; … }, class IRenderer (backendName, attachSurface, submit, renderFrame), class IRenderResourceFactory (createMeshFromData, createTextureFromData, destroy)
-В методах должна быть реализована логика: RenderCommand — одна backend-независимая команда (поля используются по-разному в зависимости от type); backendName возвращает имя бэкенда; attachSurface привязывает поверхность; submit принимает поток команд кадра; renderFrame рисует накопленный кадр; createMeshFromData загружает меш (позиция+нормаль+uv), createTextureFromData загружает текстуру, destroy освобождает ресурс.
+Перечисления и структура команды. В файле должны быть функции/методы:
+- `enum class RenderCommandType { BeginFrame, SetViewport, SetCamera, AddLight, SetSky, BindPipeline, DrawMesh, EndFrame }`
+  Что делает: вид команды отрисовки в потоке.
+- `enum class LightType { Directional = 0, Point = 1 }` — вид источника света.
+- `struct RenderCommand { RenderCommandType type; core::Transform transform; core::Vec3 color; float fovDegrees; float orthoHeight; … }`
+  Что делает: одна backend-независимая команда. Поля используются по-разному в зависимости от type (для SetCamera — поза камеры и проекция, для AddLight — поза и цвет света, для DrawMesh — материал и текстуры).
+
+class IRenderer — контракт рендерера:
+- `virtual std::string backendName() const = 0` — Возвращает: имя бэкенда ("vulkan"/"opengl").
+- `virtual void attachSurface(IRenderSurface& surface) = 0` — привязывает поверхность вывода. Параметры: surface.
+- `virtual void submit(std::span<const RenderCommand> commands) = 0` — принимает поток команд кадра. Параметры: commands.
+- `virtual void renderFrame() = 0` — рисует накопленный кадр.
+
+class IRenderResourceFactory — создание ресурсов GPU:
+- `virtual RenderResourceHandle createMeshFromData(std::span<const float> interleavedPosNormalUv) = 0`
+  Что делает: загружает меш из массива вершин (позиция+нормаль+uv). Параметры: interleavedPosNormalUv. Возвращает: хэндл ресурса.
+- `virtual RenderResourceHandle createTextureFromData(std::uint32_t w, std::uint32_t h, std::span<const std::uint8_t> rgba) = 0`
+  Что делает: загружает текстуру. Параметры: w, h — размеры, rgba — пиксели. Возвращает: хэндл.
+- `virtual void destroy(RenderResourceHandle resource) = 0` — освобождает ресурс.
+
 Сделай файл engine/rendering/include/sky/rendering/renderer_registry.hpp
-В файле engine/rendering/include/sky/rendering/renderer_registry.hpp должны быть struct BackendInit { … }, тип RendererFactory, class IRendererRegistry (registerBackend, create), std::unique_ptr<IRendererRegistry> createRendererRegistry()
-В методах должна быть реализована логика: registerBackend регистрирует фабрику бэкенда (возвращает успех); create возвращает рендерер по имени бэкенда; createRendererRegistry — фабрика реестра.
+struct BackendInit { … } — параметры инициализации бэкенда; RendererFactory — тип функции-фабрики рендерера. В файле должны быть функции/методы:
+class IRendererRegistry — реестр бэкендов рендера:
+- `virtual bool registerBackend(const std::string& name, RendererFactory factory) = 0` — регистрирует фабрику бэкенда. Возвращает: успех.
+- `virtual std::unique_ptr<IRenderer> create(const std::string& name, const BackendInit&) = 0` — Возвращает: рендерер по имени бэкенда.
+- `std::unique_ptr<IRendererRegistry> createRendererRegistry()` — фабрика реестра.
+
 Сделай файл engine/rendering/include/sky/rendering/null_renderer.hpp
-В файле engine/rendering/include/sky/rendering/null_renderer.hpp должен быть пустой рендерер (считает кадры/команды, ничего не рисует) — для тестов контракта
-В методах должна быть реализована логика: подсчёт кадров и команд без реальной отрисовки.
+В файле должен быть пустой рендерер (считает кадры/команды, ничего не рисует) — для тестов контракта.
+
 Сделай файл engine/rendering/src/null_renderer.cpp
-В файле engine/rendering/src/null_renderer.cpp должна быть реализация пустого рендерера
-В методах должна быть реализована логика: подсчёт кадров/команд без отрисовки.
+В методах должна быть реализована логика: пустой рендерер — подсчёт кадров и команд без реальной отрисовки.
+
 Сделай файл engine/rendering/src/renderer_registry.cpp
-В файле engine/rendering/src/renderer_registry.cpp должна быть реализация реестра бэкендов
-В методах должна быть реализована логика: registerBackend (хранение фабрик по имени), create (создание рендерера по имени), createRendererRegistry.
+В методах должна быть реализована логика: реестр бэкендов — registerBackend (хранение фабрик по имени), create (создание рендерера по имени), createRendererRegistry.
+
 На выходе должно получиться:
 - engine/rendering/include/sky/rendering/rendering.hpp
 - engine/rendering/include/sky/rendering/renderer_registry.hpp
 - engine/rendering/include/sky/rendering/null_renderer.hpp
 - engine/rendering/src/null_renderer.cpp
 - engine/rendering/src/renderer_registry.cpp
-КРИТЕРИЙ ПРАВИЛЬНОСТИ: null-рендерер регистрируется в реестре и создаётся по имени; submit + renderFrame увеличивают счётчики кадров/команд. Зависимость: core::Vec3/core::Transform из feature/math-and-handles.
+КРИТЕРИЙ ПРАВИЛЬНОСТИ: null-рендерер регистрируется в реестре и создаётся по имени; submit + renderFrame увеличивают счётчики кадров/команд.
 
 ## Контур E3 (Редактор .NET)
 
@@ -55,18 +95,23 @@ feature/editor-shell
 Цель фичи: каркас приложения редактора на Avalonia (.NET 8) с окном «Sky Engine».
 Описание фичи (для чего): проект редактора и первичное окно, без которого нет панелей и вызовов движка; C-интерфейс подключается со второй фичи контура.
 Пошаговое описание действий:
+
 Сделай файл editor/avalonia/SkyEditor.csproj
-В файле editor/avalonia/SkyEditor.csproj должно быть описание проекта .NET 8 с пакетами Avalonia
-В файле должна быть реализована логика: конфигурация проекта .NET 8 и зависимости Avalonia.
+В файле должны быть функции/методы:
+- `csproj` — проект .NET 8 с пакетами Avalonia.
+
 Сделай файл editor/avalonia/Program.cs
-В файле editor/avalonia/Program.cs должен быть static int Main(string[] args)
-В методе должна быть реализована логика: точка входа; ветка --screenshot (headless); возвращает код выхода.
+В файле должны быть функции/методы:
+- `static int Main(string[] args)` — точка входа; ветка --screenshot (headless). Возвращает: код выхода.
+
 Сделай файл editor/avalonia/App.axaml.cs
-В файле editor/avalonia/App.axaml.cs должен быть класс App с методом OnFrameworkInitializationCompleted()
-В методе должна быть реализована логика: приложение Avalonia открывает MainWindow.
+В файле должны быть функции/методы:
+- `App` — приложение Avalonia; `OnFrameworkInitializationCompleted()` открывает MainWindow.
+
 Сделай файл editor/avalonia/MainWindow.axaml.cs
-В файле editor/avalonia/MainWindow.axaml.cs должен быть класс MainWindow с меню (File/Edit/GameObject) и обработчиками пунктов
-В классе должна быть реализована логика: окно «Sky Engine» с меню и обработчиками пунктов меню.
+В файле должны быть функции/методы:
+- `MainWindow` — окно «Sky Engine», меню (File/Edit/GameObject), обработчики пунктов.
+
 На выходе должно получиться:
 - editor/avalonia/SkyEditor.csproj
 - editor/avalonia/Program.cs
@@ -79,22 +124,40 @@ feature/editor-shell
 feature/physics-world
 
 Цель фичи: физический мир — тела, коллайдеры, гравитация, столкновения, высотная поверхность, луч.
-Описание фичи (для чего): ядро симуляции; контракты управления и запросов плюс конкретная реализация. Бэкенд заменяем по контракту.
+Описание фичи (для чего): ядро симуляции; контракты управления и запросов плюс конкретная реализация. Зависимость: core::Vec3/core::Transform из feature/math-and-handles.
 Пошаговое описание действий:
+
 Сделай файл engine/physics/include/sky/physics/physics.hpp
-В файле engine/physics/include/sky/physics/physics.hpp должны быть типы RigidBodyDesc{type,mass,transform}, enum class ColliderShape{Box,Sphere,Capsule,TerrainHeightfield}, ColliderDesc{shape,halfExtents,radius,heightfield}, HeightfieldDesc{resolution,scale,heights}, RaycastHit{collider,point,normal,distance}, CollisionEvent{first,second}; class IPhysicsWorld (createBody(const RigidBodyDesc& desc), destroyBody(RigidBodyHandle body), attachCollider(RigidBodyHandle body, const ColliderDesc& desc), step(double fixedDeltaSeconds), drainCollisionEvents()); class IPhysicsQueryService (raycast(const core::Vec3& origin, const core::Vec3& direction, float maxDistance) const, bodyTransform(RigidBodyHandle body) const)
-В методах должна быть реализована логика: createBody создаёт тело (тип/масса/поза), destroyBody удаляет; attachCollider навешивает коллайдер, step — шаг симуляции, drainCollisionEvents — события за кадр; raycast пускает луч и возвращает попадание или nullopt; bodyTransform — трансформ тела.
+Типы: RigidBodyDesc{type,mass,transform}, enum class ColliderShape{Box,Sphere,Capsule,TerrainHeightfield}, ColliderDesc{shape,halfExtents,radius,heightfield}, HeightfieldDesc{resolution,scale,heights}, RaycastHit{collider,point,normal,distance}, CollisionEvent{first,second}. В файле должны быть функции/методы:
+class IPhysicsWorld — управление симуляцией:
+- `virtual RigidBodyHandle createBody(const RigidBodyDesc& desc) = 0`
+  Что делает: создаёт физическое тело. Параметры: desc — тип/масса/поза. Возвращает: хэндл тела.
+- `virtual void destroyBody(RigidBodyHandle body) = 0` — удаляет тело.
+- `virtual ColliderHandle attachCollider(RigidBodyHandle body, const ColliderDesc& desc) = 0`
+  Что делает: навешивает коллайдер на тело. Параметры: body, desc — форма коллайдера. Возвращает: хэндл коллайдера.
+- `virtual void step(double fixedDeltaSeconds) = 0` — шаг симуляции. Параметры: fixedDeltaSeconds — шаг времени.
+- `virtual std::vector<CollisionEvent> drainCollisionEvents() = 0` — Возвращает: события столкновений за кадр.
+class IPhysicsQueryService — запросы:
+- `virtual std::optional<RaycastHit> raycast(const core::Vec3& origin, const core::Vec3& direction, float maxDistance) const = 0`
+  Что делает: пускает луч в физический мир. Параметры: origin — начало, direction — направление, maxDistance — предел. Возвращает: попадание или nullopt.
+- `virtual core::Transform bodyTransform(RigidBodyHandle body) const = 0` — Возвращает: трансформ тела.
+
 Сделай файл engine/physics/include/sky/physics/physics_world.hpp
-В файле engine/physics/include/sky/physics/physics_world.hpp должны быть class PhysicsWorld : IPhysicsWorld, IPhysicsQueryService (setGravity(const core::Vec3& gravity), setBodyVelocity(RigidBodyHandle body, const core::Vec3& velocity), bodyVelocity(RigidBodyHandle body) const, setBodyTransform(RigidBodyHandle body, const core::Transform& transform)) и std::unique_ptr<PhysicsWorld> createPhysicsWorld()
-В методах должна быть реализована логика: setGravity задаёт гравитацию; setBodyVelocity задаёт скорость; bodyVelocity возвращает скорость; setBodyTransform переставляет тело.
+class PhysicsWorld : IPhysicsWorld, IPhysicsQueryService — добавляет функции/методы:
+- `virtual void setGravity(const core::Vec3& gravity) = 0` — задаёт гравитацию.
+- `virtual void setBodyVelocity(RigidBodyHandle body, const core::Vec3& velocity) = 0` — задаёт скорость тела.
+- `virtual core::Vec3 bodyVelocity(RigidBodyHandle body) const = 0` — Возвращает: скорость тела.
+- `virtual void setBodyTransform(RigidBodyHandle body, const core::Transform& transform) = 0` — переставляет тело.
+- `std::unique_ptr<PhysicsWorld> createPhysicsWorld()` — фабрика.
+
 Сделай файл engine/physics/src/physics_world.cpp
-В файле engine/physics/src/physics_world.cpp должна быть реализация PhysicsWorld
 В методах должна быть реализована логика: интегрирование гравитации в step; detectAndResolve (расталкивание AABB, сбор CollisionEvent); sampleHeightfield/resolveHeightfields (удержание на террейне); raycast по коллайдерам и высотной поверхности.
+
 На выходе должно получиться:
 - engine/physics/include/sky/physics/physics.hpp
 - engine/physics/include/sky/physics/physics_world.hpp
 - engine/physics/src/physics_world.cpp
-КРИТЕРИЙ ПРАВИЛЬНОСТИ: тело за 1 с падает ≈4.9 м под гравитацией; куб замирает на полу (расталкивание AABB); луч попадает в коллайдер. Зависимость: core::Vec3/core::Transform из feature/math-and-handles.
+КРИТЕРИЙ ПРАВИЛЬНОСТИ: тело за 1 с падает ≈4.9 м под гравитацией; куб замирает на полу (расталкивание AABB); луч попадает в коллайдер.
 
 ## Контур E5 (Пайплайн и QA)
 
@@ -103,15 +166,20 @@ feature/build-system
 Цель фичи: скелет сборки CMake для движка, редактора, плеера и тестов.
 Описание фичи (для чего): единый механизм сборки модулей; в него остальные контуры добавляют свои модули по мере готовности.
 Пошаговое описание действий:
+
 Сделай файл engine/CMakeLists.txt
-В файле engine/CMakeLists.txt должна быть функция sky_add_module(NAME DIR sources…)
-В функции должна быть реализована логика: создаёт статическую библиотеку с public-include-путями и стандартом C++20; регистрирует модули и связи между ними.
+В файле должны быть функции/методы:
+- `sky_add_module(NAME DIR sources…)`
+  Что делает: создаёт статическую библиотеку с public-include-путями и стандартом C++20; регистрирует модули и связи между ними.
+
 Сделай файл CMakeLists.txt (корневой)
-В файле CMakeLists.txt должны быть объявление проекта, опции и add_subdirectory для движка/редактора/плеера/тестов
-В файле должна быть реализована логика: конфигурация проекта и подключение подкаталогов.
+В файле должны быть функции/методы:
+- корневой проект, опции, `add_subdirectory` для движка/редактора/плеера/тестов.
+
 Сделай файл tests/CMakeLists.txt
-В файле tests/CMakeLists.txt должна быть регистрация тестовых целей
-В файле должна быть реализована логика: сборка тестов и их регистрация в ctest.
+В файле должны быть функции/методы:
+- регистрация тестовых целей.
+
 На выходе должно получиться:
 - CMakeLists.txt
 - engine/CMakeLists.txt
@@ -125,15 +193,39 @@ feature/ecs-core
 Цель фичи: ECS-ядро — сущности, типизированные хранилища компонентов, планировщик систем и запросы.
 Описание фичи (для чего): сущности держат компоненты в хранилищах по типу, системы обрабатывают их пачками; на этом ядре строятся все этапы контура.
 Пошаговое описание действий:
+
 Сделай файл engine/ecs/include/sky/ecs/ecs.hpp
-В файле engine/ecs/include/sky/ecs/ecs.hpp должны быть struct EntityId { std::uint32_t index; std::uint32_t generation; }; class IEcsComponentStore (componentType, has, remove, count); class IEcsSystem (name, update); class IEcsWorld (createEntity, destroyEntity, isAlive, store); class IEcsSystemScheduler (registerSystem, unregisterSystem, tick); class IEcsQueryService (entitiesWith(std::set<std::type_index> types))
-В методах должна быть реализована логика: EntityId — сущность с поколением (защита от повторного использования id); componentType/has/remove/count — хранилище одного типа; system update обрабатывает подходящие сущности; createEntity/destroyEntity/isAlive/store — мир сущностей; registerSystem/unregisterSystem/tick — планировщик; entitiesWith находит сущности с заданным набором компонентов.
+`struct EntityId { std::uint32_t index; std::uint32_t generation; }` — сущность с поколением (защита от повторного использования id). В файле должны быть функции/методы:
+class IEcsComponentStore — хранилище одного типа компонента:
+- `virtual std::type_index componentType() const = 0` — Возвращает: тип компонента.
+- `virtual bool has(EntityId entity) const = 0` — Возвращает: есть ли компонент у сущности.
+- `virtual void remove(EntityId entity) = 0` — удаляет компонент у сущности.
+- `virtual std::size_t count() const = 0` — Возвращает: число компонентов.
+class IEcsSystem — система, исполняемая каждый кадр:
+- `virtual std::string name() const = 0` — Возвращает: имя системы.
+- `virtual void update(double deltaSeconds) = 0` — обрабатывает подходящие сущности. Параметры: deltaSeconds — шаг времени.
+class IEcsWorld — мир сущностей:
+- `virtual EntityId createEntity() = 0` — Возвращает: новую сущность.
+- `virtual void destroyEntity(EntityId entity) = 0` — уничтожает сущность.
+- `virtual bool isAlive(EntityId entity) const = 0` — Возвращает: жива ли сущность.
+- `virtual IEcsComponentStore& store(std::type_index componentType) = 0` — Возвращает: хранилище типа.
+class IEcsSystemScheduler — планировщик:
+- `virtual void registerSystem(IEcsSystem& system) = 0` — регистрирует систему.
+- `virtual void unregisterSystem(IEcsSystem& system) = 0` — снимает систему.
+- `virtual void tick(double deltaSeconds) = 0` — прогоняет все системы за такт. Параметры: deltaSeconds.
+class IEcsQueryService — запросы:
+- `virtual std::vector<EntityId> entitiesWith(std::set<std::type_index> types) const = 0`
+  Что делает: находит сущности с заданным набором компонентов. Параметры: types. Возвращает: список сущностей.
+
 Сделай файл engine/ecs/include/sky/ecs/ecs_world.hpp
-В файле engine/ecs/include/sky/ecs/ecs_world.hpp должны быть class EcsWorld : IEcsWorld, IEcsSystemScheduler, IEcsQueryService с template <typename T> TypedComponentStore<T>& storeFor() и std::unique_ptr<EcsWorld> createEcsWorld()
-В методах должна быть реализована логика: storeFor<T>() — типобезопасный доступ к хранилищу компонента T (методы set(entity, value), get(entity)→T*).
+class EcsWorld : IEcsWorld, IEcsSystemScheduler, IEcsQueryService — добавляет функции/методы:
+- `template <typename T> TypedComponentStore<T>& storeFor()`
+  Что делает: типобезопасный доступ к хранилищу компонента T (с методами set(entity, value), get(entity)→T*). Возвращает: хранилище T.
+- `std::unique_ptr<EcsWorld> createEcsWorld()` — фабрика.
+
 Сделай файл engine/ecs/src/ecs_world.cpp
-В файле engine/ecs/src/ecs_world.cpp должна быть реализация EcsWorld и createEcsWorld()
 В методах должна быть реализована логика: учёт живых сущностей; destroyEntity удаляет компоненты во всех хранилищах; tick прогоняет системы; entitiesWith отбирает сущности со всеми указанными компонентами.
+
 На выходе должно получиться:
 - engine/ecs/include/sky/ecs/ecs.hpp
 - engine/ecs/include/sky/ecs/ecs_world.hpp
