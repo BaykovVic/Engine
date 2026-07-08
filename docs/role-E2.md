@@ -54,6 +54,10 @@ Vulkan-бэкенд (закадровый и оконный), PBR-освещен
 - `virtual void destroy(RenderResourceHandle resource) = 0` — освобождает ресурс.
 
 #### Файл `engine/rendering/include/sky/rendering/renderer_registry.hpp`
+`struct BackendInit { … }` — параметры инициализации бэкенда; `RendererFactory` —
+тип функции-фабрики рендерера.
+
+**`class IRendererRegistry`** — реестр бэкендов рендера.
 - `virtual bool registerBackend(const std::string& name, RendererFactory factory) = 0` — регистрирует фабрику бэкенда. Возвращает: успех.
 - `virtual std::unique_ptr<IRenderer> create(const std::string& name, const BackendInit&) = 0` — Возвращает: рендерер по имени бэкенда.
 - `std::unique_ptr<IRendererRegistry> createRendererRegistry()` — фабрика реестра.
