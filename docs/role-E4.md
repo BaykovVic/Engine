@@ -1,81 +1,138 @@
 # Техническое задание · Контур E4 «Рантайм и скриптинг»
 
-**Исполнитель контура:** инженер C++ и .NET-хостинга.
-**Область ответственности:** физическая симуляция, режим воспроизведения,
-ввод, автономный проигрыватель и подсистема скриптинга (хостинг .NET,
-управляемый рантайм). Скриптинг имеет наибольшую длину зависимостей, поэтому
-его следует начинать не позднее пятой недели.
-**Модули:** `engine/physics`, `engine/scripting`, `player`,
-`managed/SkyEngine.Managed`.
-Пофайловая детализация: [week1-files.md](week1-files.md) … [weeks7-8-files.md](weeks7-8-files.md).
+**Область ответственности.** Физическая симуляция, режим воспроизведения, ввод, автономный проигрыватель и подсистема скриптинга (.NET-хостинг).
+
+Все пути и имена методов взяты из фактического репозитория и совпадают с проектом 1:1. «Сделай файл» — файл создаётся на этом этапе; «Дополни файл» — в существующий файл добавляются перечисленные методы.
+
 
 ---
 
 ## Этап 1 (Неделя 1). Физическая симуляция
 
 **Общее описание задач контура.**
-Реализовать физический мир: типы тел и коллайдеров, интегрирование
-гравитации, разрешение столкновений коробок по ограничивающим объёмам,
-удержание тел на высотной поверхности, луч по сцене и контракт
-синхронизации физики с объектным миром.
 
-**На выходе должно получиться:**
-- Динамическое тело за 1 с падает примерно на 4.9 м; статическое неподвижно.
-- Тело останавливается на статическом полу и удерживается на высотной поверхности.
-- Объект, связанный с падающим телом, синхронно опускается в объектном мире.
-- Тест `physics_tests` проходит.
+Реализовать физический мир: тела, коллайдеры, гравитацию, столкновения, высотную поверхность, луч, синхронизацию.
 
-## Этап 2 (Неделя 2, веха M1). Автономный проигрыватель
+- **Сделай файл** `engine/physics/include/sky/physics/physics.hpp`
+  В файле должны быть: `IPhysicsWorld`, `createBody`, `destroyBody`, `attachCollider`, `detachCollider`, `step`, `drainCollisionEvents`, `IPhysicsQueryService`, `bodyTransform`, `IPhysicsSyncContract`, `pushKinematicState`, `pullSimulationResults`
+- **Сделай файл** `engine/physics/include/sky/physics/physics_world.hpp`
+  В файле должны быть: `PhysicsWorld`, `setGravity`, `setBodyVelocity`, `bodyVelocity`, `setBodyTransform`, `createPhysicsWorld`, `ObjectPhysicsSync`, `bind`, `unbind`
+- **Сделай файл** `engine/physics/src/physics_world.cpp`
+  В файле должны быть: `createBody`, `destroyBody`, `attachCollider`, `invalid`, `detachCollider`, `step`, `resolveHeightfields`, `detectAndResolve`, `drainCollisionEvents`, `worldAabb`, `bodyTransform`, `setBodyVelocity`, `bodyVelocity`, `setBodyTransform`, `sampleHeightfield`, `resolve`, `ObjectPhysicsSyncImpl`, `bind`, `pushKinematicState`, `pullSimulationResults`, `createPhysicsWorld`
+- **Сделай файл** `tests/physics_tests.cpp`
+  В файле должны быть: `testGravityIntegration`, `createPhysicsWorld`, `step`, `bodyVelocity`, `bodyTransform`, `testCollisionAndResolution`, `drainCollisionEvents`, `testRaycast`, `raycast`, `testObjectSync`, `createObjectWorld`, `createObjectPhysicsSync`, `createObject`, `setLocalTransform`, `createBody`, `bind`, `pushKinematicState`, `pullSimulationResults`, `localTransform`, `unbind`, `main`, `summary`
 
-**Общее описание задач контура.**
-Реализовать каркас проигрывателя: собственный цикл (ввод → физика → рендер),
-оконный и безоконный (headless) режимы запуска.
+**На выходе должно получиться (список артефактов):**
+- Библиотека `sky_physics` собрана; тест `physics_tests` зелёный.
 
-**На выходе должно получиться:**
-- Проигрыватель в безоконном режиме формирует изображение кадра в файл.
-- Оконный режим отображает сцену.
+**Критерий правильности:** Тело за 1 с падает ≈4.9 м; куб замирает на полу; тело удерживается на heightfield; привязанный объект синхронно опускается.
 
-## Этап 3 (Недели 3–4, веха M2). Режим воспроизведения и ввод
-
-**Общее описание задач контура.**
-Реализовать управление воспроизведением (запуск/пауза/остановка) со снимком
-состояния сцены на входе и восстановлением на выходе, а также приём событий
-ввода с переносимыми кодами клавиш.
-
-**На выходе должно получиться:**
-- Вход в режим воспроизведения снимает состояние сцены, выход восстанавливает его без остаточного движения тел.
-- Состояние клавиатуры доступно движку.
-
-## Этап 4 (Недели 5–6, веха M3). Подсистема скриптинга
-
-**Общее описание задач контура.**
-Реализовать хостинг .NET-рантайма, управляемый базовый класс скрипта
-(аналог MonoBehaviour) с событиями жизненного цикла, обратный программный
-интерфейс движка (трансформы, журнал, время, ввод), интеграцию скриптов в
-цикл воспроизведения и запуск скриптов в проигрывателе.
-
-**На выходе должно получиться:**
-- Скрипт на C#, назначенный объекту в редакторе, исполняется в режиме воспроизведения и в проигрывателе.
-- Корректность подтверждается точной проверкой (поворот 90°/с за 1 с = 45°).
-- Журнал скрипта выводится в консоль редактора; доступны время и ввод.
-
-## Этап 5 (Недели 7–8, веха M4). Пользовательские сборки и игровой интерфейс
-
-**Общее описание задач контура.**
-Реализовать компиляцию пользовательских скриптов проекта в сборку с
-перезагрузкой между сессиями воспроизведения и расширить программный
-интерфейс движка функциями геймплея (создание и уничтожение объектов,
-скорость тела, луч).
-
-**На выходе должно получиться:**
-- Файл `.cs` из каталога скриптов проекта компилируется и исполняется в режиме воспроизведения; правка кода подхватывается при следующем запуске.
-- Скриптам доступны создание/уничтожение объектов, управление скоростью тела и луч по физическому миру.
-- Демонстрационная игра исполняется в проигрывателе из сохранённой сцены.
 
 ---
 
-## Приёмка контура по итогам срока
+## Этап 2 (Неделя 2). Автономный проигрыватель
 
-- Физика проходит численные проверки; проигрыватель формирует кадр.
-- Режим воспроизведения восстанавливает сцену.
-- Скрипт на C# работает в редакторе и в билде; пользовательские скрипты компилируются; демо-игра запускается.
+**Общее описание задач контура.**
+
+Реализовать проигрыватель с собственным циклом и режимами запуска (оконный/headless).
+
+- **Сделай файл** `player/src/main.cpp`
+  В файле должны быть: `mapPlatformKey`, `runHeadless`, `createVulkanRenderer`, `builder`, `setScene`, `play`, `tickFrame`, `submit`, `renderFrame`, `readbackFrame`, `frameWidth`, `frameHeight`, `encodePngRgba`, `writeAll`, `runWindowed`, `createCocoaWindowSystem`, `createX11WindowSystem`, `createWindow`, `metalLayer`, `nativeHandles`, `setEventCallback`, `now`, `pumpEvents`, `presentedFrames`, `main`
+
+**На выходе должно получиться (список артефактов):**
+- Бинарь `sky_player`; безоконный режим пишет PNG.
+
+**Критерий правильности:** `sky_player --headless out.png` формирует изображение кадра.
+
+
+---
+
+## Этап 3 (Недели 3–4). Режим воспроизведения и ввод
+
+**Общее описание задач контура.**
+
+Реализовать управление воспроизведением со снимком/восстановлением сцены и приём ввода.
+
+- **Сделай файл** `editor/viewport_bridge/include/sky/editor/viewport/play_mode_controller.hpp`
+  В файле должны быть: `PlayModeController`, `setScene`, `tickFrame`
+- **Сделай файл** `editor/viewport_bridge/src/play_mode_controller.cpp`
+  В файле должны быть: `PlayModeControllerImpl`, `play`, `transition`, `pause`, `stop`, `onStateChanged`, `setScene`, `tickFrame`
+- **Дополни файл** `editor/shell/src/editor_context.hpp`
+  В файле должны быть: `beginPlay`, `endPlay`, `setKeyDown`, `keyDown`
+- **Дополни файл** `editor/shell/src/editor_context.cpp`
+  В файле должны быть: `beginPlay`, `endPlay`
+
+**На выходе должно получиться (список артефактов):**
+- Вход в play снимает состояние, выход восстанавливает; состояние клавиш доступно движку.
+
+**Критерий правильности:** После play→stop сцена в исходном состоянии, тела без остаточной скорости.
+
+
+---
+
+## Этап 4 (Недели 5–6). Подсистема скриптинга
+
+**Общее описание задач контура.**
+
+Реализовать хостинг .NET, базовый класс скрипта, обратный API движка и интеграцию в play.
+
+- **Сделай файл** `engine/scripting/include/sky/scripting/scripting_boundary.hpp`
+  В файле должны быть: `IScriptBindingService`, `registerBinding`, `unbindInstance`, `IScriptLifecycleBridge`, `dispatchAll`, `INativeHandleRegistry`, `allocate`, `release`, `resolve`
+- **Сделай файл** `engine/scripting/include/sky/scripting/script_host.hpp`
+  В файле должны быть: `IScriptHost`, `start`, `shutdown`, `loadAssembly`, `loadedAssemblies`, `createInstance`, `destroyInstance`, `IDomainReloadPolicy`, `policy`, `canReloadNow`, `requestReload`
+- **Сделай файл** `engine/scripting/include/sky/scripting/script_runtime.hpp`
+  В файле должны быть: `ScriptRuntime`, `createScriptRuntime`
+- **Сделай файл** `engine/scripting/include/sky/scripting/dotnet_host.hpp`
+  В файле должны быть: `DotNetScriptHost`, `probeValue`, `installEngineApi`, `beginFrame`, `scriptClassNames`, `loadUserAssembly`, `unloadUserAssembly`, `createDotNetScriptHost`
+- **Сделай файл** `engine/scripting/src/dotnet_host.cpp`
+  В файле должны быть: `splitLines`, `discoverHostfxr`, `DotNetScriptHostImpl`, `start`, `dlopen`, `dlsym`, `initialize`, `resolve`, `shutdown`, `close_`, `loadAssembly`, `managedLoadAssembly_`, `createInstance`, `managedCreateInstance_`, `destroyInstance`, `managedDestroyInstance_`, `probeValue`, `managedGetProbe_`, `installEngineApi`, `managedInitialize_`, `managedSetObjectId_`, `beginFrame`, `managedTickFrame_`, `scriptClassNames`, `scriptFields`, `loadUserAssembly`, `managedLoadUserAssembly_`, `unloadUserAssembly`, `managedUnloadUserAssembly_`, `createDotNetScriptHost`, `available`
+- **Сделай файл** `engine/scripting/src/script_runtime.cpp`
+  В файле должны быть: `registerBinding`, `bindingFor`, `invalid`, `allocate`, `unbindInstance`, `release`, `dispatchAll`, `resolve`, `createScriptRuntime`
+- **Сделай файл** `managed/SkyEngine.Managed/Bootstrap.cs`
+  В файле должны быть: `LoadAssembly`, `LoadUserAssembly`, `AssemblyLoadContext`, `MemoryStream`, `UnloadUserAssembly`, `Initialize`, `TickFrame`, `SetObjectId`, `NativeHandle`, `DestroyInstance`, `InvokeLifecycle`, `GetScriptClasses`, `GetScriptFields`, `SetScriptField`, `FieldKind`, `GetProbe`, `ResolveType`, `IProbe`, `Bootstrap`, `picker`, `shadows`
+- **Сделай файл** `managed/SkyEngine.Managed/ScriptComponent.cs`
+  В файле должны быть: `SetLocalPosition`, `SetLocalEuler`, `SetLocalScale`, `SetVelocity`, `Instantiate`, `Destroy`, `OnCreate`, `OnStart`, `OnUpdate`, `OnFixedUpdate`, `OnDestroy`, `for`, `ScriptComponent`
+- **Сделай файл** `managed/SkyEngine.Managed/NativeHandle.cs`
+  В файле должны быть: `NativeHandle`, `struct`
+- **Сделай файл** `managed/SkyEngine.Managed/Engine.cs`
+  В файле должны быть: `SetVec3Fn`, `GetVec3Fn`, `LogFn`, `IsKeyDownFn`, `InstantiateFn`, `DestroyFn`, `RaycastFn`, `Install`, `Engine`, `Api`
+- **Сделай файл** `managed/SkyEngine.Managed/Debug.cs`
+  В файле должны быть: `Log`, `LogWarning`, `LogError`, `Write`, `Debug`
+- **Сделай файл** `managed/SkyEngine.Managed/Time.cs`
+  В файле должны быть: `Time`
+- **Сделай файл** `managed/SkyEngine.Managed/Input.cs`
+  В файле должны быть: `GetKey`, `KeyCode`, `Input`
+- **Дополни файл** `editor/shell/src/editor_context.cpp`
+  В файле должны быть: `initScripting`, `startPlayScripts`, `tickScripts`, `stopPlayScripts`
+- **Сделай файл** `tests/dotnet_host_tests.cpp`
+  В файле должны быть: `startHost`, `createDotNetScriptHost`, `start`, `testLifecycleThroughRealDotNet`, `createInstance`, `loadedAssemblies`, `probeValue`, `destroyInstance`, `testSceneTickDrivesCSharp`, `createScriptRuntime`, `createObjectWorld`, `createComponentWorld`, `createStdFileSystem`, `createFileSerializationBackend`, `createSceneWorld`, `createScene`, `createObject`, `addRootObject`, `bindInstance`, `resolve`, `dispatch`, `activate`, `tick`, `unbindInstance`, `main`, `summary`
+- **Сделай файл** `tests/scripting_rendering_tests.cpp`
+  В файле должны быть: `loadAssembly`, `loadedAssemblies`, `createInstance`, `destroyInstance`, `testScriptingBoundary`, `createScriptRuntime`, `registerBinding`, `bindingFor`, `bindInstance`, `resolve`, `dispatch`, `unbindInstance`, `testNullRenderer`, `createNullRenderer`, `backendName`, `createOffscreenSurface`, `width`, `attachSurface`, `createFromAsset`, `liveResourceCount`, `submit`, `renderFrame`, `frameCount`, `commandsInLastFrame`, `destroy`, `testRendererRegistry`, `createRendererRegistry`, `hasBackend`, `create`, `main`, `summary`
+
+**На выходе должно получиться (список артефактов):**
+- Скрипт на C# исполняется в редакторе и в проигрывателе; Debug.Log в консоль; Time/Input доступны.
+
+**Критерий правильности:** Скрипт-вращатель даёт 90°/с (за 1 с = 45°) в Play редактора и в плеере; тест `dotnet_host_tests` зелёный.
+
+
+---
+
+## Этап 5 (Недели 7–8). Пользовательские сборки и игровой интерфейс
+
+**Общее описание задач контура.**
+
+Реализовать компиляцию пользовательских скриптов и расширить API движка функциями геймплея.
+
+- **Дополни файл** `editor/shell/src/editor_context.cpp`
+  В файле должны быть: `reloadUserScripts`, `scriptSourceDirs`
+- **Дополни файл** `managed/SkyEngine.Managed/Bootstrap.cs`
+  В файле должны быть: `LoadUserAssembly`, `UnloadUserAssembly`
+- **Сделай файл** `managed/SkyEngine.Managed/Physics.cs`
+  В файле должны быть: `Raycast`, `RaycastHit`, `Physics`
+- **Дополни файл** `managed/SkyEngine.Managed/ScriptComponent.cs`
+  В файле должны быть: `Instantiate`, `Destroy`, `SetVelocity`, `GetWorldPosition`
+
+**На выходе должно получиться (список артефактов):**
+- Скрипты из Assets/Scripts компилируются и работают в Play; доступны Instantiate/Destroy/velocity/raycast.
+
+**Критерий правильности:** Правка `.cs` подхватывается при следующем Play; скрипт спавнит/уничтожает объекты и читает физический луч.
