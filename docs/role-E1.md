@@ -10,15 +10,30 @@
 возвращает**. Методы сгруппированы по классам; перед каждой группой — краткое
 пояснение назначения.
 
+## Обозначения (C++)
+
+Термины, встречающиеся в сигнатурах:
+- `constexpr` — функция может вычисляться на этапе компиляции; пишется как обычная функция.
+- `virtual … = 0` — чисто виртуальный метод: объявление без реализации, его обязана реализовать наследующая реализация (это контракт).
+- `class IИмя` — интерфейс: набор методов-контрактов, реализуемых отдельным классом.
+- `template <typename Tag>` — шаблон: обобщённый тип, параметризуемый другим типом.
+- `std::optional<T>` — «значение типа T или ничего» (используется, когда ключа/данных может не быть).
+- `std::unique_ptr<T>` — владеющий указатель: автоматически освобождает объект.
+- `std::vector<T>` — динамический массив значений типа T.
+- `std::variant<A,B,…>` — значение одного из перечисленных типов (у нас — поле любого из пяти типов).
+- `std::string_view` — «взгляд» на строку без копирования (только для чтения).
+- `const` в конце метода — метод не меняет объект (только читает).
+- `[[nodiscard]]` — результат метода нельзя игнорировать.
+
 ---
 
 ## Этап 1 (Неделя 1). Математика, объектная и компонентная модели
 
-**Общее описание задач контура.** Реализовать математический слой, службы
+**Общее описание задач контура.** Контур реализует математический слой, службы
 логирования и конфигурации, объектную модель (иерархия и трансформы) и
 компонентную модель с полями, описываемыми данными.
 
-### Сделай файл `engine/core/include/sky/core/math.hpp`
+### Файл `engine/core/include/sky/core/math.hpp`
 
 Свободные функции над векторами, кватернионами и трансформами (все
 `constexpr`). Структуры `Vec3{x,y,z}`, `Quat{x,y,z,w}`, `Transform{position,
@@ -49,7 +64,7 @@ rotation, scale}` объявляются здесь же.
 **Проверка:** `rotate(поворот 90° вокруг Y, {0,0,1})` ≈ `{1,0,0}` (±1e-5);
 `invCompose(parent, compose(parent, child)) == child`.
 
-### Сделай файл `engine/core/include/sky/core/handle.hpp`
+### Файл `engine/core/include/sky/core/handle.hpp`
 
 - `template <typename Tag> struct Handle { std::uint64_t value; … }`
   Что делает: типобезопасный идентификатор. Разные теги (`ObjectTag`,
@@ -57,7 +72,7 @@ rotation, scale}` объявляются здесь же.
   хэндлом компонента. Содержит `isValid()`, статический `invalid()`,
   `operator==`.
 
-### Сделай файл `engine/core/include/sky/core/logger.hpp`
+### Файл `engine/core/include/sky/core/logger.hpp`
 
 Единый журнал для всех модулей. `enum class LogLevel {Trace,Debug,Info,
 Warning,Error,Critical}` объявляется здесь.
@@ -69,7 +84,7 @@ Warning,Error,Critical}` объявляется здесь.
   Что делает: сокращения для частых уровней (вызывают `log` с нужным уровнем).
   Параметры: как выше без `level`. Возвращает: ничего.
 
-### Сделай файл `engine/core/include/sky/core/config_service.hpp`
+### Файл `engine/core/include/sky/core/config_service.hpp`
 
 Иерархическая конфигурация уровня движка (без доменного состояния).
 
@@ -84,13 +99,13 @@ Warning,Error,Critical}` объявляется здесь.
   Что делает: устанавливает значение.
   Параметры: `key` — имя, `value` — значение (строкой). Возвращает: ничего.
 
-### Сделай файлы `engine/core/src/console_logger.cpp`, `engine/core/src/memory_config_service.cpp`
+### Файлы `engine/core/src/console_logger.cpp`, `engine/core/src/memory_config_service.cpp`
 
 Реализации интерфейсов выше плюс фабрики (объявлены в `runtime_services.hpp`):
 - `std::unique_ptr<ILogger> createConsoleLogger()` — журнал в stdout/stderr с именем уровня и категорией.
 - `std::unique_ptr<IConfigService> createInMemoryConfigService()` — конфиг на основе `map` ключ→значение.
 
-### Сделай файл `engine/object/include/sky/object/object_model.hpp`
+### Файл `engine/object/include/sky/object/object_model.hpp`
 
 Три контракта объектной модели. `using ObjectHandle = core::Handle<ObjectTag>`.
 
@@ -123,7 +138,7 @@ Warning,Error,Critical}` объявляется здесь.
 - `inline void setWorldTransform(IObjectHierarchyAccess& access, ObjectHandle object, const core::Transform& world)`
   Что делает: задаёт мировой трансформ, пересчитывая локальный через `invCompose` (для корня — как есть). Параметры: `access` — иерархия, `object` — объект, `world` — желаемый мировой трансформ.
 
-### Сделай файлы `engine/object/include/sky/object/object_world.hpp`, `engine/object/src/object_world.cpp`
+### Файлы `engine/object/include/sky/object/object_world.hpp`, `engine/object/src/object_world.cpp`
 
 - `class ObjectWorld : IObjectFactory, IObjectHierarchyAccess, IObjectQueryService`
   Единый владелец иерархии. Добавляет:
@@ -132,7 +147,7 @@ Warning,Error,Critical}` объявляется здесь.
   Что делает: создаёт реализацию мира объектов. Возвращает: владеющий указатель.
   Внутри `.cpp`: хранилище `id → {локальный трансформ, родитель, дети, имя}`; `worldTransform` = `compose` локальных вверх; `destroyObject` рекурсивно удаляет поддерево.
 
-### Сделай файл `engine/component/include/sky/component/component_model.hpp`
+### Файл `engine/component/include/sky/component/component_model.hpp`
 
 `using FieldValue = std::variant<float, std::int64_t, bool, std::string,
 core::Vec3>` — значение поля любого из пяти типов. `ComponentDescriptor`
@@ -153,7 +168,7 @@ typeName}` объявляются здесь.
 - `virtual const ComponentDescriptor& descriptorOf(ComponentHandle component) const = 0` — Возвращает: описание типа компонента.
 - `virtual object::ObjectHandle ownerOf(ComponentHandle component) const = 0` — Возвращает: объект-владелец компонента.
 
-### Сделай файлы `engine/component/include/sky/component/component_world.hpp`, `engine/component/src/component_world.cpp`
+### Файлы `engine/component/include/sky/component/component_world.hpp`, `engine/component/src/component_world.cpp`
 
 `class ComponentWorld` наследует все интерфейсы выше и добавляет доступ к данным:
 - `virtual void setField(ComponentHandle component, const std::string& name, FieldValue value) = 0`
@@ -165,7 +180,7 @@ typeName}` объявляются здесь.
 - `virtual void detachAllFrom(object::ObjectHandle object) = 0` — снимает все компоненты объекта.
 - `std::unique_ptr<ComponentWorld> createComponentWorld()` — фабрика.
 
-### Сделай файлы `tests/core_tests.cpp`, `tests/world_tests.cpp`
+### Файлы `tests/core_tests.cpp`, `tests/world_tests.cpp`
 
 Проверяют математику, объектный и компонентный миры (см. критерии этапа).
 
@@ -181,10 +196,10 @@ typeName}` объявляются здесь.
 
 ## Этап 2 (Неделя 2, веха M1). Сцена и сборочная точка
 
-**Общее описание задач контура.** Реализовать модель сцены и собрать все
+**Общее описание задач контура.** Контур реализует модель сцены и собрать все
 подсистемы движка в единый `EditorContext` с демонстрационной сценой.
 
-### Сделай файлы `engine/scene/include/sky/scene/scene_world.hpp`, `engine/scene/src/scene_world.cpp`
+### Файлы `engine/scene/include/sky/scene/scene_world.hpp`, `engine/scene/src/scene_world.cpp`
 
 `class SceneWorld` (наследует `ISceneRepository`, `ISceneRuntime`,
 `ISceneQueryService`). Создаётся через `SceneWorldDeps` (ссылки на объектный,
@@ -197,17 +212,17 @@ typeName}` объявляются здесь.
   Возвращает: корневые объекты сцены.
 - `std::unique_ptr<SceneWorld> createSceneWorld(const SceneWorldDeps& deps)` — фабрика.
 
-### Сделай файлы `engine/scene/include/sky/scene/scene_authoring.hpp`, `engine/scene/src/scene_authoring.cpp`
+### Файлы `engine/scene/include/sky/scene/scene_authoring.hpp`, `engine/scene/src/scene_authoring.cpp`
 
 `enum class PrimitiveKind {Cube, Plane, Sphere}`.
 - `object::ObjectHandle createPrimitive(const AuthoringServices& services, PrimitiveKind kind, const std::string& name)`
   Что делает: создаёт объект-примитив с компонентом Mesh Renderer.
   Параметры: `services` — набор ссылок на миры объектов/компонентов, `kind` — вид примитива, `name` — имя. Возвращает: хэндл созданного объекта.
 
-### Сделай файлы `editor/shell/src/editor_context.hpp`, `editor/shell/src/editor_context.cpp`
+### Файлы `editor/shell/src/editor_context.hpp`, `editor/shell/src/editor_context.cpp`
 
 `class EditorContext` — собирает движок в один объект (владеет всеми мирами
-через `unique_ptr`) и строит демо-сцену. На этом этапе реализуй:
+через `unique_ptr`) и строит демо-сцену. На этом этапе:
 - `EditorContext()` — конструктор: создаёт все подсистемы, вызывает `buildDemoScene()`.
 - `std::vector<object::ObjectHandle> rootObjects() const`
   Возвращает: корневые объекты активной сцены (нужно контуру E3 для дерева и E2 для обхода).
@@ -226,11 +241,11 @@ typeName}` объявляются здесь.
 
 ## Этап 3 (Недели 3–4, веха M2). Отмена операций и формат сцены SKYB
 
-**Общее описание задач контура.** Реализовать стек команд отмены, бинарный
+**Общее описание задач контура.** Контур реализует стек команд отмены, бинарный
 формат сцены SKYB и операции редактирования графа объектов. Снимок поддерева
 делай без потерь — он используется отменой удаления, префабами и сценами.
 
-### Сделай файлы `editor/shell/src/editor_commands.hpp`, `editor/shell/src/editor_commands.cpp`
+### Файлы `editor/shell/src/editor_commands.hpp`, `editor/shell/src/editor_commands.cpp`
 
 - `class IEditorCommand { virtual void redo()=0; virtual void undo()=0; virtual std::string label() const=0; }`
   Базовый класс команды: применить, отменить, человекочитаемая метка.
@@ -240,13 +255,13 @@ typeName}` объявляются здесь.
   - `bool undo()` — отменяет верхнюю. Возвращает: было ли что отменять.
   - `bool redo()` — повторяет. Возвращает: было ли что повторять.
   - `bool canUndo() const` / `bool canRedo() const` — Возвращает: доступность.
-- Фабрики команд (каждая возвращает `std::unique_ptr<IEditorCommand>`), реализуй по одной на операцию:
+- Фабрики команд (каждая возвращает `std::unique_ptr<IEditorCommand>`), по одной на операцию (каждая — отдельная операция):
   - `makeTransformCommand(object, before, after)` — изменение трансформа (до/после).
   - `makeFieldCommand(component, fieldName, before, after)` — изменение поля компонента.
   - `makeCreateCommand(...)` / `makeDeleteCommand(context, object)` — создание/удаление.
   - `makeDuplicateCommand`, `makeReparentCommand`, `makeRenameCommand`, `makeAddComponentCommand`, `makeRemoveComponentCommand`, `makeMaterialCreateCommand`, `makeMaterialEditCommand` — аналогично, по смыслу имени.
 
-### Дополни файл `editor/shell/src/editor_context.cpp`
+### Дополнение файла `editor/shell/src/editor_context.cpp`
 
 Структуры снимка объявлены в `.hpp`: `ObjectSnapshot{name, local, hasPhysicsBody,
 components, children}`, `ComponentSnapshot{typeId, fields}`.
@@ -261,13 +276,13 @@ components, children}`, `ComponentSnapshot{typeId, fields}`.
 - `void reparent(object::ObjectHandle child, object::ObjectHandle newParent)` — меняет родителя, сохраняя мировое положение.
 - `void destroyObject(object::ObjectHandle object)` — удаляет объект из сцены.
 
-### Дополни файл `engine/scene/src/scene_world.cpp`
+### Дополнение файла `engine/scene/src/scene_world.cpp`
 
-- реализуй `saveSceneAs` как настоящий SKYB: магия "SKYB", схема `sky.scene`,
+- `saveSceneAs` реализуется как настоящий SKYB: магия "SKYB", схема `sky.scene`,
   обход корней → имя, трансформ, компоненты с полями (через `ByteWriter`);
   чтение обратно с прямой миграцией версий.
 
-### Сделай файлы `tests/undo_tests.cpp`, `tests/scene_tests.cpp`
+### Файлы `tests/undo_tests.cpp`, `tests/scene_tests.cpp`
 
 **На выходе должно получиться:** отмена/повтор всех операций; сцена сохраняется
 в SKYB и открывается идентично.
@@ -279,10 +294,10 @@ delete/duplicate/reparent/rename.
 
 ## Этап 4 (Недели 5–6, веха M3). Восстановление физики из сцены
 
-**Общее описание задач контура.** Реализовать воссоздание физических тел из
+**Общее описание задач контура.** Контур реализует воссоздание физических тел из
 компонентов при открытии сцены.
 
-### Дополни файл `editor/shell/src/editor_context.cpp`
+### Дополнение файла `editor/shell/src/editor_context.cpp`
 
 - приватный `void reattachPhysics()`
   Что делает: при `openScene` создаёт физические тела и коллайдеры из
@@ -298,10 +313,10 @@ delete/duplicate/reparent/rename.
 
 ## Этап 5 (Недели 7–8, веха M4). Префабы
 
-**Общее описание задач контура.** Реализовать префабы SKYP поверх снимка
+**Общее описание задач контура.** Контур реализует префабы SKYP поверх снимка
 объекта.
 
-### Дополни файл `editor/shell/src/editor_context.cpp`
+### Дополнение файла `editor/shell/src/editor_context.cpp`
 
 - `bool savePrefab(object::ObjectHandle object, const std::string& path)`
   Что делает: сериализует поддерево объекта в файл `.skyprefab` (формат SKYP
