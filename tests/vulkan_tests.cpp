@@ -272,11 +272,139 @@ void testSwapchainPresentation() {
     windows->destroyWindow(window);
 }
 
+// A stream with camera/sun/sky ready for extra draws appended by each test.
+std::vector<sky::rendering::RenderCommand> baseScene(float exposure = 0.0f) {
+    std::vector<sky::rendering::RenderCommand> commands;
+    sky::rendering::RenderCommand begin;
+    begin.type = sky::rendering::RenderCommandType::BeginFrame;
+    commands.push_back(begin);
+    sky::rendering::RenderCommand viewport;
+    viewport.type = sky::rendering::RenderCommandType::SetViewport;
+    viewport.viewportWidth = kWidth;
+    viewport.viewportHeight = kHeight;
+    commands.push_back(viewport);
+    sky::rendering::RenderCommand camera;
+    camera.type = sky::rendering::RenderCommandType::SetCamera;
+    camera.transform.position = {0.0f, 0.5f, 6.0f};
+    camera.fovDegrees = 50.0f;
+    camera.exposure = exposure;
+    commands.push_back(camera);
+    sky::rendering::RenderCommand sun;
+    sun.type = sky::rendering::RenderCommandType::AddLight;
+    sun.lightType = sky::rendering::LightType::Directional;
+    sun.transform.rotation = {-0.42f, 0.0f, 0.0f, 0.907f};
+    sun.color = {1.0f, 1.0f, 1.0f};
+    sun.lightIntensity = 1.2f;
+    commands.push_back(sun);
+    sky::rendering::RenderCommand sky;
+    sky.type = sky::rendering::RenderCommandType::SetSky;
+    sky.color = {0.62f, 0.70f, 0.80f};
+    sky.emissive = {0.21f, 0.36f, 0.57f};
+    commands.push_back(sky);
+    return commands;
+}
+
+sky::rendering::RenderCommand redCube(float opacity = 1.0f) {
+    sky::rendering::RenderCommand cube;
+    cube.type = sky::rendering::RenderCommandType::DrawMesh;
+    cube.transform.scale = {2.0f, 2.0f, 2.0f};
+    cube.color = {0.9f, 0.2f, 0.15f};
+    cube.roughness = 0.7f;
+    cube.opacity = opacity;
+    return cube;
+}
+
+void endFrame(std::vector<sky::rendering::RenderCommand>& commands) {
+    sky::rendering::RenderCommand end;
+    end.type = sky::rendering::RenderCommandType::EndFrame;
+    commands.push_back(end);
+}
+
+void testFrustumCulling() {
+    const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+    auto commands = baseScene();
+    commands.push_back(redCube()); // in view at the origin
+    auto behind = redCube();
+    behind.transform.position = {0.0f, 0.0f, 100.0f}; // behind the camera
+    commands.push_back(behind);
+    auto farLeft = redCube();
+    farLeft.transform.position = {-500.0f, 0.0f, 0.0f}; // outside the frustum
+    commands.push_back(farLeft);
+    endFrame(commands);
+    renderer->submit(commands);
+    renderer->renderFrame();
+    CHECK(renderer->culledLastFrame() == 2);
+    // The in-view cube still made it to the pixels.
+    const auto centre = pixelAt(renderer->readbackFrame(), kWidth / 2, kHeight / 2);
+    CHECK(centre.r > 100);
+}
+
+void testTransparency() {
+    const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+    // Opaque reference: the cube fully hides the sky at the centre.
+    auto opaque = baseScene();
+    opaque.push_back(redCube(1.0f));
+    endFrame(opaque);
+    renderer->submit(opaque);
+    renderer->renderFrame();
+    const auto opaqueCentre =
+        pixelAt(renderer->readbackFrame(), kWidth / 2, kHeight / 2);
+
+    // Sky-only reference.
+    auto empty = baseScene();
+    endFrame(empty);
+    renderer->submit(empty);
+    renderer->renderFrame();
+    const auto skyCentre = pixelAt(renderer->readbackFrame(), kWidth / 2, kHeight / 2);
+
+    // 35% opacity: the sky shows through — bluer than the opaque cube,
+    // redder than the bare sky.
+    auto blended = baseScene();
+    blended.push_back(redCube(0.35f));
+    endFrame(blended);
+    renderer->submit(blended);
+    renderer->renderFrame();
+    const auto mixCentre = pixelAt(renderer->readbackFrame(), kWidth / 2, kHeight / 2);
+    CHECK(mixCentre.b > opaqueCentre.b + 15); // sky shows through the cube
+    CHECK(mixCentre.b + 15 < skyCentre.b);    // yet the cube dims the sky
+}
+
+void testTonemapExposure() {
+    const auto renderer = sky::rendering_vulkan::createVulkanRenderer(kWidth, kHeight);
+    CHECK(renderer != nullptr);
+    if (renderer == nullptr) {
+        return;
+    }
+    const auto skyPixel = [&](float exposure) {
+        auto commands = baseScene(exposure);
+        endFrame(commands);
+        renderer->submit(commands);
+        renderer->renderFrame();
+        return pixelAt(renderer->readbackFrame(), kWidth / 2, 4);
+    };
+    const auto passthrough = skyPixel(0.0f); // 0 = tonemap off
+    const auto bright = skyPixel(3.0f);      // hot exposure lifts the sky
+    const auto dark = skyPixel(0.25f);       // low exposure sinks it
+    CHECK(bright.b > passthrough.b + 10);
+    CHECK(dark.b + 10 < passthrough.b);
+}
+
 int main() {
     testVulkanFrame();
     testVulkanTexturing();
     testVulkanPbrMaps();
     testVulkanResourcesAndRegistry();
+    testFrustumCulling();
+    testTransparency();
+    testTonemapExposure();
     testSwapchainPresentation();
     return sky::test::summary("vulkan_tests");
 }

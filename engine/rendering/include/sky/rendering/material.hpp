@@ -35,6 +35,8 @@ struct MaterialDesc {
     core::Vec2 uvTiling{1.0f, 1.0f};
     /// Parallax displacement strength for the height map (0 = disabled).
     float parallaxDepth = 0.0f;
+    /// 1 = opaque; < 1 renders in the sorted transparent pass.
+    float opacity = 1.0f;
 };
 
 /// Rendering Abstraction contract: authoring and lookup of materials.

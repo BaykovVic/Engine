@@ -26,6 +26,8 @@ public:
     [[nodiscard]] virtual std::uint32_t frameHeight() const = 0;
     /// Frames delivered to the window so far (presentation mode).
     [[nodiscard]] virtual std::uint64_t presentedFrames() const = 0;
+    /// DrawMesh commands skipped by frustum culling in the last frame.
+    [[nodiscard]] virtual std::uint64_t culledLastFrame() const = 0;
 };
 
 /// Native handles of the window a swapchain should present into, passed as

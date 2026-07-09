@@ -3,6 +3,7 @@
 // with host readback. Buffers are host-visible for simplicity; staging and
 // swapchain presentation are later increments behind the same contract.
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -20,6 +21,8 @@
 
 #include "../shaders/mesh.frag.spv.h"
 #include "../shaders/mesh.vert.spv.h"
+#include "../shaders/post.frag.spv.h"
+#include "../shaders/post.vert.spv.h"
 #include "../shaders/shadow.vert.spv.h"
 #include "sky/rendering_vulkan/vulkan_backend.hpp"
 
@@ -27,6 +30,9 @@ namespace sky::rendering_vulkan {
 namespace {
 
 constexpr VkFormat kColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+// HDR intermediate the scene renders into before the tonemap post pass;
+// 16-bit float support as colour attachment + sampled image is mandatory.
+constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 constexpr int kMaxLights = 4;
 constexpr std::uint32_t kShadowMapSize = 2048;
@@ -53,7 +59,7 @@ struct PushBlock {
     float model[16];
     float baseColor[4]; // w = skyMode
     float emissive[4];  // w = roughness
-    float params[4];    // x = metallic
+    float params[4];    // x = metallic, y = opacity
     float params2[4];   // xy = uvTiling, z = parallaxDepth
 };
 
@@ -188,7 +194,56 @@ struct GpuBuffer {
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     std::uint32_t vertexCount = 0;
+    core::Vec3 boundsCenter{}; // local-space bounding sphere (frustum culling)
+    float boundsRadius = 0.0f;
 };
+
+// Six frustum planes (ax+by+cz+d, normals pointing inside) extracted from a
+// column-major view-projection matrix (Gribb/Hartmann, Vulkan 0..1 depth).
+struct FrustumPlanes {
+    float plane[6][4];
+};
+
+FrustumPlanes frustumFromViewProjection(const Mat4& vp) {
+    const auto row = [&](int i, int j) { return vp.m[j * 4 + i]; };
+    FrustumPlanes f{};
+    for (int p = 0; p < 6; ++p) {
+        const int axis = p / 2;       // 0 = x, 1 = y, 2 = z
+        const bool positive = p % 2;  // +row (left/bottom/near) or row3-row
+        for (int j = 0; j < 4; ++j) {
+            const float r3 = row(3, j);
+            const float ra = row(axis, j);
+            if (axis == 2) {
+                // Vulkan clip depth is 0..1: near plane is row2 itself.
+                f.plane[p][j] = positive ? r3 - ra : ra;
+            } else {
+                f.plane[p][j] = positive ? r3 - ra : r3 + ra;
+            }
+        }
+        const float len = std::sqrt(f.plane[p][0] * f.plane[p][0] +
+                                    f.plane[p][1] * f.plane[p][1] +
+                                    f.plane[p][2] * f.plane[p][2]);
+        if (len > 1e-6f) {
+            for (int j = 0; j < 4; ++j) {
+                f.plane[p][j] /= len;
+            }
+        }
+    }
+    return f;
+}
+
+/// True when the world-space sphere lies fully outside any frustum plane.
+bool sphereOutsideFrustum(const FrustumPlanes& f, const core::Vec3& center,
+                          float radius) {
+    for (const auto& p : f.plane) {
+        const float distance =
+            p[0] * center.x + p[1] * center.y + p[2] * center.z + p[3];
+        if (distance < -radius) {
+            return true;
+        }
+    }
+    return false;
+}
 
 struct GpuTexture {
     VkImage image = VK_NULL_HANDLE;
@@ -207,8 +262,9 @@ public:
             presentMode_ = presentTarget_.x11Display != nullptr &&
                            presentTarget_.x11Window != 0;
         }
-        ready_ = initInstanceAndDevice() && initTarget() && initPipeline() &&
-                 initFrameResources() && initShadowResources();
+        ready_ = initInstanceAndDevice() && initTarget() && initScenePass() &&
+                 initPipeline() && initFrameResources() &&
+                 initShadowResources() && initPostResources();
     }
 
     ~VulkanRendererImpl() override {
@@ -231,6 +287,7 @@ public:
             if (descriptorPool_) vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
             if (setLayout_) vkDestroyDescriptorSetLayout(device_, setLayout_, nullptr);
             if (pipeline_) vkDestroyPipeline(device_, pipeline_, nullptr);
+            if (blendPipeline_) vkDestroyPipeline(device_, blendPipeline_, nullptr);
             if (pipelineLayout_) vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
             if (shadowPipeline_) vkDestroyPipeline(device_, shadowPipeline_, nullptr);
             if (shadowPipelineLayout_)
@@ -253,6 +310,16 @@ public:
             if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
             if (framebuffer_) vkDestroyFramebuffer(device_, framebuffer_, nullptr);
             if (renderPass_) vkDestroyRenderPass(device_, renderPass_, nullptr);
+            if (postPipeline_) vkDestroyPipeline(device_, postPipeline_, nullptr);
+            if (postPipelineLayout_)
+                vkDestroyPipelineLayout(device_, postPipelineLayout_, nullptr);
+            if (postSampler_) vkDestroySampler(device_, postSampler_, nullptr);
+            if (sceneFramebuffer_)
+                vkDestroyFramebuffer(device_, sceneFramebuffer_, nullptr);
+            if (scenePass_) vkDestroyRenderPass(device_, scenePass_, nullptr);
+            if (hdrView_) vkDestroyImageView(device_, hdrView_, nullptr);
+            if (hdrImage_) vkDestroyImage(device_, hdrImage_, nullptr);
+            if (hdrMemory_) vkFreeMemory(device_, hdrMemory_, nullptr);
             if (colorView_) vkDestroyImageView(device_, colorView_, nullptr);
             if (depthView_) vkDestroyImageView(device_, depthView_, nullptr);
             if (colorImage_) vkDestroyImage(device_, colorImage_, nullptr);
@@ -274,6 +341,7 @@ public:
     std::uint32_t frameWidth() const override { return width_; }
     std::uint32_t frameHeight() const override { return height_; }
     std::uint64_t presentedFrames() const override { return presentedFrames_; }
+    std::uint64_t culledLastFrame() const override { return culledLastFrame_; }
 
     // IRenderer
 
@@ -296,6 +364,7 @@ public:
         FrameUbo frame{};
         Mat4 viewProjection = Mat4::identity();
         float aspect = static_cast<float>(width_) / static_cast<float>(height_);
+        float exposure = 0.0f; // 0 = passthrough post pass
         int lightCount = 0;
         int shadowLight = -1; // first directional light casts the shadows
         core::Vec3 shadowDir{0.0f, -1.0f, 0.0f};
@@ -316,6 +385,7 @@ public:
                     frame.cameraPos[0] = command.transform.position.x;
                     frame.cameraPos[1] = command.transform.position.y;
                     frame.cameraPos[2] = command.transform.position.z;
+                    exposure = command.exposure;
                     break;
                 }
                 case rendering::RenderCommandType::AddLight: {
@@ -368,6 +438,24 @@ public:
                     sizeof(float) * 16);
         std::memcpy(uboMapped_, &frame, sizeof(frame));
 
+        // Frustum culling state for the main pass (the shadow pass keeps
+        // every caster so offscreen meshes still throw shadows into view).
+        const FrustumPlanes frustum = frustumFromViewProjection(viewProjection);
+        culledLastFrame_ = 0;
+        const auto meshCulled = [&](const rendering::RenderCommand& command) {
+            const auto it = meshes_.find(command.resource.value);
+            const GpuBuffer& mesh = it != meshes_.end() ? it->second : cube_;
+            const auto& s = command.transform.scale;
+            const float maxScale = std::max(
+                {std::fabs(s.x), std::fabs(s.y), std::fabs(s.z)});
+            const core::Vec3 center =
+                command.transform.position +
+                core::rotate(command.transform.rotation,
+                             mesh.boundsCenter * command.transform.scale);
+            return sphereOutsideFrustum(frustum, center,
+                                        mesh.boundsRadius * maxScale);
+        };
+
         // Acquire the presentation image when a swapchain drives the frame.
         std::uint32_t imageIndex = 0;
         if (presentMode_) {
@@ -412,8 +500,10 @@ public:
                 std::memcpy(shadowPush.lightViewProjection,
                             lightViewProjection.m.data(), sizeof(float) * 16);
                 for (const auto& command : pending_) {
-                    if (command.type != rendering::RenderCommandType::DrawMesh) {
-                        continue; // the sky dome casts no shadow
+                    if (command.type != rendering::RenderCommandType::DrawMesh ||
+                        command.opacity < 0.999f) {
+                        continue; // neither the sky dome nor transparent
+                                  // meshes cast shadows
                     }
                     std::memcpy(shadowPush.model,
                                 fromTransform(command.transform).m.data(),
@@ -436,9 +526,8 @@ public:
         clears[0].color = {{0.137f, 0.176f, 0.220f, 1.0f}};
         clears[1].depthStencil = {1.0f, 0};
         VkRenderPassBeginInfo passBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        passBegin.renderPass = renderPass_;
-        passBegin.framebuffer =
-            presentMode_ ? swapFramebuffers_[imageIndex] : framebuffer_;
+        passBegin.renderPass = scenePass_; // the scene draws into HDR
+        passBegin.framebuffer = sceneFramebuffer_;
         passBegin.renderArea = {{0, 0}, {width_, height_}};
         passBegin.clearValueCount = 2;
         passBegin.pClearValues = clears;
@@ -453,6 +542,36 @@ public:
         const VkRect2D scissor{{0, 0}, {width_, height_}};
         vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+
+        const auto drawMeshCommand = [&](const rendering::RenderCommand& command) {
+            PushBlock push{};
+            std::memcpy(push.model, fromTransform(command.transform).m.data(),
+                        sizeof(push.model));
+            push.baseColor[0] = command.color.x;
+            push.baseColor[1] = command.color.y;
+            push.baseColor[2] = command.color.z;
+            push.emissive[0] = command.emissive.x;
+            push.emissive[1] = command.emissive.y;
+            push.emissive[2] = command.emissive.z;
+            push.emissive[3] = command.roughness;
+            push.params[0] = command.metallic;
+            push.params[1] = command.opacity;
+            push.params2[0] = command.uvTiling.x;
+            push.params2[1] = command.uvTiling.y;
+            push.params2[2] = command.parallaxDepth;
+            bindMaterial(command);
+            const auto it = meshes_.find(command.resource.value);
+            drawBuffer(it != meshes_.end() ? it->second : cube_, push);
+        };
+        // Transparent draws wait for the blend pass, ordered back-to-front
+        // by NDC depth of the mesh origin (monotonic for both projections).
+        std::vector<std::pair<float, const rendering::RenderCommand*>> transparent;
+        const auto ndcDepth = [&](const core::Vec3& p) {
+            const auto& m = viewProjection.m;
+            const float cz = m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14];
+            const float cw = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15];
+            return cz / std::max(cw, 1e-4f);
+        };
 
         for (const auto& command : pending_) {
             switch (command.type) {
@@ -481,23 +600,16 @@ public:
                     break;
                 }
                 case rendering::RenderCommandType::DrawMesh: {
-                    PushBlock push{};
-                    std::memcpy(push.model, fromTransform(command.transform).m.data(),
-                                sizeof(push.model));
-                    push.baseColor[0] = command.color.x;
-                    push.baseColor[1] = command.color.y;
-                    push.baseColor[2] = command.color.z;
-                    push.emissive[0] = command.emissive.x;
-                    push.emissive[1] = command.emissive.y;
-                    push.emissive[2] = command.emissive.z;
-                    push.emissive[3] = command.roughness;
-                    push.params[0] = command.metallic;
-                    push.params2[0] = command.uvTiling.x;
-                    push.params2[1] = command.uvTiling.y;
-                    push.params2[2] = command.parallaxDepth;
-                    bindMaterial(command);
-                    const auto it = meshes_.find(command.resource.value);
-                    drawBuffer(it != meshes_.end() ? it->second : cube_, push);
+                    if (meshCulled(command)) {
+                        ++culledLastFrame_;
+                        break;
+                    }
+                    if (command.opacity < 0.999f) {
+                        transparent.emplace_back(
+                            ndcDepth(command.transform.position), &command);
+                        break;
+                    }
+                    drawMeshCommand(command);
                     break;
                 }
                 default:
@@ -505,7 +617,47 @@ public:
             }
         }
 
+        // Sorted blend pass after every opaque draw: farthest first, depth
+        // writes off (the pipeline variant), so overlaps mix correctly.
+        if (!transparent.empty()) {
+            std::sort(transparent.begin(), transparent.end(),
+                      [](const auto& a, const auto& b) { return a.first > b.first; });
+            vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              blendPipeline_);
+            for (const auto& [depth, command] : transparent) {
+                drawMeshCommand(*command);
+            }
+        }
+
         vkCmdEndRenderPass(commandBuffer_);
+
+        // Post pass: fullscreen tonemap (or passthrough copy) of the HDR
+        // scene target into the presented/readback image.
+        {
+            VkRenderPassBeginInfo postBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+            postBegin.renderPass = renderPass_;
+            postBegin.framebuffer =
+                presentMode_ ? swapFramebuffers_[imageIndex] : framebuffer_;
+            postBegin.renderArea = {{0, 0}, {width_, height_}};
+            postBegin.clearValueCount = 2;
+            postBegin.pClearValues = clears;
+            vkCmdBeginRenderPass(commandBuffer_, &postBegin,
+                                 VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              postPipeline_);
+            vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    postPipelineLayout_, 0, 1, &postSet_, 0,
+                                    nullptr);
+            vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+            const float postParams[4] = {exposure, 0.0f, 0.0f, 0.0f};
+            vkCmdPushConstants(commandBuffer_, postPipelineLayout_,
+                               VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(postParams),
+                               postParams);
+            vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+            vkCmdEndRenderPass(commandBuffer_);
+        }
+
         vkEndCommandBuffer(commandBuffer_);
 
         VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
@@ -985,6 +1137,68 @@ private:
                VK_SUCCESS;
     }
 
+    /// HDR intermediate + the render pass the scene draws into. The post
+    /// pass then samples it, so the colour attachment ends shader-readable.
+    bool initScenePass() {
+        if (!createImage(kHdrFormat,
+                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                             VK_IMAGE_USAGE_SAMPLED_BIT,
+                         VK_IMAGE_ASPECT_COLOR_BIT, {width_, height_}, hdrImage_,
+                         hdrMemory_, hdrView_)) {
+            return false;
+        }
+        VkAttachmentDescription attachments[2]{};
+        attachments[0].format = kHdrFormat;
+        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attachments[1].format = kDepthFormat;
+        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkAttachmentReference depthRef{
+            1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorRef;
+        subpass.pDepthStencilAttachment = &depthRef;
+        // The post pass samples the HDR target in its fragment stage.
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = 0;
+        dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        VkRenderPassCreateInfo passInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+        passInfo.attachmentCount = 2;
+        passInfo.pAttachments = attachments;
+        passInfo.subpassCount = 1;
+        passInfo.pSubpasses = &subpass;
+        passInfo.dependencyCount = 1;
+        passInfo.pDependencies = &dependency;
+        if (vkCreateRenderPass(device_, &passInfo, nullptr, &scenePass_) !=
+            VK_SUCCESS) {
+            return false;
+        }
+        const VkImageView views[2] = {hdrView_, depthView_};
+        VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        fbInfo.renderPass = scenePass_;
+        fbInfo.attachmentCount = 2;
+        fbInfo.pAttachments = views;
+        fbInfo.width = width_;
+        fbInfo.height = height_;
+        fbInfo.layers = 1;
+        return vkCreateFramebuffer(device_, &fbInfo, nullptr, &sceneFramebuffer_) ==
+               VK_SUCCESS;
+    }
+
     VkShaderModule createShader(const std::uint32_t* code, std::size_t words) {
         VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         info.codeSize = words * sizeof(std::uint32_t);
@@ -1133,12 +1347,131 @@ private:
         pipelineInfo.pColorBlendState = &blend;
         pipelineInfo.pDynamicState = &dynamic;
         pipelineInfo.layout = pipelineLayout_;
-        pipelineInfo.renderPass = renderPass_;
+        pipelineInfo.renderPass = scenePass_; // the scene draws into HDR
         const auto result = vkCreateGraphicsPipelines(
             device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
+        // Transparent variant of the same pipeline: alpha blending on and
+        // depth writes off, so sorted back-to-front draws mix instead of
+        // occluding each other. pipelineInfo still points at the mutated
+        // blend/depth structs.
+        blendAttachment.blendEnable = VK_TRUE;
+        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+        depth.depthWriteEnable = VK_FALSE;
+        const auto blendResult = vkCreateGraphicsPipelines(
+            device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &blendPipeline_);
+        vkDestroyShaderModule(device_, vertex, nullptr);
+        vkDestroyShaderModule(device_, fragment, nullptr);
+        return result == VK_SUCCESS && blendResult == VK_SUCCESS &&
+               initPostPipeline(assembly, viewportState, raster, multisample,
+                                dynamic);
+    }
+
+    /// Fullscreen tonemap pipeline over the HDR target, rendered into the
+    /// presented/readback pass. Vertices come from gl_VertexIndex — no
+    /// vertex input at all.
+    bool initPostPipeline(
+        const VkPipelineInputAssemblyStateCreateInfo& assembly,
+        const VkPipelineViewportStateCreateInfo& viewportState,
+        const VkPipelineRasterizationStateCreateInfo& raster,
+        const VkPipelineMultisampleStateCreateInfo& multisample,
+        const VkPipelineDynamicStateCreateInfo& dynamic) {
+        VkPushConstantRange pushRange{};
+        pushRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushRange.size = 4 * sizeof(float);
+        VkPipelineLayoutCreateInfo layoutInfo{
+            VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &textureSetLayout_;
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pushRange;
+        if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr,
+                                   &postPipelineLayout_) != VK_SUCCESS) {
+            return false;
+        }
+
+        const auto vertex = createShader(k_post_vert_spv, std::size(k_post_vert_spv));
+        const auto fragment = createShader(k_post_frag_spv, std::size(k_post_frag_spv));
+        if (vertex == VK_NULL_HANDLE || fragment == VK_NULL_HANDLE) {
+            return false;
+        }
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vertex;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fragment;
+        stages[1].pName = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput{
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineDepthStencilStateCreateInfo depth{
+            VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+        VkPipelineColorBlendAttachmentState blendAttachment{};
+        blendAttachment.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo blend{
+            VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+        blend.attachmentCount = 1;
+        blend.pAttachments = &blendAttachment;
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{
+            VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = stages;
+        pipelineInfo.pVertexInputState = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &assembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &raster;
+        pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pDepthStencilState = &depth;
+        pipelineInfo.pColorBlendState = &blend;
+        pipelineInfo.pDynamicState = &dynamic;
+        pipelineInfo.layout = postPipelineLayout_;
+        pipelineInfo.renderPass = renderPass_;
+        const auto result = vkCreateGraphicsPipelines(
+            device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &postPipeline_);
         vkDestroyShaderModule(device_, vertex, nullptr);
         vkDestroyShaderModule(device_, fragment, nullptr);
         return result == VK_SUCCESS;
+    }
+
+    /// Sampler + descriptor set the post pass reads the HDR target through.
+    bool initPostResources() {
+        VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+        samplerInfo.magFilter = VK_FILTER_NEAREST; // 1:1 texel copy
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        if (vkCreateSampler(device_, &samplerInfo, nullptr, &postSampler_) !=
+            VK_SUCCESS) {
+            return false;
+        }
+        VkDescriptorSetAllocateInfo setAlloc{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        setAlloc.descriptorPool = descriptorPool_;
+        setAlloc.descriptorSetCount = 1;
+        setAlloc.pSetLayouts = &textureSetLayout_;
+        if (vkAllocateDescriptorSets(device_, &setAlloc, &postSet_) != VK_SUCCESS) {
+            return false;
+        }
+        VkDescriptorImageInfo imageInfo{postSampler_, hdrView_,
+                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = postSet_;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo = &imageInfo;
+        vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+        return true;
     }
 
     bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, GpuBuffer& out,
@@ -1178,6 +1511,28 @@ private:
         std::memcpy(mapped, vertices.data(), vertices.size() * sizeof(float));
         vkUnmapMemory(device_, out.memory);
         out.vertexCount = static_cast<std::uint32_t>(vertices.size() / 8);
+        // Local-space bounding sphere over the positions (stride 8: the
+        // first three floats of each vertex).
+        core::Vec3 mn{vertices[0], vertices[1], vertices[2]};
+        core::Vec3 mx = mn;
+        for (std::size_t v = 0; v < vertices.size(); v += 8) {
+            mn.x = std::min(mn.x, vertices[v]);
+            mn.y = std::min(mn.y, vertices[v + 1]);
+            mn.z = std::min(mn.z, vertices[v + 2]);
+            mx.x = std::max(mx.x, vertices[v]);
+            mx.y = std::max(mx.y, vertices[v + 1]);
+            mx.z = std::max(mx.z, vertices[v + 2]);
+        }
+        out.boundsCenter = {(mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f,
+                            (mn.z + mx.z) * 0.5f};
+        float radiusSq = 0.0f;
+        for (std::size_t v = 0; v < vertices.size(); v += 8) {
+            const float dx = vertices[v] - out.boundsCenter.x;
+            const float dy = vertices[v + 1] - out.boundsCenter.y;
+            const float dz = vertices[v + 2] - out.boundsCenter.z;
+            radiusSq = std::max(radiusSq, dx * dx + dy * dy + dz * dz);
+        }
+        out.boundsRadius = std::sqrt(radiusSq);
         return true;
     }
 
@@ -1193,11 +1548,11 @@ private:
 
         const VkDescriptorPoolSize poolSizes[2] = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 257},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 258},
         };
         VkDescriptorPoolCreateInfo poolInfo{
             VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        poolInfo.maxSets = 258;
+        poolInfo.maxSets = 259;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes;
         if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) !=
@@ -1615,9 +1970,20 @@ private:
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
 
+    VkImage hdrImage_ = VK_NULL_HANDLE;
+    VkDeviceMemory hdrMemory_ = VK_NULL_HANDLE;
+    VkImageView hdrView_ = VK_NULL_HANDLE;
+    VkRenderPass scenePass_ = VK_NULL_HANDLE;
+    VkFramebuffer sceneFramebuffer_ = VK_NULL_HANDLE;
+    VkPipelineLayout postPipelineLayout_ = VK_NULL_HANDLE;
+    VkPipeline postPipeline_ = VK_NULL_HANDLE;
+    VkSampler postSampler_ = VK_NULL_HANDLE;
+    VkDescriptorSet postSet_ = VK_NULL_HANDLE;
+
     VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkPipeline blendPipeline_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
     VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
 
@@ -1646,6 +2012,7 @@ private:
     std::vector<rendering::RenderCommand> pending_;
     std::uint64_t nextResource_ = 1;
     std::unordered_map<std::uint64_t, GpuBuffer> meshes_;
+    std::uint64_t culledLastFrame_ = 0;
 };
 
 } // namespace

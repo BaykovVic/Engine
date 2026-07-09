@@ -191,6 +191,7 @@ private:
             draw.emissive = desc.emissive;
             draw.uvTiling = desc.uvTiling;
             draw.parallaxDepth = desc.parallaxDepth;
+            draw.opacity = desc.opacity;
             const auto resolve = [&](const std::string& path) {
                 return path.empty()
                            ? rendering::RenderResourceHandle::invalid()

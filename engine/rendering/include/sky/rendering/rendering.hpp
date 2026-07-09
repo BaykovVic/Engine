@@ -82,6 +82,12 @@ struct RenderCommand {
     LightType lightType = LightType::Directional;
     float lightIntensity = 1.0f;
     float lightRange = 10.0f;
+    /// DrawMesh: 1 = opaque; < 1 draws in the sorted alpha-blend pass and
+    /// casts no shadow.
+    float opacity = 1.0f;
+    /// SetCamera: tonemapping exposure for the post pass. 0 keeps the
+    /// bit-exact passthrough; > 0 applies the ACES curve after scaling.
+    float exposure = 0.0f;
 };
 
 /// Rendering Abstraction contract: the surface a frame is presented to —

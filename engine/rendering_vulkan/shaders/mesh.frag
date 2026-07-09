@@ -30,7 +30,7 @@ layout(push_constant) uniform Push {
     mat4 model;
     vec4 baseColor; // w = skyMode
     vec4 emissive;  // w = roughness
-    vec4 params;    // x = metallic
+    vec4 params;    // x = metallic, y = opacity
     vec4 params2;   // xy = uvTiling, z = parallaxDepth
 } pc;
 
@@ -157,5 +157,6 @@ void main() {
         lo += (kd * albedo + spec) * radiance * ndl * visibility;
     }
     vec3 ambient = albedo * ao * 0.22;
-    fragColor = vec4(ambient + lo + pc.emissive.rgb, 1.0);
+    // Alpha feeds the sorted blend pass; the opaque pipeline ignores it.
+    fragColor = vec4(ambient + lo + pc.emissive.rgb, pc.params.y);
 }
