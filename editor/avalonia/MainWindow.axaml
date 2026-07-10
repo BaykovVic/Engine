@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="clr-namespace:Dock.Avalonia.Controls;assembly=Dock.Avalonia"
+        x:Class="SkyEditor.MainWindow"
+        x:CompileBindings="False"
+        Width="1280" Height="800"
+        Background="{StaticResource SkyAppBrush}"
+        Title="{Binding SceneTitle, StringFormat='{}{0}.skybox — Sky Engine 1.4'}">
+  <DockPanel>
+
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="File">
+        <MenuItem Header="New Scene" Click="OnNewScene" InputGesture="Ctrl+N"/>
+        <MenuItem Header="Open Scene…" Click="OnOpenScene" InputGesture="Ctrl+O"/>
+        <MenuItem Header="Save Scene" Click="OnSaveScene" InputGesture="Ctrl+S"/>
+        <MenuItem Header="Save Scene As…" Click="OnSaveSceneAs"/>
+        <Separator/><MenuItem Header="Quit" Click="OnQuit"/>
+      </MenuItem>
+      <MenuItem Header="Edit">
+        <MenuItem Header="Undo" Click="OnUndo" InputGesture="Ctrl+Z"/>
+        <MenuItem Header="Redo" Click="OnRedo" InputGesture="Ctrl+Y"/>
+      </MenuItem>
+      <MenuItem Header="GameObject">
+        <MenuItem Header="Create Cube" Click="OnCreateCube"/>
+        <MenuItem Header="Duplicate" Click="OnDuplicate" InputGesture="Ctrl+D"/>
+        <MenuItem Header="Delete" Click="OnDelete" InputGesture="Delete"/>
+        <Separator/>
+        <MenuItem Header="Save as Prefab" Click="OnSaveAsPrefab"/>
+      </MenuItem>
+      <MenuItem Header="Window"/><MenuItem Header="Help"/>
+    </Menu>
+
+    <Border Classes="toolbar" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Border Classes="toolGroup">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Name="HandTool" Classes="tool" Click="OnToolHand" ToolTip.Tip="Hand (Q)"><Path Classes="icon" Data="{StaticResource IconHand}"/></ToggleButton>
+              <ToggleButton Name="MoveTool" Classes="tool" IsChecked="True" Click="OnToolMove" ToolTip.Tip="Move (W)"><Path Classes="icon" Data="{StaticResource IconMove}"/></ToggleButton>
+              <ToggleButton Name="RotateTool" Classes="tool" Click="OnToolRotate" ToolTip.Tip="Rotate (E)"><Path Classes="icon" Data="{StaticResource IconRotate}"/></ToggleButton>
+              <ToggleButton Name="ScaleTool" Classes="tool" Click="OnToolScale" ToolTip.Tip="Scale (R)"><Path Classes="icon" Data="{StaticResource IconScale}"/></ToggleButton>
+            </StackPanel>
+          </Border>
+          <Border Classes="toolGroup">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button Name="playButton" Classes="tool" Click="OnPlay" ToolTip.Tip="Play"><Path Classes="iconFilled" Data="{StaticResource IconPlay}" Fill="{StaticResource SkyPlayBrush}"/></Button>
+              <Button Name="pauseButton" Classes="tool" Click="OnPause" ToolTip.Tip="Pause"><Path Classes="iconFilled" Data="{StaticResource IconPause}"/></Button>
+              <Button Name="stopButton" Classes="tool" Click="OnStop" ToolTip.Tip="Stop"><Path Classes="iconFilled" Data="{StaticResource IconStop}"/></Button>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+          <TextBlock Classes="mono muted" Text="project://SampleScene" VerticalAlignment="Center"/>
+          <Button Classes="chip">
+            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Layout"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel>
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Reset Layout" Click="OnResetLayout"/>
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Classes="statusbar" DockPanel.Dock="Bottom">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Ellipse Width="7" Height="7" Fill="{StaticResource SkyTextMutedBrush}" VerticalAlignment="Center"/>
+          <TextBlock Text="Ready"/><TextBlock Text="·"/>
+          <TextBlock Text="{Binding SelectedName, StringFormat='1 object selected · {0}'}"/>
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="v1.4 · Avalonia + native bridge"/>
+      </Grid>
+    </Border>
+
+    <dock:DockControl Name="DockControl"/>
+  </DockPanel>
+</Window>

@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:docking="clr-namespace:SkyEditor.Docking"
+             xmlns:views="clr-namespace:SkyEditor.Views"
+             x:Class="SkyEditor.App"
+             RequestedThemeVariant="Dark">
+  <Application.DataTemplates>
+    <DataTemplate DataType="docking:HierarchyTool"><views:HierarchyView/></DataTemplate>
+    <DataTemplate DataType="docking:InspectorTool"><views:InspectorView/></DataTemplate>
+    <DataTemplate DataType="docking:MaterialsTool"><views:MaterialsView/></DataTemplate>
+    <DataTemplate DataType="docking:TerrainTool"><views:TerrainView/></DataTemplate>
+    <DataTemplate DataType="docking:SceneDocument"><views:SceneView/></DataTemplate>
+    <DataTemplate DataType="docking:GameDocument"><views:GameView/></DataTemplate>
+    <DataTemplate DataType="docking:ProjectTool"><views:ProjectView/></DataTemplate>
+    <DataTemplate DataType="docking:ConsoleTool"><views:ConsoleView/></DataTemplate>
+    <DataTemplate DataType="docking:PackagesTool"><views:PackagesView/></DataTemplate>
+    <DataTemplate DataType="docking:PlaceholderTool"><views:PlaceholderView/></DataTemplate>
+  </Application.DataTemplates>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://SkyEditor/Themes/SkyDark.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Dock.Avalonia/Themes/DockFluentTheme.axaml"/>
+    <StyleInclude Source="avares://SkyEditor/Themes/SkyTheme.axaml"/>
+  </Application.Styles>
+</Application>

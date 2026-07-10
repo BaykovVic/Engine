@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:SkyEditor.Converters"
+             x:Class="SkyEditor.Views.ProjectView"
+             x:CompileBindings="False">
+  <DockPanel Background="{StaticResource SkyPanelBrush}">
+    <Border DockPanel.Dock="Top" Padding="14,6">
+      <TextBlock Classes="mono muted" Text="{Binding Main.ProjectPath}"/>
+    </Border>
+    <ListBox Name="Files" ItemsSource="{Binding Main.ProjectEntries}" DoubleTapped="OnOpen"
+             PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved">
+      <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <StackPanel Width="78" Margin="4" HorizontalAlignment="Center">
+            <Path Classes="icon" Width="34" Height="34" HorizontalAlignment="Center"
+                  Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}"/>
+            <TextBlock Text="{Binding Name}" Classes="muted" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

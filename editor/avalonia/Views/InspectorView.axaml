@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:SkyEditor.Converters"
+             x:Class="SkyEditor.Views.InspectorView"
+             x:CompileBindings="False">
+  <ScrollViewer Background="{StaticResource SkyPanelBrush}">
+    <StackPanel Margin="12" Spacing="10" IsVisible="{Binding Main.HasSelection}">
+      <Grid ColumnDefinitions="Auto,*">
+        <CheckBox IsChecked="{Binding Main.SelectedEnabled, Mode=TwoWay}" VerticalAlignment="Center" ToolTip.Tip="Enabled"/>
+        <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Main.SelectedName, Mode=TwoWay}"/>
+      </Grid>
+
+      <Border Classes="card">
+        <StackPanel Spacing="9">
+          <TextBlock Classes="cardTitle" Text="Transform"/>
+          <Grid ColumnDefinitions="64,*">
+            <TextBlock Classes="fieldLabel" Text="Position"/>
+            <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
+              <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.PositionX, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.PositionY, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.PositionZ, Mode=TwoWay}"/></Grid>
+            </Grid>
+          </Grid>
+          <Grid ColumnDefinitions="64,*">
+            <TextBlock Classes="fieldLabel" Text="Rotation"/>
+            <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
+              <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.RotationX, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.RotationY, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.RotationZ, Mode=TwoWay}"/></Grid>
+            </Grid>
+          </Grid>
+          <Grid ColumnDefinitions="64,*">
+            <TextBlock Classes="fieldLabel" Text="Scale"/>
+            <Grid Grid.Column="1" ColumnDefinitions="*,6,*,6,*">
+              <Grid ColumnDefinitions="13,*"><TextBlock Classes="axisX" Text="X"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.ScaleX, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="2" ColumnDefinitions="13,*"><TextBlock Classes="axisY" Text="Y"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.ScaleY, Mode=TwoWay}"/></Grid>
+              <Grid Grid.Column="4" ColumnDefinitions="13,*"><TextBlock Classes="axisZ" Text="Z"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.ScaleZ, Mode=TwoWay}"/></Grid>
+            </Grid>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <ItemsControl ItemsSource="{Binding Main.SelectedComponents}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <Path Classes="icon iconSmall" Data="{Binding Glyph, Converter={x:Static conv:GlyphConverter.Instance}}" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Classes="cardTitle" Text="{Binding DisplayName}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  <Button Grid.Column="2" Classes="iconButton" Click="OnRemoveComponent" ToolTip.Tip="Remove Component">
+                    <TextBlock Classes="muted" Text="✕" FontSize="13"/>
+                  </Button>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Fields}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid ColumnDefinitions="120,*" Margin="0,2">
+                        <TextBlock Classes="fieldLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
+                        <!-- scalar / string -->
+                        <TextBox Grid.Column="1" Classes="field" Text="{Binding Value, Mode=TwoWay}" IsVisible="{Binding IsScalar}"/>
+                        <!-- bool -->
+                        <CheckBox Grid.Column="1" IsChecked="{Binding BoolValue, Mode=TwoWay}" IsVisible="{Binding IsBool}"/>
+                        <!-- managed script class (reflection over loaded assemblies) -->
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsScriptClass}"
+                                  ItemsSource="{Binding ScriptClassOptions}" SelectedItem="{Binding SelectedScriptClass, Mode=TwoWay}"
+                                  PlaceholderText="Select script..."/>
+                        <!-- mesh reference (Unity-style asset picker) -->
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsMeshRef}"
+                                  ItemsSource="{Binding MeshOptions}" SelectedItem="{Binding SelectedMesh, Mode=TwoWay}">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="7">
+                                <Path Width="14" Height="14" Stretch="Uniform" Stroke="{StaticResource SkyTextMutedBrush}" StrokeThickness="1.2" Data="{StaticResource IconMesh}"/>
+                                <TextBlock Text="{Binding Display}" VerticalAlignment="Center"/>
+                              </StackPanel>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <!-- Vec3 as X/Y/Z -->
+                        <Grid Grid.Column="1" IsVisible="{Binding IsVec3}" ColumnDefinitions="13,*,6,13,*,6,13,*">
+                          <TextBlock Classes="axisX" Text="X" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="1" Classes="field" Text="{Binding X, Mode=TwoWay}"/>
+                          <TextBlock Grid.Column="3" Classes="axisY" Text="Y" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="4" Classes="field" Text="{Binding Y, Mode=TwoWay}"/>
+                          <TextBlock Grid.Column="6" Classes="axisZ" Text="Z" VerticalAlignment="Center"/>
+                          <TextBox Grid.Column="7" Classes="field" Text="{Binding Z, Mode=TwoWay}"/>
+                        </Grid>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Button Name="AddComponentButton" Classes="primary" HorizontalAlignment="Stretch">
+        <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center">
+          <Path Classes="icon iconSmall" Data="{StaticResource IconAdd}" Stroke="White"/>
+          <TextBlock Text="Add Component"/>
+        </StackPanel>
+        <Button.Flyout>
+          <Flyout Placement="Bottom">
+            <ListBox Name="AddComponentList" ItemsSource="{Binding Main.AvailableComponentTypes}"
+                     SelectionChanged="OnAddComponentSelected" MaxHeight="300" MinWidth="210"
+                     Background="Transparent">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="2">
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="muted" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Flyout>
+        </Button.Flyout>
+      </Button>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

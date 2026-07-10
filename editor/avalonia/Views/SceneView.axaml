@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:SkyEditor.Controls"
+             x:Class="SkyEditor.Views.SceneView"
+             x:CompileBindings="False">
+  <DockPanel Background="#101216">
+    <Border DockPanel.Dock="Top" Classes="panelHeader">
+      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+          <ToggleButton Classes="viewMode" Name="spaceToggle" Content="Local" CornerRadius="6" Click="OnSpaceToggle" ToolTip.Tip="Gizmo space"/>
+          <StackPanel Orientation="Horizontal" Spacing="0">
+            <ToggleButton Classes="viewMode" Name="view3D" IsChecked="True" Content="3D" CornerRadius="6,0,0,6" Click="OnView3D" ToolTip.Tip="Perspective"/>
+            <ToggleButton Classes="viewMode" Name="view2D" Content="2D" CornerRadius="0,6,6,0" Click="OnView2D" ToolTip.Tip="Orthographic YZ plane"/>
+          </StackPanel>
+          <Button Classes="chip"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Shaded"/><Path Classes="icon iconSmall" Data="{StaticResource IconChevronDown}"/></StackPanel></Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Panel>
+      <controls:VulkanViewport Name="Viewport"/>
+      <TextBlock Classes="mono muted" Text="tris 48.2k · 60 fps" Margin="14,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+      <Border Name="PausedBadge" Classes="badge" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12">
+        <TextBlock Name="PausedText" Text="Paused"/>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

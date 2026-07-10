@@ -1,0 +1,50 @@
+# Sky Engine CI: native build + full test suite + a headless player smoke run,
+# plus the Avalonia editor build (dotnet build failures must never be silent).
+# Vulkan runs on Mesa's lavapipe software driver; X11 tests run under Xvfb.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build libx11-dev libvulkan-dev mesa-vulkan-drivers \
+            vulkan-tools xvfb
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (engine, bridge, player, managed)
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Build Avalonia editor
+        run: dotnet build editor/avalonia/SkyEditor.csproj -c Release --nologo
+
+      - name: Test
+        run: xvfb-run -a ctest --test-dir build --output-on-failure -j"$(nproc)"
+
+      - name: Player smoke (headless, scripted demo scene)
+        run: ./build/player/sky_player --headless player-smoke.png --frames 60
+
+      - name: Upload player screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-smoke
+          path: player-smoke.png

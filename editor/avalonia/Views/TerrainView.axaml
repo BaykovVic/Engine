@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyEditor.Views.TerrainView"
+             x:CompileBindings="False">
+  <ScrollViewer Background="{StaticResource SkyPanelBrush}">
+    <StackPanel Margin="14" Spacing="12">
+      <Border Classes="card">
+        <StackPanel Spacing="9">
+          <TextBlock Classes="cardTitle" Text="Sculpt"/>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ToggleButton Classes="viewMode" IsChecked="True" Content="Raise"/>
+            <ToggleButton Classes="viewMode" Content="Lower"/>
+            <ToggleButton Classes="viewMode" Content="Smooth"/>
+          </StackPanel>
+          <Grid ColumnDefinitions="70,*,40"><TextBlock Classes="fieldLabel" Text="Radius"/><Slider Grid.Column="1" Minimum="1" Maximum="20" Value="5.5"/><TextBlock Grid.Column="2" Classes="muted" Text="5.5" VerticalAlignment="Center"/></Grid>
+          <Grid ColumnDefinitions="70,*,40"><TextBlock Classes="fieldLabel" Text="Strength"/><Slider Grid.Column="1" Minimum="0" Maximum="1" Value="0.3"/><TextBlock Grid.Column="2" Classes="muted" Text="0.3" VerticalAlignment="Center"/></Grid>
+        </StackPanel>
+      </Border>
+      <Border Classes="card">
+        <StackPanel Spacing="9">
+          <TextBlock Classes="cardTitle" Text="Map Generation"/>
+          <Grid ColumnDefinitions="70,*"><TextBlock Classes="fieldLabel" Text="Seed"/><TextBox Grid.Column="1" Classes="field" Text="{Binding Main.TerrainSeed, Mode=TwoWay}"/></Grid>
+          <Button Classes="primary" HorizontalAlignment="Stretch" Click="OnGenerate">
+            <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center">
+              <Path Classes="icon iconSmall" Data="{StaticResource IconRefresh}" Stroke="White"/>
+              <TextBlock Text="Generate"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyEditor.Views.PackagesView"
+             x:CompileBindings="False">
+  <DockPanel Background="{StaticResource SkyPanelBrush}">
+    <Border DockPanel.Dock="Top" Classes="panelHeader">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="sectionTitle" Text="Packages" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="chip" Content="Refresh" Click="OnRefresh"/>
+      </Grid>
+    </Border>
+    <!-- Install from a folder, tarball or git URL (#tag pins a tag). -->
+    <Border DockPanel.Dock="Top" Padding="10,7">
+      <Grid ColumnDefinitions="*,8,Auto">
+        <TextBox Name="InstallSource" Classes="field"
+                 Watermark="Folder, .tar.gz or git URL (#tag)"/>
+        <Button Grid.Column="2" Classes="chip" Content="Install" Click="OnInstall"/>
+      </Grid>
+    </Border>
+    <!-- Column header -->
+    <Border DockPanel.Dock="Top" Classes="table-header">
+      <Grid ColumnDefinitions="*,90,90,110">
+        <TextBlock Text="Package"/>
+        <TextBlock Grid.Column="1" Text="Version"/>
+        <TextBlock Grid.Column="2" Text="Status"/>
+        <TextBlock Grid.Column="3" Text=""/>
+      </Grid>
+    </Border>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Main.Packages}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Classes="table-row">
+              <Grid ColumnDefinitions="*,90,90,110" VerticalAlignment="Center">
+                <StackPanel Spacing="1" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}"/>
+                  <TextBlock Classes="muted" Text="{Binding Id}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Classes="mono muted" Text="{Binding Version}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Classes="muted" Text="{Binding StatusText}" VerticalAlignment="Center"/>
+                <Button Grid.Column="3" Classes="chip" Content="{Binding ToggleLabel}" Click="OnToggle" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
