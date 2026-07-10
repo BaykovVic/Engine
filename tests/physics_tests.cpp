@@ -97,6 +97,49 @@ void testObjectSync() {
     sync->unbind(body);
 }
 
+void testParentedObjectSync() {
+    // A body bound to a CHILD object: the world-space body pose must come
+    // back through invCompose, not land in the local transform verbatim —
+    // otherwise the parent offset is applied twice and the child drifts.
+    const auto objects = sky::object::createObjectWorld();
+    const auto physics = sky::physics::createPhysicsWorld();
+    const auto sync = sky::physics::createObjectPhysicsSync(*physics, *objects);
+
+    const auto parent = objects->createObject("rig");
+    objects->setLocalTransform(parent, {{5.0f, 0.0f, 0.0f}, {}, {1, 1, 1}});
+    const auto child = objects->createObject("crate");
+    objects->setParent(child, parent);
+    objects->setLocalTransform(child, {{0.0f, 10.0f, 0.0f}, {}, {1, 1, 1}});
+    // World position of the child is (5, 10, 0).
+    const auto body = physics->createBody({sky::physics::BodyType::Dynamic, 1.0f, {}});
+    sync->bind(body, child);
+
+    sync->pushKinematicState();
+    CHECK(nearly(physics->bodyTransform(body).position.x, 5.0f));
+    CHECK(nearly(physics->bodyTransform(body).position.y, 10.0f));
+
+    // One synced step: the child's WORLD pose must match the body's pose
+    // exactly (no drift), and its local x must stay 0 relative to the rig.
+    physics->step(1.0 / 60.0);
+    sync->pullSimulationResults();
+    const auto bodyPose = physics->bodyTransform(body);
+    const auto childWorld = objects->worldTransform(child);
+    CHECK(nearly(childWorld.position.x, bodyPose.position.x));
+    CHECK(nearly(childWorld.position.y, bodyPose.position.y));
+    CHECK(nearly(objects->localTransform(child).position.x, 0.0f));
+
+    // Repeated push/pull cycles stay stable: without the world-space
+    // write-back the parent offset compounds every tick.
+    for (int i = 0; i < 10; ++i) {
+        sync->pushKinematicState();
+        physics->step(1.0 / 60.0);
+        sync->pullSimulationResults();
+    }
+    CHECK(nearly(objects->worldTransform(child).position.x, 5.0f));
+
+    sync->unbind(body);
+}
+
 } // namespace
 
 int main() {
@@ -104,5 +147,6 @@ int main() {
     testCollisionAndResolution();
     testRaycast();
     testObjectSync();
+    testParentedObjectSync();
     return sky::test::summary("physics_tests");
 }

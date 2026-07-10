@@ -454,9 +454,13 @@ public:
 
     void pullSimulationResults() override {
         // After the step the simulation owns dynamic motion; objects follow.
+        // Body poses are world-space (push sends world transforms), so the
+        // write-back goes through world space too: a parented object gets
+        // its local transform via invCompose instead of the raw body pose.
         for (const auto& [bodyId, object] : bindings_) {
-            hierarchy_.setLocalTransform(object,
-                                         physics_.bodyTransform(RigidBodyHandle{bodyId}));
+            object::setWorldTransform(
+                hierarchy_, object,
+                physics_.bodyTransform(RigidBodyHandle{bodyId}));
         }
     }
 

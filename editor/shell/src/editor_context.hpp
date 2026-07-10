@@ -47,6 +47,9 @@ struct ObjectSnapshot {
     bool hasPhysicsBody = false;
     std::vector<ComponentSnapshot> components;
     std::vector<ObjectSnapshot> children;
+    /// The live object this snapshot was taken from. Transient — play-mode
+    /// reconciliation matches survivors by it; never serialized (SKYP).
+    object::ObjectHandle source;
 };
 
 /// Active terrain brush, set by the Terrain panel and applied by the scene
@@ -64,9 +67,11 @@ class EditorContext {
 public:
     EditorContext();
 
-    /// Snapshots every object's local transform so play mode can be entered
-    /// non-destructively; endPlay restores them and re-seats the physics
-    /// bodies (zero velocity), so leaving play returns the scene to how it was.
+    /// Snapshots the full scene state (hierarchy, transforms, component
+    /// fields) so play mode is entered non-destructively; endPlay reconciles
+    /// everything the game mutated — restores survivors in place, removes
+    /// play-created objects, recreates play-destroyed ones — and re-seats
+    /// the physics bodies (zero velocity).
     void beginPlay();
     void endPlay();
 
@@ -239,6 +244,13 @@ private:
     void writePackageLock();
     void startPlayScripts();
     void stopPlayScripts();
+    /// endPlay reconciliation over the pre-play snapshots: survivors are
+    /// re-parented and restored in place, casualties recreated.
+    void reparentToSnapshot(const ObjectSnapshot& snapshot,
+                            object::ObjectHandle parent);
+    void destroyPlayCreated();
+    void restorePlayState(const ObjectSnapshot& snapshot,
+                          object::ObjectHandle parent);
     /// Creates managed instances for every sky.script in a subtree, pushes
     /// the authored field values and runs OnCreate/OnStart.
     void startScriptsFor(object::ObjectHandle object);
@@ -248,7 +260,13 @@ private:
 
     std::vector<object::ObjectHandle> roots_;
     std::unordered_map<std::uint64_t, physics::RigidBodyHandle> bodies_;
-    std::unordered_map<std::uint64_t, core::Transform> playSnapshot_;
+    // Full pre-play scene state: snapshots of every root subtree plus the
+    // set of object ids that existed when play started. endPlay reconciles
+    // against them: survivors get their state back in place (stable
+    // handles), play-created objects are removed, play-destroyed ones are
+    // recreated from their snapshots.
+    std::vector<ObjectSnapshot> playRoots_;
+    std::unordered_set<std::uint64_t> playExisting_;
     std::unordered_set<std::uint64_t> disabled_;
     // Live managed script instances during play: (managedInstanceId, objectId).
     std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;

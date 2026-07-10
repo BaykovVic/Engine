@@ -1,6 +1,10 @@
 // Undo/redo of editor commands against the real engine worlds. The command
 // layer is Qt-free, so it is verified here without the UI.
 
+#include <filesystem>
+#include <string>
+#include <variant>
+
 #include "editor_commands.hpp"
 #include "sky/editor/viewport/tool_command_bus.hpp"
 #include "sky_test.hpp"
@@ -166,6 +170,70 @@ void testToolCommandBus() {
     CHECK(redos == 1);
 }
 
+void testPlayModeFullRestore() {
+    EditorContext context;
+
+    // Authored state: a crate with a known component field value.
+    const auto crate = context.createCrate("Hero", {0.0f, 5.0f, 0.0f});
+    const auto meshBefore = context.components->componentsOf(crate).size();
+    const auto keeper = context.createEmpty("Keeper");
+    const auto keeperName = context.objects->nameOf(keeper);
+    const auto rootsBefore = context.rootObjects().size();
+
+    context.beginPlay();
+    // The "game" mutates everything it can: moves the crate, edits a
+    // component field, spawns an object, destroys another.
+    context.objects->setLocalTransform(crate, {{9.0f, 9.0f, 9.0f}, {}, {1, 1, 1}});
+    if (!context.components->componentsOf(crate).empty()) {
+        const auto component = context.components->componentsOf(crate).front();
+        context.components->setField(component, "material", std::string("Lava"));
+    }
+    context.createEmpty("PlaySpawned");
+    context.destroyObject(keeper);
+    context.endPlay();
+
+    // Transform and component state are back.
+    CHECK(context.objects->localTransform(crate).position.y == 5.0f);
+    CHECK(context.components->componentsOf(crate).size() == meshBefore);
+    bool lavaLeaked = false;
+    for (const auto component : context.components->componentsOf(crate)) {
+        const auto value = context.components->field(component, "material");
+        if (value) {
+            if (const auto* text = std::get_if<std::string>(&*value)) {
+                lavaLeaked = lavaLeaked || *text == "Lava";
+            }
+        }
+    }
+    CHECK(!lavaLeaked);
+
+    // The play-spawned object is gone; the destroyed one is back by name.
+    CHECK(context.objects->findByName("PlaySpawned").empty());
+    CHECK(context.objects->findByName(keeperName).size() == 1);
+    CHECK(context.rootObjects().size() == rootsBefore);
+}
+
+void testSceneRootsSyncOnSave() {
+    namespace fs = std::filesystem;
+    const auto path = fs::temp_directory_path() / "sky_roots_sync_test.skybox";
+
+    EditorContext context;
+    const auto rootsBefore = context.rootObjects().size();
+    const auto doomed = context.createEmpty("Doomed");
+    const auto survivor = context.createEmpty("Survivor");
+    (void)survivor;
+
+    // Deleting a root after it was registered with the scene: the save must
+    // not resurrect it from the scene record's stale root list.
+    context.destroyObject(doomed);
+    CHECK(context.saveScene(path));
+    CHECK(context.openScene(path));
+
+    CHECK(context.objects->findByName("Doomed").empty());
+    CHECK(context.objects->findByName("Survivor").size() == 1);
+    CHECK(context.rootObjects().size() == rootsBefore + 1);
+    fs::remove(path);
+}
+
 } // namespace
 
 int main() {
@@ -174,5 +242,7 @@ int main() {
     testCreateRenameReparent();
     testHistoryDiscipline();
     testToolCommandBus();
+    testPlayModeFullRestore();
+    testSceneRootsSyncOnSave();
     return sky::test::summary("undo_tests");
 }

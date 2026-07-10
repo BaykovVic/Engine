@@ -48,6 +48,12 @@ public:
     /// Registers an existing object (and its subtree) as a root of the scene.
     virtual void addRootObject(SceneHandle scene, object::ObjectHandle object) = 0;
 
+    /// Replaces the scene's root list wholesale. The editor owns the live
+    /// list (deletes and reparents mutate it there); save paths sync it here
+    /// so the persisted scene never walks stale roots.
+    virtual void setRootObjects(SceneHandle scene,
+                                std::vector<object::ObjectHandle> roots) = 0;
+
     /// Saves a scene to an explicit path, optionally excluding one root subtree
     /// (e.g. an editor fixture not covered by the scene schema).
     virtual bool saveSceneAs(SceneHandle scene, const std::filesystem::path& path,

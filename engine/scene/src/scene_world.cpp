@@ -406,6 +406,16 @@ public:
         }
     }
 
+    void setRootObjects(SceneHandle scene,
+                        std::vector<object::ObjectHandle> roots) override {
+        if (auto* record = find(scene)) {
+            record->rootObjects = std::move(roots);
+            if (activeScene_ == scene) {
+                context_.rootObjects = record->rootObjects;
+            }
+        }
+    }
+
 private:
     /// Serializes a scene record to its descriptor path, optionally skipping
     /// one root subtree (used to keep the editor's terrain fixture, whose

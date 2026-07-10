@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 
 #include "sky/package/package_installer.hpp"
 #include "sky/package/package_lock.hpp"
@@ -427,13 +428,19 @@ object::ObjectHandle EditorContext::createModelObject(const std::string& name,
 }
 
 void EditorContext::beginPlay() {
-    // Capture every object's local transform so leaving play can restore it.
-    playSnapshot_.clear();
+    // Capture the FULL scene state — hierarchy, transforms, component
+    // fields — so leaving play can reconcile everything the game mutated,
+    // not just transforms.
+    playRoots_.clear();
+    playExisting_.clear();
+    for (const auto root : roots_) {
+        playRoots_.push_back(snapshotObject(root));
+    }
     std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
     while (!stack.empty()) {
         const auto object = stack.back();
         stack.pop_back();
-        playSnapshot_[object.value] = objects->localTransform(object);
+        playExisting_.insert(object.value);
         for (const auto child : objects->childrenOf(object)) {
             stack.push_back(child);
         }
@@ -448,14 +455,20 @@ void EditorContext::beginPlay() {
 
 void EditorContext::endPlay() {
     stopPlayScripts();
-    for (const auto& [id, transform] : playSnapshot_) {
-        const object::ObjectHandle object{id};
-        if (objects->exists(object)) {
-            objects->setLocalTransform(object, transform);
-        }
+    // 1. Survivors go back under their pre-play parents first, so objects
+    //    created during play never hold restored children when destroyed.
+    for (const auto& root : playRoots_) {
+        reparentToSnapshot(root, object::ObjectHandle::invalid());
     }
-    // Re-seat the simulation: bodies back to the restored pose, no residual
-    // velocity, so the next play session starts from the original state.
+    // 2. Everything created during play is removed (top-most subtrees).
+    destroyPlayCreated();
+    // 3. Survivors get their transforms and component state back in place
+    //    (stable handles); play-destroyed objects are recreated.
+    for (const auto& root : playRoots_) {
+        restorePlayState(root, object::ObjectHandle::invalid());
+    }
+    // 4. Re-seat the simulation: bodies back to the restored pose, no
+    //    residual velocity, so the next play session starts clean.
     for (const auto& [id, body] : bodies_) {
         const object::ObjectHandle object{id};
         if (objects->exists(object)) {
@@ -463,7 +476,90 @@ void EditorContext::endPlay() {
             physics->setBodyVelocity(body, {0.0f, 0.0f, 0.0f});
         }
     }
-    playSnapshot_.clear();
+    playRoots_.clear();
+    playExisting_.clear();
+}
+
+void EditorContext::reparentToSnapshot(const ObjectSnapshot& snapshot,
+                                       object::ObjectHandle parent) {
+    if (!objects->exists(snapshot.source)) {
+        return; // destroyed during play; restorePlayState recreates it
+    }
+    if (parent.isValid() && objects->parentOf(snapshot.source) != parent) {
+        objects->setParent(snapshot.source, parent);
+    }
+    for (const auto& child : snapshot.children) {
+        reparentToSnapshot(child, snapshot.source);
+    }
+}
+
+void EditorContext::destroyPlayCreated() {
+    // Top-most objects that did not exist when play started; their whole
+    // subtrees go (depth-first — destroyObject does not cascade).
+    std::vector<object::ObjectHandle> created;
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        if (!playExisting_.contains(object.value)) {
+            created.push_back(object);
+            continue; // the whole subtree is play-created
+        }
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+    }
+    const std::function<void(object::ObjectHandle)> destroySubtree =
+        [&](object::ObjectHandle object) {
+            for (const auto child : objects->childrenOf(object)) {
+                destroySubtree(child);
+            }
+            destroyObject(object);
+        };
+    for (const auto object : created) {
+        destroySubtree(object);
+    }
+}
+
+void EditorContext::restorePlayState(const ObjectSnapshot& snapshot,
+                                     object::ObjectHandle parent) {
+    if (!objects->exists(snapshot.source)) {
+        // Destroyed during play: bring the whole subtree back from the
+        // snapshot (new handles — the old ones died with the objects).
+        restoreObject(snapshot, parent);
+        return;
+    }
+    objects->setLocalTransform(snapshot.source, snapshot.local);
+    // Component state back IN PLACE: existing components keep their handles
+    // (undo history and editor caches hold them); only real differences
+    // attach or detach. Snapshot components match current ones by typeId.
+    auto current = components->componentsOf(snapshot.source);
+    std::vector<bool> used(current.size(), false);
+    for (const auto& comp : snapshot.components) {
+        auto target = component::ComponentHandle::invalid();
+        for (std::size_t i = 0; i < current.size(); ++i) {
+            if (!used[i] &&
+                components->descriptorOf(current[i]).typeId == comp.typeId) {
+                used[i] = true;
+                target = current[i];
+                break;
+            }
+        }
+        if (!target.isValid()) {
+            target = components->attach(snapshot.source, comp.typeId);
+        }
+        for (const auto& [name, value] : comp.fields) {
+            components->setField(target, name, value);
+        }
+    }
+    for (std::size_t i = 0; i < current.size(); ++i) {
+        if (!used[i]) {
+            components->detach(current[i]); // added during play
+        }
+    }
+    for (const auto& child : snapshot.children) {
+        restorePlayState(child, snapshot.source);
+    }
 }
 
 std::vector<std::filesystem::path> EditorContext::scriptSourceDirs() const {
@@ -1139,6 +1235,7 @@ core::Vec3 EditorContext::objectVelocity(object::ObjectHandle object) const {
 
 ObjectSnapshot EditorContext::snapshotObject(object::ObjectHandle object) const {
     ObjectSnapshot snapshot;
+    snapshot.source = object;
     snapshot.name = objects->nameOf(object);
     snapshot.local = objects->localTransform(object);
     snapshot.hasPhysicsBody = hasPhysicsBody(object);
@@ -1287,6 +1384,10 @@ void EditorContext::newScene() {
 }
 
 bool EditorContext::saveScene(const std::filesystem::path& path) {
+    // The editor owns the live root list (deletes/reparents mutate roots_,
+    // the scene record only ever grew) — sync it so the save never walks
+    // stale roots.
+    scenes->setRootObjects(activeScene, roots_);
     // The terrain fixture is excluded — its heightfield is not in the schema.
     return scenes->saveSceneAs(activeScene, path, terrainObject);
 }
