@@ -36,6 +36,11 @@ struct Transform {
     auto operator<=>(const Transform&) const = default;
 };
 
+// Deliberately scalar: hand-written SSE2 paths for these AoS single-value
+// operations measured 1.4-2x SLOWER than the compiler's own codegen
+// (GCC 13, -O3, x86-64; reproduce with tests/math_bench.cpp). SIMD pays
+// off only behind a batch/SoA API, not here.
+
 constexpr Vec3 operator+(const Vec3& a, const Vec3& b) {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
 }

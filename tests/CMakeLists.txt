@@ -29,6 +29,11 @@ function(sky_add_test NAME)
 endfunction()
 
 sky_add_test(core_tests)
+
+# Manual math micro-benchmark (not registered with ctest; run by hand).
+add_executable(sky_math_bench math_bench.cpp)
+target_link_libraries(sky_math_bench PRIVATE sky::sky_core)
+set_target_properties(sky_math_bench PROPERTIES EXCLUDE_FROM_ALL ON)
 sky_add_test(platform_serialization_tests)
 sky_add_test(world_tests)
 sky_add_test(scene_tests)
