@@ -315,6 +315,10 @@ EditorContext::EditorContext() {
           {"intensity", "float"},
           {"range", "float"}},
          "Rendering"});
+    components->registerComponentType(
+        {"sky.environment", "Environment", false, "",
+         {{"horizon", "Vec3"}, {"zenith", "Vec3"}, {"exposure", "float"}},
+         "Rendering"});
 
     // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
     assets = asset::createAssetDatabase();
@@ -331,9 +335,117 @@ EditorContext::EditorContext() {
     materials = rendering::createMaterialLibrary();
     materials->createMaterial({"Default", {0.72f, 0.72f, 0.74f}, 0.85f, 0.0f, {}});
     materials->createMaterial({"Gold", {1.00f, 0.78f, 0.30f}, 0.25f, 1.0f, {}});
-    materials->createMaterial({"Terrain", {0.35f, 0.47f, 0.31f}, 1.0f, 0.0f, {}});
     materials->createMaterial(
         {"Glow", {0.20f, 0.55f, 0.85f}, 0.9f, 0.0f, {0.05f, 0.35f, 0.65f}});
+
+    // Demo-scene look: engine-generated noise textures (real PNGs through
+    // the import pipeline, like the crate checker below) and the materials
+    // the golden-hour sample scene is dressed with.
+    const auto generatedAssets =
+        std::filesystem::temp_directory_path() / "sky_editor_assets";
+    {
+        // Cheap value noise: integer-hash bilinear patches.
+        const auto hash01 = [](std::uint32_t x, std::uint32_t y) {
+            std::uint32_t h = x * 374761393u + y * 668265263u;
+            h = (h ^ (h >> 13)) * 1274126177u;
+            return float((h ^ (h >> 16)) & 0xFFFF) / 65535.0f;
+        };
+        const auto noise = [&](float x, float y) {
+            const auto xi = std::uint32_t(x), yi = std::uint32_t(y);
+            const float fx = x - float(xi), fy = y - float(yi);
+            const float a = hash01(xi, yi), b = hash01(xi + 1, yi);
+            const float c = hash01(xi, yi + 1), d = hash01(xi + 1, yi + 1);
+            return (a * (1 - fx) + b * fx) * (1 - fy) +
+                   (c * (1 - fx) + d * fx) * fy;
+        };
+        const auto makeTexture = [&](const char* file, auto&& shade) {
+            asset::ImageData image;
+            image.width = image.height = 128;
+            image.pixels.resize(std::size_t(128) * 128 * 4);
+            for (std::uint32_t y = 0; y < 128; ++y) {
+                for (std::uint32_t x = 0; x < 128; ++x) {
+                    auto* px = image.pixels.data() + (std::size_t(y) * 128 + x) * 4;
+                    shade(x, y, px);
+                }
+            }
+            const auto path = generatedAssets / file;
+            fileSystem->writeAll(path, asset::encodePngRgba(image));
+            assets->importAsset(path);
+            return path.generic_string();
+        };
+        const auto grassPath = makeTexture(
+            "ground_noise.png", [&](std::uint32_t x, std::uint32_t y, std::uint8_t* px) {
+                // Meadow: green base, broad tone patches, soft dry blend.
+                const float broad = noise(x / 16.0f, y / 16.0f);
+                const float fine = noise(x / 2.0f, y / 2.0f);
+                const float dryNoise = noise(x / 11.0f + 40.0f, y / 11.0f);
+                const float dry =
+                    std::clamp((dryNoise - 0.62f) / 0.30f, 0.0f, 1.0f);
+                const float tone = 0.82f + broad * 0.24f + (fine - 0.5f) * 0.22f;
+                px[0] = std::uint8_t(std::min(255.0f, (88.0f + dry * 34.0f) * tone));
+                px[1] = std::uint8_t(std::min(255.0f, (116.0f + dry * 16.0f) * tone));
+                px[2] = std::uint8_t(std::min(255.0f, (64.0f + dry * 8.0f) * tone));
+                px[3] = 255;
+            });
+        const auto stonePath = makeTexture(
+            "stone_noise.png", [&](std::uint32_t x, std::uint32_t y, std::uint8_t* px) {
+                // Mottled warm granite with darker veins.
+                const float broad = noise(x / 12.0f + 80.0f, y / 12.0f);
+                const float vein = noise(x / 5.0f, y / 5.0f + 80.0f);
+                float tone = 0.62f + broad * 0.30f;
+                if (vein < 0.26f) {
+                    tone *= 0.55f;
+                }
+                px[0] = std::uint8_t(168.0f * tone);
+                px[1] = std::uint8_t(158.0f * tone);
+                px[2] = std::uint8_t(146.0f * tone);
+                px[3] = 255;
+            });
+
+        rendering::MaterialDesc terrainDesc;
+        terrainDesc.name = "Terrain";
+        terrainDesc.baseColor = {0.58f, 0.66f, 0.46f};
+        terrainDesc.roughness = 1.0f;
+        terrainDesc.texturePath = grassPath;
+        terrainDesc.uvTiling = {10.0f, 10.0f};
+        materials->createMaterial(terrainDesc);
+
+        rendering::MaterialDesc stoneDesc;
+        stoneDesc.name = "Stone";
+        stoneDesc.baseColor = {0.78f, 0.72f, 0.66f};
+        stoneDesc.roughness = 0.95f;
+        stoneDesc.texturePath = stonePath;
+        stoneDesc.uvTiling = {2.0f, 2.0f};
+        materials->createMaterial(stoneDesc);
+    }
+    {
+        // Polished dark stone: near-mirror metal picks up the low sun as a
+        // sharp warm highlight.
+        rendering::MaterialDesc obsidian;
+        obsidian.name = "Obsidian";
+        obsidian.baseColor = {0.16f, 0.15f, 0.18f};
+        obsidian.roughness = 0.12f;
+        obsidian.metallic = 0.9f;
+        materials->createMaterial(obsidian);
+
+        // Translucent cyan crystal — the sorted blend pass shows the scene
+        // through it; a touch of emissive keeps it readable in shade.
+        rendering::MaterialDesc crystal;
+        crystal.name = "Crystal";
+        crystal.baseColor = {0.30f, 0.78f, 0.88f};
+        crystal.roughness = 0.15f;
+        crystal.emissive = {0.08f, 0.34f, 0.42f};
+        crystal.opacity = 0.4f;
+        materials->createMaterial(crystal);
+
+        // Hot ember: emissive above 1 relies on the HDR target + ACES.
+        rendering::MaterialDesc ember;
+        ember.name = "Ember";
+        ember.baseColor = {1.0f, 0.55f, 0.18f};
+        ember.roughness = 0.6f;
+        ember.emissive = {1.9f, 0.85f, 0.25f};
+        materials->createMaterial(ember);
+    }
 
     // The crate material uses an engine-generated checkerboard texture,
     // written as a real PNG and run through the import pipeline.
@@ -1411,31 +1523,147 @@ void EditorContext::buildDemoScene() {
     activeScene = scenes->createScene({"SampleScene", {}});
     initTerrain();
 
-    createCrate("Crate A", {-1.5f, 2.0f, 0.0f});
-    createCrate("Crate B", {0.0f, 4.0f, 0.0f});
-    const auto crateC = createCrate("Crate C", {1.5f, 6.0f, 0.0f});
+    // Rolling meadow: gentle hills around the rim, the central stage kept
+    // flat so the physics crates land cleanly.
+    {
+        const auto raise = [&](float worldX, float worldZ, float radius,
+                               float strength) {
+            terrain::TerrainEdit edit;
+            edit.center = {worldX - kTerrainOriginX, 0.0f,
+                           worldZ - kTerrainOriginZ};
+            edit.radius = radius;
+            edit.strength = strength;
+            edit.operation = "raise";
+            terrain->applyEdit(terrainHandle, edit);
+        };
+        // Kept clear of the flat centre stage AND of (10, 10) — the bridge
+        // tests raycast bare terrain (world y = 0) there.
+        raise(-15.0f, 14.0f, 12.0f, 2.6f);
+        raise(20.0f, -2.0f, 11.0f, 2.2f);
+        raise(-12.0f, -10.0f, 10.0f, 1.8f);
+        raise(13.0f, -13.0f, 12.0f, 2.4f);
+        raise(-2.0f, 21.0f, 9.0f, 1.6f);
+    }
+
+    // Golden-hour environment: warm horizon, deep zenith, filmic exposure
+    // through the HDR + ACES post pass.
+    {
+        const auto environment = createEmpty("Environment");
+        // A settings holder, not scenery: parked far above the play space so
+        // viewport picking never lands on it.
+        objects->setLocalTransform(environment, {{0.0f, 80.0f, 0.0f}, {}, {1, 1, 1}});
+        const auto env = components->attach(environment, "sky.environment");
+        components->setField(env, "horizon", core::Vec3{0.94f, 0.56f, 0.34f});
+        components->setField(env, "zenith", core::Vec3{0.16f, 0.26f, 0.48f});
+        components->setField(env, "exposure", 1.15f);
+    }
+
+    createCrate("Crate A", {-4.6f, 2.0f, 1.0f});
+    createCrate("Crate B", {-4.1f, 4.0f, 1.6f});
+    const auto crateC = createCrate("Crate C", {-3.5f, 6.0f, 0.7f});
     components->setField(components->componentsOf(crateC).front(), "material",
                          std::string("Gold"));
 
-    // A real directional sun: pitched ~50 degrees down (rotation around X)
-    // so its -Z forward axis shines down onto the scene.
+    // A low golden-hour sun: pitched ~20 degrees below the horizon plane and
+    // yawed to rake across the scene, so shadows run long and warm.
     const auto light = createEmpty("Directional Light");
-    objects->setLocalTransform(
-        light, {{0.0f, 8.0f, -5.0f}, {-0.42f, 0.0f, 0.0f, 0.907f}, {1, 1, 1}});
+    {
+        const core::Quat pitch{-0.1736f, 0.0f, 0.0f, 0.9848f}; // -20 deg X
+        const core::Quat yaw{0.0f, 0.342f, 0.0f, 0.9397f};     // +40 deg Y
+        objects->setLocalTransform(light,
+                                   {{0.0f, 8.0f, -5.0f}, yaw * pitch, {1, 1, 1}});
+    }
     const auto sun = components->attach(light, "sky.light");
     components->setField(sun, "type", std::string("directional"));
-    components->setField(sun, "color", core::Vec3{1.0f, 0.96f, 0.86f});
-    components->setField(sun, "intensity", 1.1f);
+    components->setField(sun, "color", core::Vec3{1.0f, 0.64f, 0.36f});
+    components->setField(sun, "intensity", 2.2f);
     components->setField(sun, "range", 0.0f);
 
-    // A warm point light hovering over the crates.
+    // Monument stage: a polished obsidian monolith inside a granite ring,
+    // floating crystals above, ember orbs glowing at its feet.
+    {
+        const auto meshOf = [&](object::ObjectHandle object) {
+            for (const auto component : components->componentsOf(object)) {
+                if (components->descriptorOf(component).typeId == "sky.mesh") {
+                    return component;
+                }
+            }
+            return component::ComponentHandle::invalid();
+        };
+        const auto monolith = createPrimitive(scene::PrimitiveKind::Cube, "Monolith");
+        const float ground = terrainHeightAt(0.0f, 7.0f);
+        objects->setLocalTransform(monolith, {{0.0f, ground + 2.8f, 7.0f},
+                                              {0.0f, 0.1305f, 0.0f, 0.9914f},
+                                              {1.2f, 5.6f, 1.2f}});
+        components->setField(meshOf(monolith), "material",
+                             std::string("Obsidian"));
+
+        const float ringRadius = 6.5f;
+        for (int i = 0; i < 6; ++i) {
+            const float angle = float(i) * 1.0472f + 0.35f; // 60 deg apart
+            const float x = std::cos(angle) * ringRadius;
+            const float z = 7.0f + std::sin(angle) * ringRadius;
+            const float height = 2.0f + 0.5f * float((i * 3) % 4);
+            const auto stone = createPrimitive(scene::PrimitiveKind::Cube,
+                                               "Standing Stone " +
+                                                   std::to_string(i + 1));
+            const float yawHalf = angle * 0.5f;
+            objects->setLocalTransform(
+                stone, {{x, terrainHeightAt(x, z) + height * 0.5f - 0.15f, z},
+                        {0.0f, std::sin(yawHalf), 0.0f, std::cos(yawHalf)},
+                        {0.85f, height, 0.7f}});
+            components->setField(meshOf(stone), "material",
+                                 std::string("Stone"));
+        }
+
+        // Low enough that the monolith, stones and ground sit behind them —
+        // the translucency has something to read against.
+        const core::Vec3 crystalSpots[3] = {
+            {-1.9f, 2.4f, 5.6f}, {2.2f, 3.0f, 6.6f}, {1.1f, 1.8f, 4.0f}};
+        const float crystalScale[3] = {0.9f, 0.7f, 0.5f};
+        for (int i = 0; i < 3; ++i) {
+            const auto crystal = createEmpty("Crystal " + std::to_string(i + 1));
+            const core::Quat tilt{0.12f + 0.05f * float(i), 0.28f, 0.08f, 0.95f};
+            objects->setLocalTransform(crystal,
+                                       {crystalSpots[i], tilt,
+                                        {crystalScale[i], crystalScale[i],
+                                         crystalScale[i]}});
+            const auto mesh = components->attach(crystal, "sky.mesh");
+            components->setField(mesh, "material", std::string("Crystal"));
+            components->setField(mesh, "mesh",
+                                 std::string("assets://Models/pyramid.obj"));
+        }
+
+        const core::Vec3 emberSpots[2] = {{-2.1f, 0.0f, 4.4f}, {1.8f, 0.0f, 5.6f}};
+        for (int i = 0; i < 2; ++i) {
+            const auto orb = createPrimitive(scene::PrimitiveKind::Sphere,
+                                             "Ember " + std::to_string(i + 1));
+            const float x = emberSpots[i].x, z = emberSpots[i].z;
+            objects->setLocalTransform(orb, {{x, terrainHeightAt(x, z) + 0.5f, z},
+                                             {},
+                                             {0.7f, 0.7f, 0.7f}});
+            components->setField(meshOf(orb), "material",
+                                 std::string("Ember"));
+        }
+    }
+
+    // A warm ember glow at the monolith's feet…
     const auto pointLight = createEmpty("Point Light");
-    objects->setLocalTransform(pointLight, {{3.0f, 3.5f, 1.5f}, {}, {0.4f, 0.4f, 0.4f}});
+    objects->setLocalTransform(pointLight, {{0.0f, 1.4f, 5.0f}, {}, {0.4f, 0.4f, 0.4f}});
     const auto lamp = components->attach(pointLight, "sky.light");
     components->setField(lamp, "type", std::string("point"));
     components->setField(lamp, "color", core::Vec3{1.0f, 0.45f, 0.15f});
-    components->setField(lamp, "intensity", 5.0f);
-    components->setField(lamp, "range", 9.0f);
+    components->setField(lamp, "intensity", 6.0f);
+    components->setField(lamp, "range", 10.0f);
+
+    // …and a cool counter-glow inside the crystal cluster.
+    const auto crystalLight = createEmpty("Crystal Light");
+    objects->setLocalTransform(crystalLight, {{2.6f, 3.4f, 5.4f}, {}, {0.3f, 0.3f, 0.3f}});
+    const auto glow = components->attach(crystalLight, "sky.light");
+    components->setField(glow, "type", std::string("point"));
+    components->setField(glow, "color", core::Vec3{0.35f, 0.85f, 1.0f});
+    components->setField(glow, "intensity", 4.5f);
+    components->setField(glow, "range", 9.0f);
 
     // An imported OBJ model: lives under Assets/Models, runs through the asset
     // pipeline and is referenced by a clean VFS path (resolved at render time),

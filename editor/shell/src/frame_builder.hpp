@@ -52,11 +52,27 @@ public:
         viewport.viewportHeight = height;
         commands.push_back(viewport);
 
+        // Scene environment (optional "sky.environment" component on any
+        // object): sky gradient colours plus the tonemap exposure. Defaults
+        // keep the pre-environment look — exposure 0 is a passthrough.
+        core::Vec3 horizon{0.62f, 0.70f, 0.80f};
+        core::Vec3 zenith{0.21f, 0.36f, 0.57f};
+        float exposure = 0.0f;
+        forEachObject([&](object::ObjectHandle object) {
+            const auto env = componentOfType(object, "sky.environment");
+            if (env.isValid()) {
+                horizon = fieldOr<core::Vec3>(env, "horizon", horizon);
+                zenith = fieldOr<core::Vec3>(env, "zenith", zenith);
+                exposure = fieldOr<float>(env, "exposure", exposure);
+            }
+        });
+
         rendering::RenderCommand camera;
         camera.type = rendering::RenderCommandType::SetCamera;
         camera.transform = cameraOverride_ ? *cameraOverride_ : cameraPose();
         camera.fovDegrees = 50.0f;
         camera.orthoHeight = cameraOverride_ ? cameraOrthoHeight_ : 0.0f;
+        camera.exposure = exposure;
         commands.push_back(camera);
 
         forEachObject([&](object::ObjectHandle object) {
@@ -81,8 +97,8 @@ public:
 
         rendering::RenderCommand skyCommand;
         skyCommand.type = rendering::RenderCommandType::SetSky;
-        skyCommand.color = {0.62f, 0.70f, 0.80f};
-        skyCommand.emissive = {0.21f, 0.36f, 0.57f};
+        skyCommand.color = horizon;
+        skyCommand.emissive = zenith;
         commands.push_back(skyCommand);
 
         // Terrain mesh, rebuilt when its version moves.
