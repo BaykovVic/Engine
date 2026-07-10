@@ -1,5 +1,16 @@
 # Спринт 1. День 1
 
+## Общие требования ко всем фичам
+
+1. **Один PR — одна фича.** Не смешивать фичи и не менять файлы чужих контуров (например, `engine/core/include/sky/core/math.hpp` принадлежит E1).
+2. **Никаких артефактов сборки в git**: `.exe`, `.o`, `.obj`, `.spv`, каталоги `build/` — запрещены. Временные файлы (`tests/tmp/`) в PR не включать.
+3. **Namespace модуля обязателен** (`sky::core`, `sky::rendering`, `sky::object`, `sky::physics`, `sky::ecs`, ...). Код в глобальном namespace не принимается.
+4. **Интерфейсы**: секция `public:`, виртуальный деструктор `virtual ~IИмя() = default;`, чисто виртуальные методы (`= 0`).
+5. **Сигнатуры из задания копируются символ в символ** — включая `const`, `[[nodiscard]]`, типы возврата и параметры по умолчанию.
+6. **Include-стиль**: `#include "sky/<модуль>/<файл>.hpp"` при `-Iengine/<модуль>/include`; пути от корня репозитория запрещены. `<bits/stdc++.h>` запрещён, `#pragma once` обязателен в каждом заголовке.
+7. **Хэндлы** — только `core::Handle<Tag>`; в контейнерах ключ — `handle.value`. Собственные `std::hash<Handle>` и операторы в чужие заголовки не добавлять.
+8. **Критерий приёмки каждой фичи — её приёмочный тест** (указан в конце блока фичи). PR без зелёного теста не рассматривается.
+
 ## feature/math-and-handles
 
 - **Исполнитель:** E1 (Ядро и данные)
@@ -9,6 +20,75 @@
 **Цель фичи:** математика и типобезопасные идентификаторы — фундамент, от которого зависят все.
 
 **Описание фичи:** `Vec3/Quat/Transform` и `Handle` используют все модули; заголовок `math.hpp` отдаётся первым коммитом — по нему стартуют E2 и E4.
+
+**Обязательные требования:**
+
+Все объявления фичи — в `namespace sky::core`; файлы — `engine/core/include/sky/core/math.hpp` и `engine/core/include/sky/core/handle.hpp` (включения — `#include "sky/core/math.hpp"`, см. «Общие требования»).
+
+```cpp
+// math.hpp — типы (инициализаторы по умолчанию обязательны):
+struct Vec2 {
+    float x = 0.0f;
+    float y = 0.0f;
+
+    auto operator<=>(const Vec2&) const = default;
+};
+
+struct Vec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+
+    auto operator<=>(const Vec3&) const = default;
+};
+
+struct Quat {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 1.0f;
+
+    auto operator<=>(const Quat&) const = default;
+};
+
+struct Transform {
+    Vec3 position{};
+    Quat rotation{};
+    Vec3 scale{1.0f, 1.0f, 1.0f};
+
+    auto operator<=>(const Transform&) const = default;
+};
+
+// math.hpp — свободные constexpr-функции (сигнатуры символ в символ;
+// operator*(Vec3,Vec3) и divide — покомпонентные):
+constexpr Vec3 operator+(const Vec3& a, const Vec3& b);
+constexpr Vec3 operator-(const Vec3& a, const Vec3& b);
+constexpr Vec3 operator*(const Vec3& a, float s);
+constexpr Vec3 operator*(const Vec3& a, const Vec3& b);
+constexpr Quat operator*(const Quat& a, const Quat& b);
+constexpr Vec3 rotate(const Quat& q, const Vec3& v);
+constexpr Transform compose(const Transform& parent, const Transform& child);
+constexpr Quat conjugate(const Quat& q);
+constexpr Vec3 divide(const Vec3& a, const Vec3& b);
+constexpr Transform invCompose(const Transform& parent, const Transform& world);
+
+// handle.hpp — целиком (нужен <cstdint>):
+template <typename Tag>
+struct Handle {
+    std::uint64_t value = 0;
+
+    [[nodiscard]] bool isValid() const noexcept { return value != 0; }
+    auto operator<=>(const Handle&) const = default;
+
+    static constexpr Handle invalid() noexcept { return Handle{0}; }
+};
+```
+
+- Члены инициализируются по умолчанию: `Vec3 = {0,0,0}`, `Quat = {0,0,0,1}` (единичный), `Transform.scale = {1,1,1}` — без масштаба 1 по умолчанию `compose` «молча» ломается.
+- Каждому типу — `auto operator<=>(const T&) const = default;`: критерий `invCompose(parent, compose(parent, child)) == child` требует сравнения.
+- `operator-(Vec3,Vec3)`, покомпонентный `operator*(Vec3,Vec3)` и `divide(Vec3,Vec3)` обязательны — без них `compose`/`invCompose` не реализуются; `Vec2` нужен потребителям (например, uv-тайлинг рендера).
+- `Handle`: `isValid()` — это `value != 0`; `invalid()` — `static constexpr`, возвращает `Handle{0}`.
+- Ничего сверх контракта не добавлять: ни `std::hash<Handle>` (потребители ключуют контейнеры по `handle.value`), ни `operator/` для `Vec3` (деление — только `divide()`).
 
 **Общий порядок реализации фичи:**
 1. Объявить структуры `Vec3/Quat/Transform` в `math.hpp`.
@@ -95,6 +175,7 @@
 **Общий критерий правильности:**
 1. `rotate(поворот 90° вокруг Y, {0,0,1}) ≈ {1,0,0}` (±1e-5).
 2. `invCompose(parent, compose(parent, child)) == child`.
+- **Приёмочный тест:** `tests/day1/math_and_handles_tests.cpp` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).
 
 ---
 
@@ -107,6 +188,93 @@
 **Цель фичи:** общий (не только Vulkan) контракт рендера — поток команд и интерфейс рендерера.
 
 **Описание фичи:** единый контракт, от которого зависят все бэкенды; остальные фичи опираются на интерфейсы, а не на реализацию.
+
+**Обязательные требования:**
+
+Все объявления фичи — в `namespace sky::rendering`; заголовки — `engine/rendering/include/sky/rendering/rendering.hpp`, `renderer_registry.hpp`, `null_renderer.hpp` (включения — `#include "sky/rendering/rendering.hpp"`, см. «Общие требования»); реализации — `engine/rendering/src/null_renderer.cpp`, `engine/rendering/src/renderer_registry.cpp`.
+
+```cpp
+// rendering.hpp — тег и хэндл ресурса (объявить ДО RenderCommand):
+struct RenderResourceTag {};
+using RenderResourceHandle = core::Handle<RenderResourceTag>;
+
+// rendering.hpp — интерфейсы (сигнатуры символ в символ):
+class IRenderSurface {
+public:
+    virtual ~IRenderSurface() = default;
+
+    [[nodiscard]] virtual std::uint32_t width() const = 0;
+    [[nodiscard]] virtual std::uint32_t height() const = 0;
+    virtual void present() = 0;
+};
+
+class IRenderResourceFactory {
+public:
+    virtual ~IRenderResourceFactory() = default;
+
+    virtual RenderResourceHandle createMeshFromData(
+        std::span<const float> interleavedPosNormalUv) = 0;
+    virtual RenderResourceHandle createTextureFromData(
+        std::uint32_t width, std::uint32_t height,
+        std::span<const std::uint8_t> rgbaPixels) = 0;
+    virtual void destroy(RenderResourceHandle resource) = 0;
+};
+
+class IRenderer {
+public:
+    virtual ~IRenderer() = default;
+
+    [[nodiscard]] virtual std::string backendName() const = 0;
+    virtual void attachSurface(IRenderSurface& surface) = 0;
+    virtual void submit(std::span<const RenderCommand> commands) = 0;
+    virtual void renderFrame() = 0;
+};
+```
+
+```cpp
+// renderer_registry.hpp:
+struct BackendInit {
+    std::function<void*(const char*)> resolveGlProc;
+};
+
+using RendererFactory =
+    std::function<std::unique_ptr<IRenderer>(const BackendInit& init)>;
+
+class IRendererRegistry {
+public:
+    virtual ~IRendererRegistry() = default;
+
+    virtual bool registerBackend(const std::string& name, RendererFactory factory) = 0;
+    [[nodiscard]] virtual std::vector<std::string> availableBackends() const = 0;
+    [[nodiscard]] virtual bool hasBackend(const std::string& name) const = 0;
+    virtual std::unique_ptr<IRenderer> create(const std::string& name,
+                                              const BackendInit& init) = 0;
+};
+
+std::unique_ptr<IRendererRegistry> createRendererRegistry();
+
+// null_renderer.hpp:
+class NullRenderer : public IRenderer, public IRenderResourceFactory {
+public:
+    ~NullRenderer() override = default;
+
+    [[nodiscard]] virtual std::uint64_t frameCount() const = 0;
+    [[nodiscard]] virtual std::size_t commandsInLastFrame() const = 0;
+    [[nodiscard]] virtual std::size_t liveResourceCount() const = 0;
+};
+
+std::unique_ptr<NullRenderer> createNullRenderer();
+
+std::unique_ptr<IRenderSurface> createOffscreenSurface(std::uint32_t width,
+                                                       std::uint32_t height);
+```
+
+- `RenderResourceHandle` — это `core::Handle<RenderResourceTag>`, а НЕ `std::uint64_t` и не собственная структура; объявляется ДО `RenderCommand`, чьи поля (`resource`, `texture`) его используют.
+- `IRenderSurface` обязателен: ровно `width()`, `height()`, `present()`; `renderFrame()` null-рендерера вызывает `present()` у привязанной поверхности.
+- Реестр из `createRendererRegistry()` уже содержит предзарегистрированный бэкенд `"null"`; `availableBackends()` возвращает имена отсортированными по алфавиту.
+- `registerBackend` возвращает `false` и ничего не меняет для пустого имени, пустой фабрики (`nullptr`) и дубликата имени.
+- `create(name, init)` для неизвестного имени возвращает `nullptr`, а не бросает исключение.
+- Null-рендерер проверяет вход фабрик: меш — непустой и кратный целым треугольникам (24 float), текстура — `rgbaPixels.size() == width*height*4`; при нарушении возвращается невалидный хэндл, ресурс не заводится.
 
 **Общий порядок реализации фичи:**
 1. Объявить поток команд и интерфейсы в `rendering.hpp`.
@@ -269,6 +437,7 @@
 **Общий критерий правильности:**
 1. null-рендерер регистрируется в реестре и создаётся по имени.
 2. `submit` + `renderFrame` увеличивают счётчики кадров/команд.
+- **Приёмочный тест:** `tests/day1/render_contract_tests.cpp` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).
 
 ---
 
@@ -281,6 +450,28 @@
 **Цель фичи:** каркас приложения редактора на Avalonia (.NET 8) с окном «Sky Engine».
 
 **Описание фичи:** стартовый скелет — точка входа, приложение Avalonia и главное окно с меню.
+
+**Обязательные требования:**
+
+Код — в namespace `SkyEditor`; проект — `editor/avalonia/SkyEditor.csproj` (.NET 8, `<TargetFramework>net8.0</TargetFramework>`).
+
+Пакеты — ровно этот список и эти версии (как в `SkyEditor.csproj` этого репозитория):
+
+```xml
+    <PackageReference Include="Avalonia" Version="11.2.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1" />
+    <PackageReference Include="Avalonia.Headless" Version="11.2.1" />
+    <PackageReference Include="Dock.Avalonia" Version="11.2.0" />
+    <PackageReference Include="Dock.Model.Mvvm" Version="11.2.0" />
+```
+
+- Все пакеты `Avalonia.*` — строго одной версии (`11.2.1`); смешение версий ломает XAML-компиляцию и рантайм-биндинги.
+- `<OutputType>Exe</OutputType>`, НЕ `WinExe` — сборка должна давать консольный процесс с кодом возврата на Linux/CI.
+- Корень меню в `MainWindow.axaml` — элемент `<Menu>` с вложенными `<MenuItem>` (НЕ `<MenuItem>` в корне).
+- `async void`-методы, не содержащие ни одного `await`, запрещены; обработчики меню без асинхронной работы объявлять обычными `void`.
+- Обязательные файлы: `App.axaml` + `App.axaml.cs`, `MainWindow.axaml` + `MainWindow.axaml.cs`, `Program.cs`, `app.manifest`.
 
 **Общий порядок реализации фичи:**
 1. Завести проект .NET 8 (`csproj`) с пакетами Avalonia.
@@ -395,6 +586,7 @@
 **Общий критерий правильности:**
 1. `dotnet build editor/avalonia` — 0 ошибок.
 2. Окно «Sky Engine» открывается с меню File/Edit/GameObject.
+- **Приёмочный тест:** `tests/day1/editor_shell_check.py` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).
 
 ---
 
@@ -407,6 +599,109 @@
 **Цель фичи:** физический мир — тела, коллайдеры, гравитация, столкновения, высотная поверхность, луч.
 
 **Описание фичи:** ядро симуляции; контракты управления и запросов плюс конкретная реализация.
+
+**Обязательные требования:**
+
+Все объявления фичи — в `namespace sky::physics`; заголовки — `engine/physics/include/sky/physics/physics.hpp` и `engine/physics/include/sky/physics/physics_world.hpp` (включения — `#include "sky/physics/physics.hpp"`, см. «Общие требования»); реализация — `engine/physics/src/physics_world.cpp`.
+
+```cpp
+// physics.hpp — теги, хэндлы и описания (сигнатуры символ в символ):
+struct RigidBodyTag {};
+struct ColliderTag {};
+using RigidBodyHandle = core::Handle<RigidBodyTag>;
+using ColliderHandle = core::Handle<ColliderTag>;
+
+enum class BodyType {
+    Static,
+    Kinematic,
+    Dynamic,
+};
+
+struct RigidBodyDesc {
+    BodyType type = BodyType::Dynamic;
+    float mass = 1.0f;
+    core::Transform initialTransform;
+};
+
+enum class ColliderShape {
+    Box,
+    Sphere,
+    Capsule,
+    TerrainHeightfield,
+};
+
+struct HeightfieldDesc {
+    std::uint32_t resolution = 0;
+    core::Vec3 scale{1.0f, 1.0f, 1.0f};
+    std::vector<float> heights;
+};
+
+struct ColliderDesc {
+    ColliderShape shape = ColliderShape::Box;
+    core::Vec3 halfExtents{0.5f, 0.5f, 0.5f};
+    float radius = 0.5f;
+    HeightfieldDesc heightfield;
+};
+```
+
+```cpp
+// physics.hpp — события, попадания и контракты:
+struct RaycastHit {
+    ColliderHandle collider;
+    core::Vec3 point;
+    core::Vec3 normal;
+    float distance = 0.0f;
+};
+
+struct CollisionEvent {
+    ColliderHandle first;
+    ColliderHandle second;
+};
+
+class IPhysicsWorld {
+public:
+    virtual ~IPhysicsWorld() = default;
+
+    virtual RigidBodyHandle createBody(const RigidBodyDesc& desc) = 0;
+    virtual void destroyBody(RigidBodyHandle body) = 0;
+    virtual ColliderHandle attachCollider(RigidBodyHandle body, const ColliderDesc& desc) = 0;
+    virtual void detachCollider(ColliderHandle collider) = 0;
+
+    virtual void step(double fixedDeltaSeconds) = 0;
+    [[nodiscard]] virtual std::vector<CollisionEvent> drainCollisionEvents() = 0;
+};
+
+class IPhysicsQueryService {
+public:
+    virtual ~IPhysicsQueryService() = default;
+
+    [[nodiscard]] virtual std::optional<RaycastHit> raycast(const core::Vec3& origin,
+                                                            const core::Vec3& direction,
+                                                            float maxDistance) const = 0;
+    [[nodiscard]] virtual core::Transform bodyTransform(RigidBodyHandle body) const = 0;
+};
+```
+
+```cpp
+// physics_world.hpp — конкретный мир и фабрика:
+class PhysicsWorld : public IPhysicsWorld, public IPhysicsQueryService {
+public:
+    ~PhysicsWorld() override = default;
+
+    virtual void setGravity(const core::Vec3& gravity) = 0;
+    virtual void setBodyVelocity(RigidBodyHandle body, const core::Vec3& velocity) = 0;
+    [[nodiscard]] virtual core::Vec3 bodyVelocity(RigidBodyHandle body) const = 0;
+    virtual void setBodyTransform(RigidBodyHandle body, const core::Transform& transform) = 0;
+};
+
+std::unique_ptr<PhysicsWorld> createPhysicsWorld();
+```
+
+- `CollisionEvent` хранит два `ColliderHandle` (НЕ `RigidBodyHandle` и не сырые числа) — событие описывает пару коллайдеров.
+- Id тел и коллайдеров выдаёт ЕДИНЫЙ монотонный счётчик (`std::uint64_t nextId_ = 1;`): первый выданный id — 1, значение `0` зарезервировано под `Handle::invalid()`.
+- Пересечение AABB — строгое (`min < other.max && max > other.min` по каждой оси): боксы, соприкасающиеся вплотную, события не дают.
+- Внутренние хранилища ключуются по `handle.value` (`std::unordered_map<std::uint64_t, BodyRecord>` и т.п.), а не по самому `Handle` — `std::hash<Handle>` в контракте нет и добавлять его нельзя.
+- Пары коллайдеров ОДНОГО тела события не порождают; `destroyBody` каскадно удаляет коллайдеры тела; `drainCollisionEvents()` возвращает накопленные события и очищает буфер.
 
 **Общий порядок реализации фичи:**
 1. Объявить типы и контракты в `physics.hpp`.
@@ -519,6 +814,7 @@
 1. Тело за 1 с падает ≈4.9 м под гравитацией.
 2. Куб замирает на полу (расталкивание AABB).
 3. Луч попадает в коллайдер.
+- **Приёмочный тест:** `tests/day1/physics_world_tests.cpp` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).
 
 ---
 
@@ -531,6 +827,57 @@
 **Цель фичи:** скелет сборки CMake для движка, редактора, плеера и тестов.
 
 **Описание фичи:** единый механизм сборки модулей на C++20 с одной функцией регистрации модуля; остальные контуры подключают свои модули по мере готовности.
+
+**Обязательные требования:**
+
+Файлы фичи — `CMakeLists.txt` (корень), `engine/CMakeLists.txt`, `tests/CMakeLists.txt`; CMake ≥ 3.20, стандарт C++20 (без расширений).
+
+```cmake
+# Корневой CMakeLists.txt — проект, стандарт и опции (умолчания именно такие):
+cmake_minimum_required(VERSION 3.20)
+
+project(SkyEngine
+    VERSION 0.1.0
+    DESCRIPTION "Sky Engine - native-first game engine with C++20 core"
+    LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+option(SKY_BUILD_EDITOR "Build the Qt5-based editor layer" OFF)
+option(SKY_BUILD_OPENGL_BACKEND "Build the OpenGL rendering backend" ON)
+option(SKY_BUILD_VULKAN_BACKEND "Build the Vulkan rendering backend" ON)
+option(SKY_BUILD_TESTS "Build verification targets" ON)
+```
+
+```cmake
+# engine/CMakeLists.txt — функция регистрации модуля (символ в символ):
+function(sky_add_module NAME DIR)
+    set(SOURCES ${ARGN})
+    if(SOURCES)
+        add_library(${NAME} STATIC ${SOURCES})
+        target_include_directories(${NAME} PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/include)
+        target_compile_features(${NAME} PUBLIC cxx_std_20)
+        set(SCOPE PUBLIC)
+    else()
+        add_library(${NAME} INTERFACE)
+        target_include_directories(${NAME} INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/include)
+        target_compile_features(${NAME} INTERFACE cxx_std_20)
+    endif()
+    add_library(sky::${NAME} ALIAS ${NAME})
+endfunction()
+```
+
+- Опции сборки — ровно `SKY_BUILD_EDITOR` (OFF), `SKY_BUILD_OPENGL_BACKEND` (ON), `SKY_BUILD_VULKAN_BACKEND` (ON), `SKY_BUILD_TESTS` (ON); другие имена и другие умолчания не принимаются.
+- Канонический список целей движка: `sky_platform`, `sky_core`, `sky_serialization`, `sky_object`, `sky_component`, `sky_ecs`, `sky_scene`, `sky_project`, `sky_asset`, `sky_physics`, `sky_package`, `sky_rendering`, `sky_scripting`, `sky_terrain`, `sky_mapgen`; за опциями — `sky_rendering_opengl`, `sky_rendering_vulkan`; зонтичная INTERFACE-цель `sky_engine` (alias `sky::engine`). Каждая цель получает alias `sky::<имя>`.
+- Модуль без исходников остаётся INTERFACE-библиотекой через тот же вызов `sky_add_module(NAME DIR)` — контуры подключают реализацию по мере готовности, не меняя механизм.
+- Корневой файл подключает `add_subdirectory(engine)`, `add_subdirectory(editor)`, `add_subdirectory(player)`; под `if(SKY_BUILD_TESTS)` — `enable_testing()` и `add_subdirectory(tests)`.
+- Связи модулей задаются через `target_link_libraries(... PUBLIC ...)`; зависимый модуль видит заголовки зависимости по её public-include-пути.
+- Пустой `CMakeLists.txt` (или файл из одних комментариев) = провал ревью: каждый из трёх файлов обязан содержать реальные цели/регистрации.
 
 **Общий порядок реализации фичи:**
 1. Завести функцию `sky_add_module` в `engine/CMakeLists.txt`.
@@ -622,6 +969,7 @@
 **Общий критерий правильности:**
 1. `cmake -S . -B build && cmake --build build` проходит хотя бы с одним модулем (напр. `sky_core`).
 2. `sky_add_module` подключает следующий модуль одной строкой.
+- **Приёмочный тест:** `tests/day1/build_system_check.py` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).
 
 ---
 
@@ -634,6 +982,97 @@
 **Цель фичи:** ECS-ядро — сущности, типизированные хранилища компонентов, планировщик систем и запросы.
 
 **Описание фичи:** сущности держат компоненты в хранилищах по типу, системы обрабатывают их пачками; на этом ядре строятся все этапы контура.
+
+**Обязательные требования:**
+
+Все объявления фичи — в `namespace sky::ecs`; заголовки — `engine/ecs/include/sky/ecs/ecs.hpp` и `engine/ecs/include/sky/ecs/ecs_world.hpp` (включения — `#include "sky/ecs/ecs.hpp"`, см. «Общие требования»); реализация — `engine/ecs/src/ecs_world.cpp`.
+
+```cpp
+// ecs.hpp — идентификатор сущности и контракты (сигнатуры символ в символ):
+struct EntityId {
+    std::uint64_t value = 0;
+
+    [[nodiscard]] bool isValid() const noexcept { return value != 0; }
+    auto operator<=>(const EntityId&) const = default;
+};
+
+class IEcsComponentStore {
+public:
+    virtual ~IEcsComponentStore() = default;
+
+    [[nodiscard]] virtual std::type_index componentType() const = 0;
+    [[nodiscard]] virtual bool has(EntityId entity) const = 0;
+    virtual void remove(EntityId entity) = 0;
+    [[nodiscard]] virtual std::size_t count() const = 0;
+};
+
+class IEcsSystem {
+public:
+    virtual ~IEcsSystem() = default;
+
+    [[nodiscard]] virtual std::string name() const = 0;
+    virtual void update(double deltaSeconds) = 0;
+};
+
+class IEcsWorld {
+public:
+    virtual ~IEcsWorld() = default;
+
+    virtual EntityId createEntity() = 0;
+    virtual void destroyEntity(EntityId entity) = 0;
+    [[nodiscard]] virtual bool isAlive(EntityId entity) const = 0;
+    virtual IEcsComponentStore& store(std::type_index componentType) = 0;
+};
+```
+
+```cpp
+// ecs.hpp — планировщик и запросы:
+class IEcsSystemScheduler {
+public:
+    virtual ~IEcsSystemScheduler() = default;
+
+    virtual void registerSystem(IEcsSystem& system) = 0;
+    virtual void unregisterSystem(IEcsSystem& system) = 0;
+    virtual void tick(double deltaSeconds) = 0;
+};
+
+class IEcsQueryService {
+public:
+    virtual ~IEcsQueryService() = default;
+
+    [[nodiscard]] virtual std::vector<EntityId> entitiesWith(
+        const std::vector<std::type_index>& componentTypes) const = 0;
+};
+
+// ecs_world.hpp — мир и типобезопасный доступ к хранилищам:
+class EcsWorld : public IEcsWorld, public IEcsSystemScheduler, public IEcsQueryService {
+public:
+    ~EcsWorld() override = default;
+
+    template <typename T>
+    TypedComponentStore<T>& storeFor() {
+        auto& slot = stores()[std::type_index(typeid(T))];
+        if (!slot) {
+            slot = std::make_unique<TypedComponentStore<T>>();
+        }
+        return static_cast<TypedComponentStore<T>&>(*slot);
+    }
+
+protected:
+    using StoreMap =
+        std::unordered_map<std::type_index, std::unique_ptr<IEcsComponentStore>>;
+
+    virtual StoreMap& stores() = 0;
+};
+
+std::unique_ptr<EcsWorld> createEcsWorld();
+```
+
+- `EntityId` — ровно одно поле `std::uint64_t value` (НЕ пара `index`/`generation`); `isValid()` — это `value != 0`; id выдаются с 1, `EntityId{0}` — невалидный.
+- `entitiesWith` принимает `const std::vector<std::type_index>&` (НЕ `std::set`) и возвращает `std::vector<EntityId>` — только живые сущности, имеющие ВСЕ указанные компоненты.
+- `TypedComponentStore<T>` (в `ecs_world.hpp`) реализует `IEcsComponentStore`; обязательные методы — `T& set(EntityId entity, T value)` и `T* get(EntityId entity)` (`nullptr`, если компонента нет); внутренний контейнер ключуется по `entity.value`.
+- `destroyEntity` удаляет компоненты сущности во всех зарегистрированных хранилищах; `store(type)` для незарегистрированного типа бросает исключение.
+- `tick(dt)` вызывает `update(dt)` у систем в порядке регистрации; `registerSystem`/`unregisterSystem` хранят ссылки, владение системами остаётся у вызывающего.
 
 **Общий порядок реализации фичи:**
 1. Объявить `EntityId` и контракты (store/system/world/scheduler/query) в `ecs.hpp`.
@@ -650,13 +1089,13 @@
 **Назначение файла:** контракты ECS.
 
 **Пошаговое описание действий:**
-1. Объявить `EntityId` с поколением.
+1. Объявить `EntityId` с полем `value`.
 2. Объявить `IEcsComponentStore`, `IEcsSystem`, `IEcsWorld`, `IEcsSystemScheduler`, `IEcsQueryService`.
 
 **Что должно быть в файле:**
 
 *Структуры / классы / enum:*
-- `struct EntityId { std::uint32_t index; std::uint32_t generation; }`
+- `struct EntityId { std::uint64_t value; … }` (`isValid()`, `operator<=>`)
 - `class IEcsComponentStore`
 - `class IEcsSystem`
 - `class IEcsWorld`
@@ -668,10 +1107,10 @@
 - `IEcsSystem`: `name()`, `update(double deltaSeconds)`
 - `IEcsWorld`: `createEntity()`, `destroyEntity(EntityId)`, `isAlive(EntityId)`, `store(std::type_index)`
 - `IEcsSystemScheduler`: `registerSystem(IEcsSystem&)`, `unregisterSystem(IEcsSystem&)`, `tick(double)`
-- `IEcsQueryService`: `entitiesWith(std::set<std::type_index> types)`
+- `IEcsQueryService`: `entitiesWith(const std::vector<std::type_index>& componentTypes)`
 
 *Логика функций / методов:*
-- `EntityId` — сущность с поколением (защита от повторного использования id).
+- `EntityId` — идентификатор сущности: поле `value` (`std::uint64_t`), id выдаются с 1, `EntityId{0}` — невалидный.
 - `componentType`/`has`/`remove`/`count` — доступ к хранилищу одного типа компонента.
 - `name`/`update` — система обрабатывает подходящие сущности за кадр (`deltaSeconds` — шаг времени).
 - `createEntity`/`destroyEntity`/`isAlive`/`store` — мир сущностей и доступ к хранилищу типа.
@@ -750,3 +1189,4 @@
 1. Создание/уничтожение сущности работает.
 2. `storeFor<T>().set/get` работают.
 3. `entitiesWith({type})` возвращает только сущности с этим компонентом.
+- **Приёмочный тест:** `tests/day1/ecs_core_tests.cpp` — собрать/запустить по команде из шапки; результат: `N checks, 0 failures` (для чекеров — все пункты ✓, код 0).

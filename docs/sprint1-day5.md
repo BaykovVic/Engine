@@ -1,5 +1,18 @@
 # Спринт 1. День 5
 
+## Общие требования ко всем фичам
+
+1. **Один PR — одна фича.** Не смешивать фичи и не менять файлы чужих контуров (например, `engine/core/include/sky/core/math.hpp` принадлежит E1).
+2. **Никаких артефактов сборки в git**: `.exe`, `.o`, `.obj`, `.spv`, каталоги `build/` — запрещены. Временные файлы (`tests/tmp/`) в PR не включать.
+3. **Namespace модуля обязателен** (`sky::core`, `sky::rendering`, `sky::object`, `sky::physics`, `sky::ecs`, ...). Код в глобальном namespace не принимается.
+4. **Интерфейсы**: секция `public:`, виртуальный деструктор `virtual ~IИмя() = default;`, чисто виртуальные методы (`= 0`).
+5. **Сигнатуры из задания копируются символ в символ** — включая `const`, `[[nodiscard]]`, типы возврата и параметры по умолчанию.
+6. **Include-стиль**: `#include "sky/<модуль>/<файл>.hpp"` при `-Iengine/<модуль>/include`; пути от корня репозитория запрещены. `<bits/stdc++.h>` запрещён, `#pragma once` обязателен в каждом заголовке.
+7. **Хэндлы** — только `core::Handle<Tag>`; в контейнерах ключ — `handle.value`. Собственные `std::hash<Handle>` и операторы в чужие заголовки не добавлять.
+8. **Критерий приёмки каждой фичи — её приёмочный тест** (указан в конце блока фичи). PR без зелёного теста не рассматривается.
+
+---
+
 ## feature/core-tests
 
 - **Исполнитель:** E1 (Ядро и данные)
@@ -9,6 +22,19 @@
 **Цель фичи:** проверить математику, объектный и компонентный миры.
 
 **Описание фичи:** зафиксировать корректность фундамента тестами; закрывает Этап 1 контура E1.
+
+**Обязательные требования:**
+
+1. **Тесты пишутся самостоятельно.** Это мета-фича: продукт дня — сами тесты. Копирование чужих готовых тестов не принимается; приёмка идёт по чек-листу покрытия (см. «Приёмочный тест» ниже).
+2. **Оформление.** Оба файла используют харнесс `tests/sky_test.hpp` (`CHECK`, `sky::test::summary`); `main()` возвращает результат `summary(...)` (0 — успех, 1 — есть провалы). Тесты зарегистрированы в `tests/CMakeLists.txt`, видны в `ctest` и линкуются с `sky_core`, `sky_object`, `sky_component`. Инклюды — в стиле `#include "sky/core/math.hpp"` (от include-корня модуля).
+3. **Обязательное покрытие `core_tests.cpp` (математика):**
+   - `rotate`: поворот на 90° вокруг Y переводит (0,0,1) в (1,0,0) с точностью ±1e-5 (кватернион `{0, sin45, 0, cos45}`); сравнения `float` — с допуском (`std::fabs(...) < eps`), не через `==`;
+   - `compose`: родитель с переносом И масштабом ≠ 1 — позиция ребёнка масштабируется и складывается; масштаб перемножается по компонентам;
+   - `invCompose`: круговая проверка `invCompose(parent, compose(parent, child)) ≈ child`, где `parent` имеет одновременно перенос, поворот и масштаб.
+4. **Обязательное покрытие `world_tests.cpp` (объектный мир):** `createObject`/`exists`/`nameOf`/`renameObject`; согласованность `setParent`/`parentOf`/`childrenOf` (у корня `parentOf` — невалидный хендл); отказ от цикла (перевесить предка под потомка нельзя); композиция трансформов по цепочке; ребёнок (1,0,0) под родителем, повёрнутым на 90° вокруг Y, в мире ≈ (0,0,-1); `setWorldTransform` читается обратно через `worldTransform`; `findByName` возвращает ВСЕ совпадения и пустой вектор для неизвестного имени; `destroyObject` удаляет всё поддерево.
+5. **Обязательное покрытие `world_tests.cpp` (компонентный мир):** `registerComponentType` + `availableTypes`; `attach` — валидный хендл для зарегистрированного типа, невалидный для незарегистрированного; согласованность `componentsOf`/`ownerOf`/`descriptorOf`; `detach` и `detachAllFrom`; поле КАЖДОГО из 5 типов `FieldValue` (`float`, `std::int64_t`, `bool`, `std::string`, `core::Vec3`) пишется через `setField` и читается через `field` без потерь; `fields(...)` возвращает все 5; отсутствующее имя поля → `nullopt`.
+6. **Детерминизм.** Без потоков, без чтения внешних файлов, без зависимости от порядка запусков.
+7. **Вне объёма дня:** event bus, job scheduler, диагностика, конфиг-сервис — покрывать не требуется.
 
 **Общий порядок реализации фичи:**
 1. Написать проверки математики в `core_tests.cpp`.
@@ -72,17 +98,40 @@
 2. Ребёнок (1,0,0) под родителем, повёрнутым на 90° вокруг Y, в мире = (0,0,-1).
 3. Поле каждого из 5 типов записывается и читается без потерь.
 
+- **Приёмочный тест:** `tests/day5/core_tests_checklist.md` — покрытие сдаваемых тестов сверяется проверяющим по этому чек-листу (оформление + math + объектный/компонентный миры); `ctest -R "core_tests|world_tests"` зелёный, а при искусственной поломке любой проверки возвращает код 1.
+
 ---
 
 ## feature/frame-builder
 
 - **Исполнитель:** E2 (Рендеринг)
 - **Порядок реализации:** 2
-- **Зависимости:** `feature/render-contract`, `feature/vulkan-mesh-lighting`, `feature/scene-world`; `EditorContext`
+- **Зависимости:** `feature/render-contract`, `feature/vulkan-mesh-lighting`. Полный объём (обход живой сцены) дополнительно требует `feature/scene-world` и `EditorContext` (`feature/editor-context`), которые появляются позже, — в этот день строится ядро построителя против этих абстракций; приёмка идёт на дублёре фабрики ресурсов (NullRenderer), GPU не нужен.
 
 **Цель фичи:** построитель кадра, обходящий сцену и формирующий поток команд отрисовки.
 
 **Описание фичи:** `FrameBuilder` привязан к `EditorContext` и фабрике ресурсов, обходит сцену и даёт непустой поток `RenderCommand`; плюс Qt-free фасад вьюпорта. Вторая фича Этапа 2 контура E2.
+
+**Обязательные требования:**
+
+Публичный контракт построителя (namespace `sky::editor`; файл header-only — методы реализуются inline), объявления — символ в символ:
+
+```cpp
+// editor/shell/src/frame_builder.hpp
+class FrameBuilder {
+public:
+    FrameBuilder(EditorContext& context, rendering::IRenderResourceFactory& factory);
+    void setCamera(std::optional<core::Transform> pose, float orthoHeight = 0.0f);
+    std::vector<rendering::RenderCommand> build(std::uint32_t width,
+                                                std::uint32_t height);
+};
+```
+
+- **Порядок команд кадра фиксирован:** `build` начинается с `BeginFrame` (ровно один, первая команда) → ровно один `SetViewport` с переданными `width`/`height` → ровно один `SetCamera` (раньше любого `DrawMesh`) → `AddLight` для каждого включённого источника света → `DrawMesh` для каждого включённого Mesh Renderer → `EndFrame` (ровно один, последняя команда).
+- **`setCamera`:** заданная поза попадает в команду `SetCamera` без изменений; `nullopt` — возврат к камере сцены (объект `Main Camera`, при его отсутствии — запасная поза); `orthoHeight > 0` — ортографическая проекция, `0` — перспектива.
+- **Детерминированность:** повторный `build` на неизменённой сцене даёт тот же поток команд; объекты обходятся в порядке иерархии (корни и их дети по порядку).
+- **Никакого GPU в ядре:** построитель работает только через `rendering::IRenderResourceFactory` и абстракции контекста (объекты/компоненты/трансформы) — проверяется дублёром фабрики (NullRenderer).
+- **Qt-free фасад:** `viewport_bridge.hpp` не включает Qt-заголовков; контракты `IPlayModeController` (`play`/`pause`/`stop`/`state`/`onStateChanged`) и `IRuntimePreviewHost` (`attachSurface`/`detachSurface`/`context`) — чисто виртуальные, в namespace `sky::editor`.
 
 **Общий порядок реализации фичи:**
 1. Объявить `FrameBuilder` с конструктором, `setCamera` и `build` в `frame_builder.hpp`.
@@ -155,6 +204,8 @@
 1. Демо-сцена рендерится с освещением.
 2. `FrameBuilder` даёт непустой поток команд (`RenderCommand` не пуст).
 
+- **Приёмочный тест:** `tests/day5/frame_builder_tests.cpp` — собирается с NullRenderer в роли фабрики ресурсов (GPU/Vulkan не нужен); проверяет обрамление кадра `BeginFrame`/`EndFrame`, единственный `SetCamera` раньше любого `DrawMesh`, размеры кадра в `SetViewport` и передачу позы/`orthoHeight` из `setCamera`; код выхода 0. Полная сборка возможна после появления `EditorContext` (спринт 2) — см. шапку теста.
+
 ---
 
 ## feature/hierarchy-tree
@@ -166,6 +217,28 @@
 **Цель фичи:** дерево объектов на живых данных через C-интерфейс.
 
 **Описание фичи:** дополнение P/Invoke иерархии и трансформа, перечитывание иерархии в `ObservableCollection<SkyObject>` и `TreeView` по корням. Вторая фича Этапа 2 контура E3.
+
+**Обязательные требования:**
+
+1. **Обязательные файлы вью — оба:** `HierarchyView.axaml` (разметка; именно в ней объявляется дерево) и `HierarchyView.axaml.cs` (code-behind).
+2. **Именно `TreeView`, не `ListBox`:** `<TreeView ItemsSource="{Binding Main.Roots}">` с иерархическим шаблоном `<TreeDataTemplate ItemsSource="{Binding Children}">`; узел показывает имя объекта (`{Binding Name}`).
+3. **P/Invoke иерархии и трансформа — символ в символ** (реализация — в мосте контура E5):
+
+```csharp
+// editor/avalonia/Engine/EngineInterop.cs
+[DllImport(Lib)] public static extern int sky_editor_root_count(IntPtr ctx);
+[DllImport(Lib)] public static extern ulong sky_editor_root_at(IntPtr ctx, int index);
+[DllImport(Lib)] public static extern int sky_editor_child_count(IntPtr ctx, ulong obj);
+[DllImport(Lib)] public static extern ulong sky_editor_child_at(IntPtr ctx, ulong obj, int index);
+[DllImport(Lib)] public static extern int sky_editor_object_name(IntPtr ctx, ulong obj, byte[] buffer, int capacity);
+[DllImport(Lib)] public static extern void sky_editor_get_transform(IntPtr ctx, ulong obj, float[]? position, float[]? rotation, float[]? scale);
+[DllImport(Lib)] public static extern int sky_editor_render_offscreen(IntPtr ctx, uint width, uint height, byte[] outRgba, int outLength);
+[DllImport(Lib)] public static extern void sky_editor_viewport_orbit(IntPtr ctx, float deltaYawDegrees, float deltaPitchDegrees);
+[DllImport(Lib)] public static extern void sky_editor_viewport_zoom(IntPtr ctx, float factor);
+```
+
+4. **Сессия:** класс `SkyObject` (`Id`, `Name`, `ObservableCollection<SkyObject> Children`) и `ObservableCollection<SkyObject> Roots`; `public void Reload()` перечитывает корни через `sky_editor_root_count`/`sky_editor_root_at`; `Load(id)` строит узел рекурсивно (`sky_editor_object_name` + `sky_editor_child_count`/`sky_editor_child_at`); `Transform(id)` возвращает позицию (3), кватернион (4), масштаб (3).
+5. **Живые данные:** имена и вложенность в дереве приходят из движка через C-интерфейс — хардкод-заглушки не принимаются.
 
 **Общий порядок реализации фичи:**
 1. Добавить P/Invoke иерархии и трансформа в `EngineInterop.cs`.
@@ -261,17 +334,40 @@
 1. Дерево объектов отражает сцену.
 2. В дереве — имена и вложенность объектов движка.
 
+- **Приёмочный тест:** `tests/day5/hierarchy_tree_check.py` — `python3 tests/day5/hierarchy_tree_check.py <корень_репозитория>`, код выхода 0 (структурная проверка: все 9 P/Invoke, `Roots`/`Reload`/`Load`/`Transform`, `TreeView` с `TreeDataTemplate ItemsSource="{Binding Children}"`); плюс ручной smoke-тест из шапки скрипта, когда доступны dotnet и мост E5.
+
 ---
 
 ## feature/input-state
 
 - **Исполнитель:** E4 (Рантайм и физика)
 - **Порядок реализации:** 4
-- **Зависимости:** `EditorContext` (`feature/editor-context`)
+- **Зависимости:** нет. Полный `EditorContext` (`feature/editor-context`) появляется только в спринте 2 — в этот день `editor/shell/src/editor_context.hpp` создаётся как минимальный самостоятельный каркас класса с состоянием ввода; позже его дорастит спринт 2.
 
 **Цель фичи:** состояние клавиш, доступное движку и скриптам.
 
 **Описание фичи:** часть Этапа 3 (режим воспроизведения и ввод) — inline-методы состояния ввода в `EditorContext`.
+
+**Обязательные требования:**
+
+Полного `EditorContext` в этот день ещё нет — файл создаётся как минимальный самостоятельный каркас класса. Сигнатуры методов — символ в символ:
+
+```cpp
+// editor/shell/src/editor_context.hpp (namespace sky::editor; минимальный каркас)
+class EditorContext {
+public:
+    void setKeyDown(int key, bool down);        // реализуется inline
+    [[nodiscard]] bool keyDown(int key) const;  // реализуется inline
+private:
+    std::unordered_set<int> keysDown_;
+};
+```
+
+1. **Семантика множества, а не счётчика:** `setKeyDown(key, true)` заносит клавишу в `keysDown_`, `setKeyDown(key, false)` снимает; никакого счётчика вложенных нажатий и никакой пофреймовой очистки на этом уровне нет — состояние удержания живёт, пока клавишу не отпустили.
+2. **Идемпотентность автоповтора:** клавиатура шлёт KeyDown многократно — повторное `setKeyDown(key, true)` ничего не «копит», одного отпускания достаточно; отпускание ненажатой (или уже отпущенной) клавиши безопасно и ничего не меняет.
+3. **Аккорды:** несколько клавиш удерживаются одновременно (WASD + модификаторы); отпускание одной не трогает остальные.
+4. **Const-чтение:** `keyDown` обязан быть `const` и возвращать `bool` — вызывается на const-контексте, чтение не мутирует состояние (скрипты только читают через `Input.GetKey`).
+5. **Переносимые коды клавиш:** ASCII верхнего регистра для букв/цифр, пробел = 32, именованные клавиши с 256 (зеркалятся managed-перечислением `SkyEngine.KeyCode`).
 
 **Общий порядок реализации фичи:**
 1. Дополнить `editor_context.hpp` inline-методами состояния ввода.
@@ -311,6 +407,8 @@
 **Общий критерий правильности:**
 1. состояние клавиш доступно движку; после `play → stop` сцена в исходном состоянии, тела без остаточной скорости.
 
+- **Приёмочный тест:** `tests/day5/input_state_tests.cpp` — компилируется одним заголовком (`g++ -std=c++20 -O1 -I editor/shell/src tests/day5/input_state_tests.cpp`; линковать движок не нужно — методы inline) и проходит с кодом выхода 0: исходное состояние, нажатие/отпускание, аккорды, идемпотентность автоповтора, const-чтение.
+
 ---
 
 ## feature/asset-database
@@ -322,6 +420,58 @@
 **Цель фичи:** база ассетов и контракт импортёра.
 
 **Описание фичи:** часть Этапа 3 (импортёры, виртуальная ФС, тесты интерфейса) — контракт `IAssetImporter` и `AssetDatabase` с импортом и разрешением ассетов.
+
+**Обязательные требования:**
+
+Контракт модуля (namespace `sky::asset`). Интерфейсы приводятся без секций `public:` и виртуальных деструкторов (`virtual ~IИмя() = default;` обязателен по общим требованиям, п. 4); объявления — символ в символ, при расхождении с сокращёнными сигнатурами в описаниях файлов ниже приоритет у этого блока:
+
+```cpp
+// engine/asset/include/sky/asset/asset_system.hpp
+struct AssetId {
+    std::uint64_t value = 0;
+    [[nodiscard]] bool isValid() const noexcept { return value != 0; }
+    auto operator<=>(const AssetId&) const = default;
+};
+struct AssetDescriptor {
+    AssetId id;
+    std::string assetType;
+    std::filesystem::path sourcePath;
+    std::vector<AssetId> dependencies;
+    std::uint64_t contentVersion = 0;
+};
+class IAssetResolver {
+    [[nodiscard]] virtual std::optional<AssetDescriptor> resolve(AssetId id) const = 0;
+    [[nodiscard]] virtual std::optional<AssetId> findBySourcePath(
+        const std::filesystem::path& sourcePath) const = 0;
+};
+class IAssetRegistry {
+    virtual AssetId registerAsset(const AssetDescriptor& descriptor) = 0;
+    virtual void unregisterAsset(AssetId id) = 0;
+    [[nodiscard]] virtual std::vector<AssetId> dependentsOf(AssetId id) const = 0;
+    [[nodiscard]] virtual std::vector<AssetDescriptor> allAssets() const = 0;
+};
+class IAssetImporter {
+    [[nodiscard]] virtual bool supports(const std::filesystem::path& sourcePath) const = 0;
+    virtual std::optional<AssetDescriptor> import(const std::filesystem::path& sourcePath) = 0;
+};
+class IImportPipeline {
+    virtual void registerImporter(IAssetImporter& importer) = 0;
+    virtual std::optional<AssetId> importAsset(const std::filesystem::path& sourcePath) = 0;
+    virtual bool reimport(AssetId id) = 0;
+};
+// engine/asset/include/sky/asset/asset_database.hpp
+class AssetDatabase : public IAssetResolver, public IAssetRegistry, public IImportPipeline {
+public:
+    ~AssetDatabase() override = default;
+};
+std::unique_ptr<AssetDatabase> createAssetDatabase();
+AssetId assetIdFromPath(const std::filesystem::path& sourcePath);
+```
+
+1. **`assetIdFromPath` — стабильная валидная идентичность** из нормализованного пути источника (FNV-1a): одинаковый путь → одинаковый id (переживает переоткрытие проекта и повторный импорт), разный путь → разный id; разделители и `.`-сегменты нормализуются; всё ссылается на `AssetId`, никогда на путь.
+2. **Реестр согласован:** `registerAsset`/`resolve`/`findBySourcePath`/`unregisterAsset` работают в связке; `allAssets` возвращает все записи; после `unregisterAsset` ассет не разрешается.
+3. **Конвейер импорта:** `importAsset` выбирает импортёр через `supports`; неподдерживаемый источник отклоняется (`nullopt`); `reimport` сохраняет id и повышает `contentVersion` (1 → 2).
+4. **Граф зависимостей:** `dependentsOf` — обратный запрос («кто зависит от id»), корректный и напрямую, и после `unregisterAsset` зависимого.
 
 **Общий порядок реализации фичи:**
 1. Объявить `IAssetImporter` в `asset_system.hpp`.
@@ -421,6 +571,8 @@
 **Общий критерий правильности:**
 1. `asset_project_tests` зелёный (импорт и разрешение ассетов).
 
+- **Приёмочный тест:** `tests/day5/asset_database_tests.cpp` — `g++ -std=c++20 tests/day5/asset_database_tests.cpp engine/asset/src/asset_database.cpp -Iengine/asset/include -o asset_database_tests && ./asset_database_tests`, код выхода 0: идентичность (`assetIdFromPath`), реестр, `dependentsOf` и конвейер импорта (`reimport`: `contentVersion` 1 → 2) на локальном дублёре импортёра.
+
 ---
 
 ## feature/ecs-multithreading
@@ -433,6 +585,43 @@
 
 **Описание фичи:** единственная фича Этапа 4 контура E6 — раскладка систем по `IJobScheduler` и барьер перед синхронизацией.
 
+**Обязательные требования:**
+
+Контракт планировщика (namespace `sky::core`) — символ в символ; точка внедрения планировщика в мир ECS фиксируется этим заданием (без неё фича нереализуема):
+
+```cpp
+// engine/core/include/sky/core/job_scheduler.hpp
+struct JobHandle {
+    std::uint64_t value = 0;
+
+    [[nodiscard]] bool isValid() const noexcept { return value != 0; }
+};
+
+class IJobScheduler {
+public:
+    virtual ~IJobScheduler() = default;
+
+    using Job = std::function<void()>;
+
+    virtual JobHandle schedule(Job job) = 0;
+    virtual JobHandle scheduleAfter(JobHandle dependency, Job job) = 0;
+    virtual void wait(JobHandle job) = 0;
+};
+
+// engine/core/include/sky/core/runtime_services.hpp — объявление пула потоков
+std::unique_ptr<IJobScheduler> createThreadPoolScheduler(unsigned threadCount = 0);
+
+// engine/ecs/include/sky/ecs/ecs_world.hpp — точка внедрения (фиксируется заданием)
+std::unique_ptr<EcsWorld> createEcsWorld(core::IJobScheduler* scheduler = nullptr);
+```
+
+1. **Точка внедрения:** перегрузка `createEcsWorld(core::IJobScheduler* scheduler = nullptr)` — при `nullptr` `tick` остаётся последовательным (существующие вызовы `createEcsWorld()` не меняются).
+2. **Зависимость систем — по порядку регистрации:** независимые системы уходят в `schedule`; система, читающая данные ранее зарегистрированной, ставится через `scheduleAfter` от неё — порядок `update` относительно порядка регистрации сохраняется.
+3. **Хранилища компонентов не потокобезопасны** — планировщик не пускает конфликтующие системы одновременно; параллелизм допустим только между системами без общих данных.
+4. **`tick` — барьер:** до возврата из `tick` стоит `wait` по всем поставленным задачам, поэтому `pullEcsResults` видит финальные значения; каждая система выполняется ровно один раз за tick.
+5. **Критерий приёмки — эквивалентность:** результат параллельного `tick` побитово совпадает с контрольным последовательным расчётом; повторные прогоны детерминированы.
+6. **Запрет sleep и тайминговых проверок:** порядок наблюдается через `wait` и атомики, а не через задержки — результат одинаков на любом числе ядер. Пул потоков (`engine/core/src/job_scheduler.cpp`, `createThreadPoolScheduler`) — часть фичи: рабочая реализация контракта в движке; приёмочный тест проверяет сам контракт локальным многопоточным дублёром.
+
 **Общий порядок реализации фичи:**
 1. Использовать контракт `IJobScheduler` из заготовки `job_scheduler.hpp`.
 2. В `tick` разложить независимые системы по `schedule`, зависимые — через `scheduleAfter`.
@@ -441,6 +630,7 @@
 **Файлы фичи:**
 1. `engine/core/include/sky/core/job_scheduler.hpp`
 2. `engine/ecs/src/ecs_world.cpp`
+3. `engine/core/src/job_scheduler.cpp` (пул потоков — `createThreadPoolScheduler`; объявление — в `runtime_services.hpp`)
 
 ### Файл: `engine/core/include/sky/core/job_scheduler.hpp`
 
@@ -497,7 +687,10 @@
 **Список артефактов фичи:**
 1. `engine/core/include/sky/core/job_scheduler.hpp`
 2. `engine/ecs/src/ecs_world.cpp` (параллельный `tick`)
+3. `engine/core/src/job_scheduler.cpp` (пул потоков `createThreadPoolScheduler`)
 
 **Общий критерий правильности:**
 1. Параллельный tick независимых систем через `IJobScheduler`.
 2. Результат детерминирован и совпадает с однопоточным (тест эквивалентности).
+
+- **Приёмочный тест:** `tests/day5/ecs_multithreading_tests.cpp` — одна команда g++ из шапки теста (`tests/day5/ecs_multithreading_tests.cpp` + `engine/ecs/src/ecs_world.cpp` + `engine/ecs/src/object_sync.cpp`, `-pthread`), код выхода 0: контракт `schedule`/`scheduleAfter`/`wait` проверяется локальным многопоточным дублёром, эквивалентность `tick` контрольному последовательному расчёту — побитово (повторные прогоны детерминированы), каждая система выполняется ровно один раз за tick, барьер перед `pullEcsResults` — через цикл push → tick → pull; без sleep и тайминговых проверок.
