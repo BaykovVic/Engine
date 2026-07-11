@@ -16,6 +16,7 @@ constexpr serialization::SchemaVersion kSceneSchemaLegacy{1, 0};
 constexpr serialization::SchemaVersion kSceneSchemaV11{1, 1};
 constexpr serialization::SchemaVersion kSceneSchemaVersion{1, 2};
 constexpr std::uint32_t kNoParent = 0xFFFFFFFFu;
+constexpr double kPhysicsFixedStep = 1.0 / 60.0;
 
 enum class FieldTag : std::uint32_t {
     Float = 0,
@@ -285,6 +286,8 @@ bool readTransform(serialization::ByteReader& reader, core::Transform& transform
 
 class SceneWorldImpl final : public SceneWorld {
 public:
+    ~SceneWorldImpl() override { finishPendingPhysics(); }
+
     explicit SceneWorldImpl(const SceneWorldDeps& deps) : deps_(deps) {
         if (deps_.migrations != nullptr) {
             deps_.migrations->registerMigration(kSceneSchemaId, kSceneSchemaLegacy,
@@ -449,6 +452,8 @@ public:
         if (record == nullptr) {
             return;
         }
+        // Land any in-flight async step before anyone reads final state.
+        finishPendingPhysics();
         record->state = SceneState::Loaded;
         if (activeScene_ == scene) {
             context_ = {scene, SceneState::Loaded, record->rootObjects};
@@ -460,19 +465,25 @@ public:
     void tick(double deltaSeconds) override {
         // Frame order per the architecture data flow: object/component edits
         // are immediate, then physics (fixed step), then ECS systems.
-        // Scripting callbacks slot in once the Scripting Boundary lands.
+        // With a physics job scheduler attached the frame model flips to
+        // Unigine-style async: the PREVIOUS frame's simulation lands first,
+        // systems and scripts run against it, and this frame's steps are
+        // scheduled at the end — overlapping the caller's render.
         if (context_.state != SceneState::RuntimeActive) {
             return;
         }
-        if (deps_.physicsWorld != nullptr) {
-            constexpr double kFixedStep = 1.0 / 60.0;
+        const bool asyncPhysics =
+            deps_.physicsWorld != nullptr && physicsJobs_ != nullptr;
+        if (asyncPhysics) {
+            finishPendingPhysics();
+        } else if (deps_.physicsWorld != nullptr) {
             if (deps_.physicsSync != nullptr) {
                 deps_.physicsSync->pushKinematicState();
             }
             physicsAccumulator_ += deltaSeconds;
-            while (physicsAccumulator_ >= kFixedStep) {
-                deps_.physicsWorld->step(kFixedStep);
-                physicsAccumulator_ -= kFixedStep;
+            while (physicsAccumulator_ >= kPhysicsFixedStep) {
+                deps_.physicsWorld->step(kPhysicsFixedStep);
+                physicsAccumulator_ -= kPhysicsFixedStep;
             }
             if (deps_.physicsSync != nullptr) {
                 deps_.physicsSync->pullSimulationResults();
@@ -490,11 +501,25 @@ public:
             }
         }
         // Managed scripts run last in the frame, per the architecture's
-        // runtime-frame data flow.
+        // runtime-frame data flow. In async mode the caller runs its own
+        // script layer after this and then calls schedulePhysics().
         if (deps_.scriptBridge != nullptr) {
             deps_.scriptBridge->dispatchAll(scripting::ScriptLifecycleEvent::OnUpdate,
                                             deltaSeconds);
         }
+    }
+
+    void setPhysicsJobScheduler(core::IJobScheduler* scheduler) override {
+        finishPendingPhysics(); // drain under the old scheduler first
+        physicsJobs_ = scheduler;
+    }
+
+    void schedulePhysics(double deltaSeconds) override {
+        if (context_.state != SceneState::RuntimeActive ||
+            deps_.physicsWorld == nullptr || physicsJobs_ == nullptr) {
+            return; // synchronous mode already stepped inside tick()
+        }
+        beginAsyncPhysics(deltaSeconds);
     }
 
     // ISceneQueryService
@@ -617,12 +642,57 @@ private:
         }
     }
 
+    /// Joins the in-flight step job and applies its results to the objects.
+    /// Safe to call in any state; a no-op when nothing is pending.
+    void finishPendingPhysics() {
+        if (physicsJobPending_) {
+            physicsJobs_->wait(physicsJob_);
+            physicsJobPending_ = false;
+        }
+        if (physicsRoundOpen_) {
+            physicsRoundOpen_ = false;
+            if (deps_.physicsSync != nullptr) {
+                deps_.physicsSync->pullSimulationResults();
+            }
+        }
+    }
+
+    /// Pushes the authored state and schedules this frame's fixed steps in
+    /// the background. Step count is decided on the main thread, so the
+    /// step sequence is identical to the synchronous mode.
+    void beginAsyncPhysics(double deltaSeconds) {
+        if (deps_.physicsSync != nullptr) {
+            deps_.physicsSync->pushKinematicState();
+        }
+        physicsRoundOpen_ = true;
+        physicsAccumulator_ += deltaSeconds;
+        int steps = 0;
+        while (physicsAccumulator_ >= kPhysicsFixedStep) {
+            physicsAccumulator_ -= kPhysicsFixedStep;
+            ++steps;
+        }
+        if (steps == 0) {
+            return; // pushed, nothing to simulate this frame
+        }
+        auto* world = deps_.physicsWorld;
+        physicsJob_ = physicsJobs_->schedule([world, steps] {
+            for (int i = 0; i < steps; ++i) {
+                world->step(kPhysicsFixedStep);
+            }
+        });
+        physicsJobPending_ = true;
+    }
+
     SceneWorldDeps deps_;
     std::uint64_t nextId_ = 1;
     std::unordered_map<std::uint64_t, SceneRecord> scenes_;
     SceneHandle activeScene_;
     SceneRuntimeContext context_;
     double physicsAccumulator_ = 0.0;
+    core::IJobScheduler* physicsJobs_ = nullptr;
+    core::JobHandle physicsJob_{};
+    bool physicsJobPending_ = false;
+    bool physicsRoundOpen_ = false;
 };
 
 } // namespace

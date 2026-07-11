@@ -14,6 +14,7 @@
 
 #include "editor_context.hpp"
 #include "frame_builder.hpp"
+#include "sky/core/runtime_services.hpp"
 #if defined(__APPLE__)
 #include "sky/platform/cocoa_window_system.hpp"
 #else
@@ -67,6 +68,8 @@ int runHeadless(EditorContext& context, int frames, const char* screenshotPath) 
     for (int frame = 0; frame < frames; ++frame) {
         context.playMode->tickFrame(1.0 / 60.0);
         context.tickScripts(1.0 / 60.0);
+        // All script work is done: this frame's physics overlaps the render.
+        context.scenes->schedulePhysics(1.0 / 60.0);
         renderer->submit(builder.build(kWidth, kHeight));
         renderer->renderFrame();
     }
@@ -147,6 +150,8 @@ int runWindowed(EditorContext& context, int frameLimit) {
         const double step = std::min(dt, 0.1);
         context.playMode->tickFrame(step);
         context.tickScripts(step);
+        // All script work is done: this frame's physics overlaps the render.
+        context.scenes->schedulePhysics(step);
         renderer->submit(builder.build(renderer->frameWidth(),
                                        renderer->frameHeight()));
         renderer->renderFrame();
@@ -182,7 +187,14 @@ int main(int argc, char** argv) {
 
     // Without a scene the player runs the built-in demo world; with one it loads
     // the authored scene (the editor's Save -> ship -> run loop).
+    // The scheduler is declared before the context: the scene world holds a
+    // raw pointer to it, so it must outlive the context.
+    const auto physicsJobs = sky::core::createThreadPoolScheduler(1);
     EditorContext context;
+    // Unigine-style async frame model: physics steps overlap the render and
+    // land one frame later. The standalone player owns its loop, so the
+    // overlap is safe; the editor stays synchronous.
+    context.scenes->setPhysicsJobScheduler(physicsJobs.get());
     if (scenePath != nullptr) {
         if (context.openScene(scenePath)) {
             std::printf("sky_player: loaded scene %s\n", scenePath);

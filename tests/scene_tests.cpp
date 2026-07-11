@@ -1,7 +1,9 @@
 #include <filesystem>
 
 #include "sky/component/component_world.hpp"
+#include "sky/core/runtime_services.hpp"
 #include "sky/object/object_world.hpp"
+#include "sky/physics/physics_world.hpp"
 #include "sky/platform/platform_services.hpp"
 #include "sky/scene/scene_authoring.hpp"
 #include "sky/scene/scene_world.hpp"
@@ -227,6 +229,57 @@ void testLegacyV11SceneMigrates() {
                                 "sky_engine_tests" / "scene");
 }
 
+void testAsyncPhysicsMatchesSync() {
+    // The async frame model must not change the simulation: step counts are
+    // decided on the main thread, so N ticks produce the exact same body
+    // state as the synchronous mode — results just land on the objects one
+    // frame later, and deactivate() drains the last step.
+    struct Result {
+        float bodyY = 0;
+        float objectY = 0;
+    };
+    const auto run = [](sky::core::IJobScheduler* jobs) {
+        SceneFixture fx;
+        const auto physics = sky::physics::createPhysicsWorld();
+        const auto sync =
+            sky::physics::createObjectPhysicsSync(*physics, *fx.objects);
+        sky::scene::SceneWorldDeps deps{*fx.objects,    *fx.objects,
+                                        *fx.objects,    *fx.components,
+                                        *fx.components, *fx.storage};
+        deps.physicsWorld = physics.get();
+        deps.physicsSync = sync.get();
+        const auto scenes = sky::scene::createSceneWorld(deps);
+        if (jobs != nullptr) {
+            scenes->setPhysicsJobScheduler(jobs);
+        }
+
+        const auto scene = scenes->createScene({"sim", {}});
+        const auto crate = fx.objects->createObject("crate");
+        fx.objects->setLocalTransform(crate, {{0, 20, 0}, {}, {1, 1, 1}});
+        scenes->addRootObject(scene, crate);
+        const auto body = physics->createBody(
+            {sky::physics::BodyType::Dynamic, 1.0f, {{0, 20, 0}, {}, {1, 1, 1}}});
+        sync->bind(body, crate);
+
+        scenes->activate(scene);
+        for (int i = 0; i < 60; ++i) {
+            scenes->tick(1.0 / 60.0);
+            scenes->schedulePhysics(1.0 / 60.0); // no-op in sync mode
+        }
+        scenes->deactivate(scene); // drains the in-flight async step
+        return Result{physics->bodyTransform(body).position.y,
+                      fx.objects->localTransform(crate).position.y};
+    };
+
+    const auto syncRun = run(nullptr);
+    const auto jobs = sky::core::createThreadPoolScheduler(1);
+    const auto asyncRun = run(jobs.get());
+
+    CHECK(syncRun.bodyY == asyncRun.bodyY);     // bit-exact step sequence
+    CHECK(syncRun.objectY == asyncRun.objectY); // objects converge on drain
+    CHECK(syncRun.bodyY < 19.0f);               // and the body actually fell
+}
+
 void testLoadRejectsCorruptScene() {
     SceneFixture fx;
     const auto path =
@@ -287,6 +340,7 @@ int main() {
     testSceneRoundTrip();
     testGuidReferenceResolution();
     testLegacyV11SceneMigrates();
+    testAsyncPhysicsMatchesSync();
     testLoadRejectsCorruptScene();
     testSceneAuthoring();
     return sky::test::summary("scene_tests");

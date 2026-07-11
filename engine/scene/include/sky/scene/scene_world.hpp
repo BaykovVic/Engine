@@ -6,6 +6,7 @@
 #include <string>
 
 #include "sky/component/component_world.hpp"
+#include "sky/core/job_scheduler.hpp"
 #include "sky/ecs/ecs.hpp"
 #include "sky/ecs/object_sync.hpp"
 #include "sky/object/object_model.hpp"
@@ -72,6 +73,22 @@ public:
     /// The current root objects of a scene (after load, to rebuild editor state).
     [[nodiscard]] virtual std::vector<object::ObjectHandle> rootObjectsOf(
         SceneHandle scene) const = 0;
+
+    /// Moves the fixed-step physics onto the scheduler (Unigine-style async
+    /// frame model): tick() applies the PREVIOUS frame's simulation results
+    /// and runs systems against them; the caller then finishes ALL of its
+    /// script work and calls schedulePhysics(dt), whose background steps
+    /// overlap the render — at the cost of a one-frame lag. nullptr returns
+    /// to synchronous stepping (schedulePhysics becomes a no-op). The
+    /// pending step is always drained before results are read
+    /// (deactivate/unload/scheduler swap).
+    virtual void setPhysicsJobScheduler(core::IJobScheduler* scheduler) = 0;
+
+    /// Async mode only: pushes the authored state and schedules this
+    /// frame's fixed steps in the background. Call it strictly after every
+    /// piece of code that may touch the physics world this frame — the job
+    /// runs concurrently with everything that follows.
+    virtual void schedulePhysics(double deltaSeconds) = 0;
 };
 
 std::unique_ptr<SceneWorld> createSceneWorld(const SceneWorldDeps& deps);
