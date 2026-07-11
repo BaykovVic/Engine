@@ -4,6 +4,7 @@
 #include <thread>
 
 #include "sky/core/math.hpp"
+#include "sky/core/random.hpp"
 #include "sky/core/runtime_services.hpp"
 #include "sky_test.hpp"
 
@@ -94,6 +95,33 @@ void testMath() {
     CHECK(nearlyEqual(world.scale.x, 2.0f));
 }
 
+void testPcg32() {
+    // Reference vectors of the canonical PCG32 (seed 42, sequence 54). The
+    // managed SkyEngine.Random asserts the SAME constants in the bridge
+    // tests — together they prove the two implementations are one generator.
+    sky::core::Pcg32 rng(42);
+    CHECK(rng.next() == 0xa15c02b7u);
+    CHECK(rng.next() == 0x7b47f409u);
+    CHECK(rng.next() == 0xba1d3330u);
+    CHECK(rng.next() == 0x83d2f293u);
+
+    // Reseeding replays the sequence exactly.
+    rng.reseed(42);
+    CHECK(rng.next() == 0xa15c02b7u);
+
+    // Derived draws stay in their contracts.
+    sky::core::Pcg32 draws(7);
+    for (int i = 0; i < 100; ++i) {
+        const float f = draws.nextFloat();
+        CHECK(f >= 0.0f);
+        CHECK(f < 1.0f);
+        const auto n = draws.range(-3, 5);
+        CHECK(n >= -3);
+        CHECK(n < 5);
+    }
+    CHECK(draws.range(2, 2) == 2); // empty span degrades to min
+}
+
 } // namespace
 
 int main() {
@@ -102,5 +130,6 @@ int main() {
     testJobScheduler();
     testDiagnostics();
     testMath();
+    testPcg32();
     return sky::test::summary("core_tests");
 }

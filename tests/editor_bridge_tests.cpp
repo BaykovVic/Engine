@@ -570,6 +570,124 @@ void testBridgeFixedUpdate() {
 #endif
 }
 
+// The determinism contract, end to end: two identical play sessions — same
+// seed, same injected input, a mid-run Time.TimeScale change — produce
+// bit-identical script motion, the same fixed-step count and the same RNG
+// draws. Also pins SkyEngine.Random to the native Pcg32 reference vectors.
+void testBridgeDeterministicReplay() {
+#ifdef SKY_TEST_MANAGED
+    struct RunResult {
+        float position[3] = {0, 0, 0};
+        std::string rngLine;
+        std::string finalLine;
+    };
+    const auto run = [] {
+        RunResult result;
+        SkyEditorContext* ctx = sky_editor_create();
+        char root[512] = {0};
+        sky_editor_assets_root(ctx, root, sizeof(root));
+        const std::filesystem::path scriptsDir =
+            std::filesystem::path(root) / "Scripts";
+        std::error_code stale;
+        std::filesystem::remove_all(scriptsDir, stale);
+        std::filesystem::create_directories(scriptsDir);
+        {
+            std::ofstream source(scriptsDir / "DetProbe.cs");
+            source << "namespace SkyProject;\n"
+                   << "public class DetProbe : SkyEngine.ScriptComponent\n"
+                   << "{\n"
+                   << "    private int _frame; private int _fixed; private float _x;\n"
+                   << "    public override void OnStart()\n"
+                   << "    {\n"
+                   << "        SkyEngine.Random.InitState(42);\n"
+                   << "        SkyEngine.Debug.Log(\"rng=\" + SkyEngine.Random.NextUInt()"
+                   << " + \",\" + SkyEngine.Random.NextUInt()"
+                   << " + \",\" + SkyEngine.Random.NextUInt());\n"
+                   << "    }\n"
+                   << "    public override void OnFixedUpdate(double dt) { _fixed++; }\n"
+                   << "    public override void OnUpdate(double dt)\n"
+                   << "    {\n"
+                   << "        _frame++;\n"
+                   << "        if (_frame == 30) SkyEngine.Time.TimeScale = 0.5;\n"
+                   << "        var step = SkyEngine.Random.Range(0.0f, 1.0f)"
+                   << " + (SkyEngine.Input.GetKey(SkyEngine.KeyCode.W) ? 1.0f : 0.0f);\n"
+                   << "        _x += step * (float)dt;\n"
+                   << "        SetLocalPosition(_x, 0.5f, 0.0f);\n"
+                   << "        if (_frame == 60)\n"
+                   << "            SkyEngine.Debug.Log(\"final x=\" + _x.ToString(\"R\")"
+                   << " + \" fixed=\" + _fixed"
+                   << " + \" scale=\" + SkyEngine.Time.TimeScale);\n"
+                   << "    }\n"
+                   << "}\n";
+        }
+        CHECK(sky_editor_reload_scripts(ctx) == 1);
+
+        const SkyObjectId object =
+            sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "DetProbe");
+        sky_editor_add_component(ctx, object, "sky.script");
+        int32_t script = -1;
+        for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+            char type[64] = {0};
+            sky_editor_component_type(ctx, object, i, type, sizeof(type));
+            if (std::strcmp(type, "sky.script") == 0) {
+                script = i;
+            }
+        }
+        CHECK(script >= 0);
+        sky_editor_set_component_field(ctx, object, script, 0,
+                                       "SkyProject.DetProbe");
+
+        // The recorded session: W held on frames 10..24, 60 frames total.
+        CHECK(sky_editor_play(ctx) == 1);
+        for (int frame = 1; frame <= 60; ++frame) {
+            sky_editor_set_key_state(ctx, 'W',
+                                     frame >= 10 && frame < 25 ? 1 : 0);
+            sky_editor_tick_play(ctx, 1.0 / 60.0);
+        }
+        sky_editor_get_transform(ctx, object, result.position, nullptr, nullptr);
+        for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+            char line[512] = {0};
+            sky_editor_log_text(ctx, i, line, sizeof(line));
+            if (std::strstr(line, "rng=") != nullptr) {
+                result.rngLine = line;
+            }
+            if (std::strstr(line, "final x=") != nullptr) {
+                result.finalLine = line;
+            }
+        }
+        sky_editor_stop(ctx);
+        sky_editor_destroy(ctx);
+        std::error_code cleanup;
+        std::filesystem::remove_all(scriptsDir, cleanup);
+        return result;
+    };
+
+    const auto first = run();
+    const auto second = run();
+
+    // The managed generator IS the native Pcg32: same reference vectors as
+    // core_tests' testPcg32 (seed 42).
+    CHECK(first.rngLine.find("rng=2707161783,2068313097,3122475824") !=
+          std::string::npos);
+    // 30 frames at scale 1 (30 steps) + 30 frames at 0.5 (15 steps): the
+    // time scale reached the fixed-step accumulator; the getter round-trips.
+    CHECK(first.finalLine.find("fixed=45") != std::string::npos);
+    CHECK(first.finalLine.find("scale=0.5") != std::string::npos);
+    if (first.finalLine.find("fixed=45") == std::string::npos ||
+        first.rngLine.find("rng=2707161783") == std::string::npos) {
+        std::printf("rngLine:   %s\nfinalLine: %s\n", first.rngLine.c_str(),
+                    first.finalLine.c_str());
+    }
+
+    // Replay: the second session is bit-identical to the first.
+    CHECK(std::memcmp(first.position, second.position,
+                      sizeof(first.position)) == 0);
+    CHECK(first.finalLine == second.finalLine);
+    CHECK(first.rngLine == second.rngLine);
+    CHECK(first.position[0] > 0.0f); // and the cube actually moved
+#endif
+}
+
 std::string componentField(SkyEditorContext* ctx, SkyObjectId object,
                            const char* typeId, int32_t fieldIndex) {
     for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
@@ -1141,6 +1259,7 @@ int main() {
     testBridgeScriptFields();
     testBridgeUserScripts();
     testBridgeFixedUpdate();
+    testBridgeDeterministicReplay();
     testBridgePrefabs();
     testBridgeScriptEngineApi();
     testBridgePackagePersistence();

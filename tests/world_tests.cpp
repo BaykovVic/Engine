@@ -155,6 +155,48 @@ void testEcsWorld() {
     world->unregisterSystem(system);
 }
 
+class OrderProbeSystem final : public sky::ecs::IEcsSystem {
+public:
+    OrderProbeSystem(std::string name, std::vector<std::string>& log)
+        : name_(std::move(name)), log_(log) {}
+
+    std::string name() const override { return name_; }
+    void update(double) override { log_.push_back(name_); }
+
+private:
+    std::string name_;
+    std::vector<std::string>& log_;
+};
+
+void testEcsSystemOrderIsRegistrationOrder() {
+    // Determinism contract: systems tick in registration order, every frame,
+    // regardless of names or registration count. Simulation code may rely on
+    // "A registered before B" as an ordering guarantee.
+    const auto world = sky::ecs::createEcsWorld();
+    std::vector<std::string> log;
+    OrderProbeSystem zulu("zulu", log);
+    OrderProbeSystem alpha("alpha", log);
+    OrderProbeSystem mike("mike", log);
+    world->registerSystem(zulu);
+    world->registerSystem(alpha);
+    world->registerSystem(mike);
+
+    world->tick(0.016);
+    world->tick(0.016);
+    const std::vector<std::string> expected{"zulu", "alpha", "mike",
+                                            "zulu", "alpha", "mike"};
+    CHECK(log == expected);
+
+    // Unregistering keeps the relative order of the survivors.
+    world->unregisterSystem(alpha);
+    log.clear();
+    world->tick(0.016);
+    CHECK((log == std::vector<std::string>{"zulu", "mike"}));
+
+    world->unregisterSystem(zulu);
+    world->unregisterSystem(mike);
+}
+
 } // namespace
 
 void testDataAsset() {
@@ -212,6 +254,7 @@ int main() {
     testWorldTransformWriteback();
     testComponentWorld();
     testEcsWorld();
+    testEcsSystemOrderIsRegistrationOrder();
     testDataAsset();
     return sky::test::summary("world_tests");
 }

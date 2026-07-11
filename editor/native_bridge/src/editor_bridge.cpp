@@ -1503,8 +1503,7 @@ int32_t sky_editor_play_state(SkyEditorContext* ctx) {
 void sky_editor_tick_play(SkyEditorContext* ctx, double dt) {
     auto& context = ec(ctx);
     if (context.playMode->state() == sky::editor::PlayModeState::Playing) {
-        context.playMode->tickFrame(dt);
-        context.tickScripts(dt);
+        context.tickPlayFrame(dt);
     }
 }
 

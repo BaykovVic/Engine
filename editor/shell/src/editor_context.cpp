@@ -141,7 +141,7 @@ std::int32_t scriptRaycast(float ox, float oy, float oz, float dx, float dy,
 }
 
 /// Native function table handed to managed SkyEngine.Engine (layout must match
-/// the managed Api struct: thirteen cdecl pointers, see the static_assert
+/// the managed Api struct: fourteen cdecl pointers, see the static_assert
 /// below the table).
 struct SkyScriptApi {
     void* setLocalPosition;
@@ -157,6 +157,7 @@ struct SkyScriptApi {
     void* getVelocity;
     void* raycast;
     void* dataAsset;
+    void* timeScale;
 };
 
 /// Serializes the resolved (inheritance applied) fields of a data asset as
@@ -206,9 +207,21 @@ std::int32_t scriptDataAsset(const char* ref, char* buffer,
     return std::int32_t(text.size());
 }
 
+/// One pointer serves Time.TimeScale's getter and setter: apply != 0 stores
+/// the clamped value, the current scale is always returned.
+double scriptTimeScale(double value, std::int32_t apply) {
+    if (g_scriptContext == nullptr) {
+        return 1.0;
+    }
+    if (apply != 0) {
+        g_scriptContext->setTimeScale(value);
+    }
+    return g_scriptContext->timeScale();
+}
+
 // Layout guard: the managed Api struct mirrors this table field for field;
 // a one-sided edit must fail the build, not corrupt memory at runtime.
-static_assert(sizeof(SkyScriptApi) == 13 * sizeof(void*),
+static_assert(sizeof(SkyScriptApi) == 14 * sizeof(void*),
               "SkyScriptApi changed: mirror the managed Engine.Api struct and "
               "update both counts");
 
@@ -224,7 +237,8 @@ SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptSetVelocity),
                          reinterpret_cast<void*>(&scriptGetVelocity),
                          reinterpret_cast<void*>(&scriptRaycast),
-                         reinterpret_cast<void*>(&scriptDataAsset)};
+                         reinterpret_cast<void*>(&scriptDataAsset),
+                         reinterpret_cast<void*>(&scriptTimeScale)};
 
 /// Resolves an "assets://" VFS reference against the Assets root; plain
 /// filesystem paths pass through unchanged.
@@ -907,6 +921,7 @@ void EditorContext::startPlayScripts() {
     playScripts_.clear();
     fixedUpdateMids_.clear();
     playTime_ = 0.0;
+    timeScale_ = 1.0; // a slow-motion experiment never outlives its session
     if (scriptHost == nullptr) {
         return;
     }
@@ -1034,6 +1049,15 @@ void EditorContext::fixedTickScripts(double fixedDeltaSeconds) {
         scriptHost->invokeLifecycle(
             mid, scripting::ScriptLifecycleEvent::OnFixedUpdate, fixedDeltaSeconds);
     }
+}
+
+void EditorContext::tickPlayFrame(double realDeltaSeconds) {
+    const double dt = realDeltaSeconds * timeScale_;
+    playMode->tickFrame(dt);
+    tickScripts(dt);
+    // All script work is done: in async mode this frame's physics steps are
+    // scheduled now and overlap the caller's render (no-op in sync mode).
+    scenes->schedulePhysics(dt);
 }
 
 void EditorContext::stopPlayScripts() {

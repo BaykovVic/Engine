@@ -106,6 +106,20 @@ public:
     /// playing). No-op when scripting is unavailable or nothing is scripted.
     void tickScripts(double deltaSeconds);
 
+    /// One play frame from real elapsed time: applies the time scale, then
+    /// runs the frame in order — systems/physics, scripts, and (async mode)
+    /// scheduling this frame's physics to overlap the caller's render. The
+    /// bridge and the player both drive play through this single entry.
+    void tickPlayFrame(double realDeltaSeconds);
+
+    /// Simulation speed multiplier (Time.TimeScale): scales the delta fed to
+    /// systems, physics accumulation and scripts. 0 pauses; negatives clamp
+    /// to 0. Reset to 1 on every play start.
+    void setTimeScale(double scale) {
+        timeScale_ = scale < 0.0 ? 0.0 : scale;
+    }
+    [[nodiscard]] double timeScale() const { return timeScale_; }
+
     /// Dispatches OnFixedUpdate to the scripts that override it. Invoked by
     /// the scene world before every physics step (never called directly).
     void fixedTickScripts(double fixedDeltaSeconds);
@@ -310,6 +324,7 @@ private:
     std::unordered_set<std::uint64_t> fixedUpdateMids_;
     std::unordered_set<int> keysDown_;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
+    double timeScale_ = 1.0; // Time.TimeScale; reset on play start
     // Active package ids and their registry handles (registered on first
     // activation, reused after).
     std::unordered_set<std::string> activePackages_;

@@ -42,6 +42,11 @@ public static class Engine
         [MarshalAs(UnmanagedType.LPUTF8Str)] string assetRef, byte[] buffer,
         int capacity);
 
+    /// <summary>Get/set in one pointer: apply != 0 stores the (clamped)
+    /// value; the current scale is always returned.</summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate double TimeScaleFn(double value, int apply);
+
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
@@ -55,8 +60,9 @@ public static class Engine
     internal static GetVec3Fn? GetVelocity;
     internal static RaycastFn? Raycast;
     internal static DataAssetFn? DataAssetFields;
+    internal static TimeScaleFn? TimeScale;
 
-    /// Layout must match the native SkyScriptApi struct (thirteen cdecl
+    /// Layout must match the native SkyScriptApi struct (fourteen cdecl
     /// pointers; the native side static_asserts the same count).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
@@ -74,11 +80,12 @@ public static class Engine
         public IntPtr GetVelocity;
         public IntPtr Raycast;
         public IntPtr DataAsset;
+        public IntPtr TimeScale;
     }
 
     /// Both sides of the boundary must agree on the pointer count; keep in
     /// sync with the native static_assert on sizeof(SkyScriptApi).
-    private const int ExpectedApiPointers = 13;
+    private const int ExpectedApiPointers = 14;
 
     internal static void Install(IntPtr apiPtr)
     {
@@ -110,6 +117,8 @@ public static class Engine
             Raycast = Marshal.GetDelegateForFunctionPointer<RaycastFn>(api.Raycast);
         if (api.DataAsset != IntPtr.Zero)
             DataAssetFields = Marshal.GetDelegateForFunctionPointer<DataAssetFn>(api.DataAsset);
+        if (api.TimeScale != IntPtr.Zero)
+            TimeScale = Marshal.GetDelegateForFunctionPointer<TimeScaleFn>(api.TimeScale);
 
         // Layout guard: a one-sided table edit must be loud, not a silent
         // misroute of every call after the mismatch.

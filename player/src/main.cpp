@@ -66,10 +66,7 @@ int runHeadless(EditorContext& context, int frames, const char* screenshotPath) 
     context.playMode->play();
     context.beginPlay(); // spins up the managed scripts (OnCreate/OnStart)
     for (int frame = 0; frame < frames; ++frame) {
-        context.playMode->tickFrame(1.0 / 60.0);
-        context.tickScripts(1.0 / 60.0);
-        // All script work is done: this frame's physics overlaps the render.
-        context.scenes->schedulePhysics(1.0 / 60.0);
+        context.tickPlayFrame(1.0 / 60.0);
         renderer->submit(builder.build(kWidth, kHeight));
         renderer->renderFrame();
     }
@@ -148,10 +145,7 @@ int runWindowed(EditorContext& context, int frameLimit) {
         previous = now;
 
         const double step = std::min(dt, 0.1);
-        context.playMode->tickFrame(step);
-        context.tickScripts(step);
-        // All script work is done: this frame's physics overlaps the render.
-        context.scenes->schedulePhysics(step);
+        context.tickPlayFrame(step);
         renderer->submit(builder.build(renderer->frameWidth(),
                                        renderer->frameHeight()));
         renderer->renderFrame();
