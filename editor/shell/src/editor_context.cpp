@@ -4,9 +4,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <variant>
 
 #include "sky/component/data_asset.hpp"
 #include "sky/package/package_installer.hpp"
@@ -139,7 +141,8 @@ std::int32_t scriptRaycast(float ox, float oy, float oz, float dx, float dy,
 }
 
 /// Native function table handed to managed SkyEngine.Engine (layout must match
-/// the managed Api struct: twelve cdecl pointers).
+/// the managed Api struct: thirteen cdecl pointers, see the static_assert
+/// below the table).
 struct SkyScriptApi {
     void* setLocalPosition;
     void* setLocalEuler;
@@ -153,7 +156,62 @@ struct SkyScriptApi {
     void* setVelocity;
     void* getVelocity;
     void* raycast;
+    void* dataAsset;
 };
+
+/// Serializes the resolved (inheritance applied) fields of a data asset as
+/// records "name US type US value RS" (US = 0x1F, RS = 0x1E). Writes up to
+/// capacity-1 bytes plus a terminator and returns the full length, so the
+/// managed side can retry with an exact buffer.
+std::int32_t scriptDataAsset(const char* ref, char* buffer,
+                             std::int32_t capacity) {
+    if (g_scriptContext == nullptr || ref == nullptr) {
+        return 0;
+    }
+    std::string text;
+    for (const auto& [name, value] :
+         g_scriptContext->resolvedDataAssetFields(ref)) {
+        text += name;
+        text += '\x1F';
+        char formatted[64];
+        if (const auto* f = std::get_if<float>(&value)) {
+            std::snprintf(formatted, sizeof(formatted), "%g", *f);
+            text += "float\x1F";
+            text += formatted;
+        } else if (const auto* i = std::get_if<std::int64_t>(&value)) {
+            std::snprintf(formatted, sizeof(formatted), "%lld",
+                          static_cast<long long>(*i));
+            text += "int\x1F";
+            text += formatted;
+        } else if (const auto* b = std::get_if<bool>(&value)) {
+            text += "bool\x1F";
+            text += *b ? "true" : "false";
+        } else if (const auto* v = std::get_if<sky::core::Vec3>(&value)) {
+            std::snprintf(formatted, sizeof(formatted), "%g, %g, %g", v->x,
+                          v->y, v->z);
+            text += "Vec3\x1F";
+            text += formatted;
+        } else if (const auto* s = std::get_if<std::string>(&value)) {
+            text += "string\x1F";
+            text += *s;
+        }
+        text += '\x1E';
+    }
+    if (buffer != nullptr && capacity > 0) {
+        const auto copied =
+            std::min<std::size_t>(text.size(), std::size_t(capacity) - 1);
+        std::memcpy(buffer, text.data(), copied);
+        buffer[copied] = '\0';
+    }
+    return std::int32_t(text.size());
+}
+
+// Layout guard: the managed Api struct mirrors this table field for field;
+// a one-sided edit must fail the build, not corrupt memory at runtime.
+static_assert(sizeof(SkyScriptApi) == 13 * sizeof(void*),
+              "SkyScriptApi changed: mirror the managed Engine.Api struct and "
+              "update both counts");
+
 SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptSetLocalEuler),
                          reinterpret_cast<void*>(&scriptSetLocalScale),
@@ -165,7 +223,8 @@ SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptDestroyObject),
                          reinterpret_cast<void*>(&scriptSetVelocity),
                          reinterpret_cast<void*>(&scriptGetVelocity),
-                         reinterpret_cast<void*>(&scriptRaycast)};
+                         reinterpret_cast<void*>(&scriptRaycast),
+                         reinterpret_cast<void*>(&scriptDataAsset)};
 
 /// Resolves an "assets://" VFS reference against the Assets root; plain
 /// filesystem paths pass through unchanged.

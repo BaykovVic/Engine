@@ -88,8 +88,16 @@ UI есть только у редактора; внутри игры нет Can
         name/type/value, правка пишется сразу, строка добавления поля с
         выбором типа. ABI: 7 функций `sky_editor_data_*`
         (тест `testBridgeDataAssets`, включая персист между сессиями).
-  - [ ] Managed `DataAsset.Load("assets://Data/…")` — 13-й указатель
-        reverse-API + layout-guard (следующий инкремент).
+  - [x] Managed `DataAsset.Load("assets://Data/…")`: 13-й указатель
+        reverse-API (`scriptDataAsset` отдаёт resolved-поля с наследованием,
+        query-buffer с ретраем), класс `DataAsset` с типизированными
+        геттерами (GetFloat/GetInt/GetBool/GetString/TryGetVec3).
+        Layout-guard с обеих сторон: `static_assert(13*sizeof(void*))` в
+        нативной таблице + проверка `Marshal.SizeOf<Api>` при Install —
+        закрывает пункт архдолга о ручной зеркальности. E2E-тест:
+        user-script читает ассет и логирует значения (testBridgeDataAssets,
+        SKY_TEST_MANAGED-секция); цепочка наследования —
+        `testDataAssetInheritanceChain`.
   - [ ] Поле-ссылка `assetRef` у компонентов с выпадающим списком.
   - Все ингредиенты уже есть: `FieldValue`-инфраструктура (кормит инспектор,
     undo и сериализацию), `ISerializationBackend` (версии схем + миграции),
@@ -159,8 +167,9 @@ UI есть только у редактора; внутри игры нет Can
   стабильном `ComponentHandle`.
 
 **Граница native/.NET:**
-- [ ] Layout-паритет таблицы 12 указателей — только комментарием; нужен
-  static_assert/тест размера с обеих сторон.
+- [x] ~~Layout-паритет таблицы указателей только комментарием~~ — теперь
+  13 указателей под двусторонней защитой: нативный `static_assert` на
+  `sizeof(SkyScriptApi)` + managed-проверка `Marshal.SizeOf<Api>` в Install.
 - [ ] Нет канала ошибок у мутирующих ABI-вызовов (молчаливый no-op) и
   exception-firewall под extern "C".
 - [ ] Строки: 256-байтный колпак `ReadString` без ретрая; кодировка

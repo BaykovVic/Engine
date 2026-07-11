@@ -37,6 +37,11 @@ public static class Engine
                                   out float nx, out float ny, out float nz,
                                   out float distance);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int DataAssetFn(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string assetRef, byte[] buffer,
+        int capacity);
+
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
@@ -49,8 +54,10 @@ public static class Engine
     internal static SetVec3Fn? SetVelocity;
     internal static GetVec3Fn? GetVelocity;
     internal static RaycastFn? Raycast;
+    internal static DataAssetFn? DataAssetFields;
 
-    /// Layout must match the native SkyScriptApi struct (twelve cdecl pointers).
+    /// Layout must match the native SkyScriptApi struct (thirteen cdecl
+    /// pointers; the native side static_asserts the same count).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
     {
@@ -66,7 +73,12 @@ public static class Engine
         public IntPtr SetVelocity;
         public IntPtr GetVelocity;
         public IntPtr Raycast;
+        public IntPtr DataAsset;
     }
+
+    /// Both sides of the boundary must agree on the pointer count; keep in
+    /// sync with the native static_assert on sizeof(SkyScriptApi).
+    private const int ExpectedApiPointers = 13;
 
     internal static void Install(IntPtr apiPtr)
     {
@@ -96,5 +108,35 @@ public static class Engine
             GetVelocity = Marshal.GetDelegateForFunctionPointer<GetVec3Fn>(api.GetVelocity);
         if (api.Raycast != IntPtr.Zero)
             Raycast = Marshal.GetDelegateForFunctionPointer<RaycastFn>(api.Raycast);
+        if (api.DataAsset != IntPtr.Zero)
+            DataAssetFields = Marshal.GetDelegateForFunctionPointer<DataAssetFn>(api.DataAsset);
+
+        // Layout guard: a one-sided table edit must be loud, not a silent
+        // misroute of every call after the mismatch.
+        if (Marshal.SizeOf<Api>() != IntPtr.Size * ExpectedApiPointers)
+            Log?.Invoke(3, "SkyScriptApi layout mismatch: managed Api pointer " +
+                           "count diverged from the native table");
+    }
+
+    /// Raw serialized fields of a data asset (US/RS separated records) with
+    /// the query-buffer retry the boundary contract promises.
+    internal static string ReadDataAssetRaw(string assetRef)
+    {
+        var fn = DataAssetFields;
+        if (fn == null || string.IsNullOrEmpty(assetRef))
+            return string.Empty;
+        var buffer = new byte[1024];
+        var length = fn(assetRef, buffer, buffer.Length);
+        if (length <= 0)
+            return string.Empty;
+        if (length >= buffer.Length)
+        {
+            buffer = new byte[length + 1];
+            length = fn(assetRef, buffer, buffer.Length);
+        }
+        var copied = Math.Min(length, buffer.Length - 1);
+        return copied <= 0
+            ? string.Empty
+            : System.Text.Encoding.UTF8.GetString(buffer, 0, copied);
     }
 }

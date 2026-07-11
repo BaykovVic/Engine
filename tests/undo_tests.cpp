@@ -330,6 +330,50 @@ void testMaterialEditsPersist() {
     fs::remove(fs::path(skymat.string() + ".skymeta"), ec);
 }
 
+void testDataAssetInheritanceChain() {
+    namespace fs = std::filesystem;
+    const auto dataDir = fs::temp_directory_path() / "sky_editor_assets" / "Data";
+
+    EditorContext context;
+    // Base asset authored through the public API…
+    CHECK(context.createDataAsset("base_enemy", "game.enemy"));
+    CHECK(context.setDataAssetField("assets://Data/base_enemy.skydata", "health",
+                                    100.0f));
+    CHECK(context.setDataAssetField("assets://Data/base_enemy.skydata", "speed",
+                                    5.0f));
+    // …the child points at it by GUID and overrides one field.
+    const auto baseId =
+        context.assets->findBySourcePath(dataDir / "base_enemy.skydata");
+    CHECK(baseId.has_value());
+    if (!baseId) {
+        return;
+    }
+    CHECK(context.createDataAsset("elite_enemy", "game.enemy"));
+    {
+        auto child = context.loadDataAssetByRef("assets://Data/elite_enemy.skydata");
+        CHECK(child.has_value());
+        if (child) {
+            child->parentGuid = baseId->value;
+            child->fields["health"] = 250.0f;
+            CHECK(sky::component::saveDataAsset(
+                *context.storage, dataDir / "elite_enemy.skydata", *child));
+        }
+    }
+
+    // Resolution walks the chain: the override wins, the base shines through.
+    const auto fields =
+        context.resolvedDataAssetFields("assets://Data/elite_enemy.skydata");
+    CHECK(fields.size() == 2);
+    CHECK(std::get<float>(fields.at("health")) == 250.0f);
+    CHECK(std::get<float>(fields.at("speed")) == 5.0f);
+
+    std::error_code cleanup;
+    for (const auto* name : {"base_enemy", "elite_enemy"}) {
+        fs::remove(dataDir / (std::string(name) + ".skydata"), cleanup);
+        fs::remove(dataDir / (std::string(name) + ".skydata.skymeta"), cleanup);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -342,5 +386,6 @@ int main() {
     testSceneRootsSyncOnSave();
     testAssetRenameSurvivesSceneReload();
     testMaterialEditsPersist();
+    testDataAssetInheritanceChain();
     return sky::test::summary("undo_tests");
 }

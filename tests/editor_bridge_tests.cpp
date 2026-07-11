@@ -961,6 +961,72 @@ void testBridgeDataAssets() {
     CHECK(std::strcmp(text, "true") == 0); // boss
     sky_editor_destroy(ctx);
 
+#ifdef SKY_TEST_MANAGED
+    // Gameplay path: a user script loads the asset through the reverse API
+    // (DataAsset.Load) and logs the typed values.
+    {
+        ctx = sky_editor_create();
+        char root[512] = {0};
+        sky_editor_assets_root(ctx, root, sizeof(root));
+        const std::filesystem::path scriptsDir =
+            std::filesystem::path(root) / "Scripts";
+        std::error_code stale;
+        std::filesystem::remove_all(scriptsDir, stale);
+        std::filesystem::create_directories(scriptsDir);
+        {
+            std::ofstream source(scriptsDir / "DataProbe.cs");
+            source << "namespace SkyProject;\n"
+                   << "public class DataProbe : SkyEngine.ScriptComponent\n"
+                   << "{\n"
+                   << "    public override void OnStart()\n"
+                   << "    {\n"
+                   << "        var data = SkyEngine.DataAsset.Load("
+                   << "\"assets://Data/bridge_probe.skydata\");\n"
+                   << "        if (data != null)\n"
+                   << "            SkyEngine.Debug.Log(\"DataProbe health=\" + "
+                   << "data.GetFloat(\"health\") + \" boss=\" + "
+                   << "data.GetBool(\"boss\"));\n"
+                   << "    }\n"
+                   << "}\n";
+        }
+        CHECK(sky_editor_reload_scripts(ctx) == 1);
+        const SkyObjectId probe =
+            sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "DataProbe");
+        sky_editor_add_component(ctx, probe, "sky.script");
+        int32_t script = -1;
+        for (int32_t i = 0; i < sky_editor_component_count(ctx, probe); ++i) {
+            char type[64] = {0};
+            sky_editor_component_type(ctx, probe, i, type, sizeof(type));
+            if (std::strcmp(type, "sky.script") == 0) {
+                script = i;
+            }
+        }
+        CHECK(script >= 0);
+        sky_editor_set_component_field(ctx, probe, script, 0,
+                                       "SkyProject.DataProbe");
+        CHECK(sky_editor_play(ctx) == 1);
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+        bool logged = false;
+        for (int32_t i = 0; i < sky_editor_log_count(ctx) && !logged; ++i) {
+            char line[256] = {0};
+            sky_editor_log_text(ctx, i, line, sizeof(line));
+            logged = std::strstr(line, "DataProbe health=150 boss=True") != nullptr;
+        }
+        if (!logged) {
+            for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+                char line[256] = {0};
+                sky_editor_log_text(ctx, i, line, sizeof(line));
+                std::printf("LOG[%d]: %s\n", i, line);
+            }
+        }
+        CHECK(logged);
+        sky_editor_stop(ctx);
+        sky_editor_destroy(ctx);
+        std::error_code cleanupScripts;
+        std::filesystem::remove_all(scriptsDir, cleanupScripts);
+    }
+#endif
+
     // Leave the shared assets root clean.
     namespace fs = std::filesystem;
     const auto file = fs::temp_directory_path() / "sky_editor_assets" / "Data" /
