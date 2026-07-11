@@ -26,4 +26,7 @@ public partial class InspectorView : UserControl
         this.FindControl<Button>("AddComponentButton")?.Flyout?.Hide();
         Vm?.AddComponent(type.TypeId);
     }
+
+    private void OnAddDataField(object? sender, RoutedEventArgs e)
+        => Vm?.SelectedDataAsset?.AddField();
 }

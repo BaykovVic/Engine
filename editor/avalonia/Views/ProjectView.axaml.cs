@@ -24,6 +24,9 @@ public partial class ProjectView : UserControl
             (DataContext as EditorTool)?.Main?.OpenProjectEntry(entry);
     }
 
+    private void OnNewDataAsset(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => (DataContext as EditorTool)?.Main?.CreateNewDataAsset();
+
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _pressPoint = e.GetPosition(this);

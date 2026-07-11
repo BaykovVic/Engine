@@ -61,6 +61,25 @@ internal static class Program
             }
         }
 
+        // --data-demo: create a data asset with a few authored fields and
+        // open it, so the capture shows the Inspector's data-asset editor.
+        if (Array.IndexOf(cmdArgs, "--data-demo") >= 0 &&
+            window.DataContext is MainViewModel dvm)
+        {
+            dvm.CreateNewDataAsset();
+            var asset = dvm.SelectedDataAsset;
+            if (asset != null)
+            {
+                asset.NewFieldName = "health"; asset.NewFieldType = "float";
+                asset.NewFieldValue = "150"; asset.AddField();
+                asset.NewFieldName = "boss"; asset.NewFieldType = "bool";
+                asset.NewFieldValue = "true"; asset.AddField();
+                asset.NewFieldName = "tint"; asset.NewFieldType = "Vec3";
+                asset.NewFieldValue = "1, 0.4, 0.2"; asset.AddField();
+            }
+            Dispatcher.UIThread.RunJobs();
+        }
+
         // Exercise the editing path: create a cube and move it, so the capture
         // shows it both in the Hierarchy and in the live viewport.
         if (demo && window.DataContext is MainViewModel vm)

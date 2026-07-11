@@ -5,7 +5,13 @@
              x:CompileBindings="False">
   <DockPanel Background="{StaticResource SkyPanelBrush}">
     <Border DockPanel.Dock="Top" Padding="14,6">
-      <TextBlock Classes="mono muted" Text="{Binding Main.ProjectPath}"/>
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="mono muted" Text="{Binding Main.ProjectPath}" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="iconButton" Click="OnNewDataAsset"
+                ToolTip.Tip="New Data Asset (Assets/Data)">
+          <TextBlock Classes="muted" Text="+ Data" FontSize="12"/>
+        </Button>
+      </Grid>
     </Border>
     <ListBox Name="Files" ItemsSource="{Binding Main.ProjectEntries}" DoubleTapped="OnOpen"
              PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved">

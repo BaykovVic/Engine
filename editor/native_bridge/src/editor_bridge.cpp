@@ -796,6 +796,128 @@ void sky_editor_set_material_field(SkyEditorContext* ctx, int32_t index, int32_t
     }
 }
 
+namespace {
+
+/// Field enumeration order for the data-asset ABI: the std::map iteration
+/// (name-sorted), stable between calls.
+std::vector<std::pair<std::string, sky::component::FieldValue>> dataFieldsOf(
+    SkyEditorContext* ctx, const char* ref) {
+    if (ref == nullptr) {
+        return {};
+    }
+    const auto desc = ec(ctx).loadDataAssetByRef(ref);
+    if (!desc) {
+        return {};
+    }
+    return {desc->fields.begin(), desc->fields.end()};
+}
+
+std::string dataFieldTypeName(const sky::component::FieldValue& value) {
+    if (std::holds_alternative<float>(value)) return "float";
+    if (std::holds_alternative<std::int64_t>(value)) return "int";
+    if (std::holds_alternative<bool>(value)) return "bool";
+    if (std::holds_alternative<sky::core::Vec3>(value)) return "Vec3";
+    return "string";
+}
+
+std::string dataFieldText(const sky::component::FieldValue& value) {
+    char b[64];
+    if (const auto* f = std::get_if<float>(&value)) {
+        std::snprintf(b, sizeof(b), "%g", *f);
+        return b;
+    }
+    if (const auto* i = std::get_if<std::int64_t>(&value)) {
+        std::snprintf(b, sizeof(b), "%lld", static_cast<long long>(*i));
+        return b;
+    }
+    if (const auto* flag = std::get_if<bool>(&value)) {
+        return *flag ? "true" : "false";
+    }
+    if (const auto* v = std::get_if<sky::core::Vec3>(&value)) {
+        std::snprintf(b, sizeof(b), "%g, %g, %g", v->x, v->y, v->z);
+        return b;
+    }
+    if (const auto* s = std::get_if<std::string>(&value)) {
+        return *s;
+    }
+    return "";
+}
+
+} // namespace
+
+int32_t sky_editor_data_asset_create(SkyEditorContext* ctx, const char* name,
+                                     const char* typeId) {
+    if (name == nullptr || typeId == nullptr) {
+        return 0;
+    }
+    return ec(ctx).createDataAsset(name, typeId) ? 1 : 0;
+}
+
+int32_t sky_editor_data_type_id(SkyEditorContext* ctx, const char* ref, char* buffer,
+                                int32_t capacity) {
+    const auto desc =
+        ref != nullptr ? ec(ctx).loadDataAssetByRef(ref) : std::nullopt;
+    return copyString(desc ? desc->typeId : "", buffer, capacity);
+}
+
+int32_t sky_editor_data_field_count(SkyEditorContext* ctx, const char* ref) {
+    return int32_t(dataFieldsOf(ctx, ref).size());
+}
+
+int32_t sky_editor_data_field_name(SkyEditorContext* ctx, const char* ref,
+                                   int32_t index, char* buffer, int32_t capacity) {
+    const auto fields = dataFieldsOf(ctx, ref);
+    if (index < 0 || std::size_t(index) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(fields[std::size_t(index)].first, buffer, capacity);
+}
+
+int32_t sky_editor_data_field_type(SkyEditorContext* ctx, const char* ref,
+                                   int32_t index, char* buffer, int32_t capacity) {
+    const auto fields = dataFieldsOf(ctx, ref);
+    if (index < 0 || std::size_t(index) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(dataFieldTypeName(fields[std::size_t(index)].second), buffer,
+                      capacity);
+}
+
+int32_t sky_editor_data_field_value(SkyEditorContext* ctx, const char* ref,
+                                    int32_t index, char* buffer, int32_t capacity) {
+    const auto fields = dataFieldsOf(ctx, ref);
+    if (index < 0 || std::size_t(index) >= fields.size()) {
+        return copyString("", buffer, capacity);
+    }
+    return copyString(dataFieldText(fields[std::size_t(index)].second), buffer,
+                      capacity);
+}
+
+void sky_editor_set_data_field(SkyEditorContext* ctx, const char* ref,
+                               const char* name, const char* type,
+                               const char* value) {
+    if (ref == nullptr || name == nullptr || type == nullptr || value == nullptr) {
+        return;
+    }
+    const std::string typeName = type;
+    const std::string text = value;
+    sky::component::FieldValue parsed;
+    if (typeName == "float") {
+        parsed = std::strtof(text.c_str(), nullptr);
+    } else if (typeName == "int") {
+        parsed = std::int64_t(std::strtoll(text.c_str(), nullptr, 10));
+    } else if (typeName == "bool") {
+        parsed = text == "true" || text == "1";
+    } else if (typeName == "Vec3") {
+        float x = 0, y = 0, z = 0;
+        std::sscanf(text.c_str(), "%g, %g, %g", &x, &y, &z);
+        parsed = sky::core::Vec3{x, y, z};
+    } else {
+        parsed = text;
+    }
+    ec(ctx).setDataAssetField(ref, name, parsed);
+}
+
 int32_t sky_editor_vfs_count(SkyEditorContext* ctx, const char* dir) {
     return int32_t(ec(ctx).vfs->list(dir != nullptr ? dir : "").size());
 }

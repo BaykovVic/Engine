@@ -13,6 +13,7 @@
 #include "sky/asset/obj_importer.hpp"
 #include "sky/asset/png_decoder.hpp"
 #include "sky/component/component_world.hpp"
+#include "sky/component/data_asset.hpp"
 #include "sky/core/runtime_services.hpp"
 #include "sky/rendering/material.hpp"
 #include "sky/mapgen/generation_pipeline.hpp"
@@ -88,6 +89,18 @@ public:
     /// format). The Materials panel calls it after every edit, so material
     /// changes survive a restart.
     void persistMaterial(rendering::MaterialHandle material);
+
+    /// Data assets (ScriptableObject analog) under Assets/Data. Refs are
+    /// VFS-style ("assets://Data/enemy.skydata").
+    bool createDataAsset(const std::string& name, const std::string& typeId);
+    [[nodiscard]] std::optional<component::DataAssetDesc> loadDataAssetByRef(
+        const std::string& ref) const;
+    bool setDataAssetField(const std::string& ref, const std::string& name,
+                           const component::FieldValue& value);
+    /// Fields with the parent chain applied (child overrides win); parents
+    /// resolve by GUID through the asset database. Empty on a bad ref.
+    [[nodiscard]] std::map<std::string, component::FieldValue>
+    resolvedDataAssetFields(const std::string& ref) const;
 
     /// Drives the managed gameplay scripts one frame (call each frame while
     /// playing). No-op when scripting is unavailable or nothing is scripted.

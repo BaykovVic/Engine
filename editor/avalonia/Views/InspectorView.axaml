@@ -4,6 +4,43 @@
              x:Class="SkyEditor.Views.InspectorView"
              x:CompileBindings="False">
   <ScrollViewer Background="{StaticResource SkyPanelBrush}">
+   <StackPanel>
+    <!-- A data asset opened from the Project panel (ScriptableObject-style). -->
+    <StackPanel Margin="12" Spacing="10" IsVisible="{Binding Main.HasDataAssetSelection}">
+      <Border Classes="card">
+        <StackPanel Spacing="9">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="cardTitle" Text="{Binding Main.SelectedDataAsset.Name}"/>
+            <TextBlock Grid.Column="1" Classes="muted mono" Text="{Binding Main.SelectedDataAsset.TypeId}"/>
+          </Grid>
+          <ItemsControl ItemsSource="{Binding Main.SelectedDataAsset.Fields}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="120,60,*" Margin="0,2">
+                  <TextBlock Classes="fieldLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Classes="muted mono" Text="{Binding Type}" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Classes="field" Text="{Binding Value, Mode=TwoWay}"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,70,*,Auto">
+            <TextBox Classes="field" Watermark="field name"
+                     Text="{Binding Main.SelectedDataAsset.NewFieldName, Mode=TwoWay}"/>
+            <ComboBox Grid.Column="1" Margin="4,0" MinWidth="62"
+                      ItemsSource="{Binding Main.SelectedDataAsset.FieldTypes}"
+                      SelectedItem="{Binding Main.SelectedDataAsset.NewFieldType, Mode=TwoWay}"/>
+            <TextBox Grid.Column="2" Classes="field" Watermark="value"
+                     Text="{Binding Main.SelectedDataAsset.NewFieldValue, Mode=TwoWay}"/>
+            <Button Grid.Column="3" Margin="4,0,0,0" Classes="iconButton"
+                    Click="OnAddDataField" ToolTip.Tip="Add Field">
+              <TextBlock Classes="muted" Text="+" FontSize="14"/>
+            </Button>
+          </Grid>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
     <StackPanel Margin="12" Spacing="10" IsVisible="{Binding Main.HasSelection}">
       <Grid ColumnDefinitions="Auto,*">
         <CheckBox IsChecked="{Binding Main.SelectedEnabled, Mode=TwoWay}" VerticalAlignment="Center" ToolTip.Tip="Enabled"/>
@@ -119,5 +156,6 @@
         </Button.Flyout>
       </Button>
     </StackPanel>
+   </StackPanel>
   </ScrollViewer>
 </UserControl>

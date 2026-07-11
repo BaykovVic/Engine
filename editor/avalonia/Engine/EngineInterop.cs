@@ -85,6 +85,15 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_material_field_value(IntPtr ctx, int index, int field, byte[] buffer, int capacity);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_set_material_field(IntPtr ctx, int index, int field, string value);
 
+    // --- Data assets (ScriptableObject analog): Assets/Data/*.skydata ---
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_asset_create(IntPtr ctx, string name, string typeId);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_type_id(IntPtr ctx, string assetRef, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_field_count(IntPtr ctx, string assetRef);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_field_name(IntPtr ctx, string assetRef, int index, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_field_type(IntPtr ctx, string assetRef, int index, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_data_field_value(IntPtr ctx, string assetRef, int index, byte[] buffer, int capacity);
+    [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern void sky_editor_set_data_field(IntPtr ctx, string assetRef, string name, string type, string value);
+
     // --- Project / VFS ---
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_count(IntPtr ctx, string dir);
     [DllImport(Lib, CharSet = CharSet.Ansi)] public static extern int sky_editor_vfs_entry(IntPtr ctx, string dir, int index, byte[] buffer, int capacity);

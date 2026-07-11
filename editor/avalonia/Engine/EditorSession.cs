@@ -687,6 +687,36 @@ public sealed class EditorSession : IDisposable
     public void SetMaterialField(int material, int field, string value) =>
         EngineInterop.sky_editor_set_material_field(_ctx, material, field, value);
 
+    // --- Data assets (ScriptableObject analog) ---
+
+    public bool CreateDataAsset(string name, string typeId) =>
+        EngineInterop.sky_editor_data_asset_create(_ctx, name, typeId) == 1;
+
+    public string DataAssetTypeId(string assetRef) =>
+        EngineInterop.ReadString((b, n) =>
+            EngineInterop.sky_editor_data_type_id(_ctx, assetRef, b, n));
+
+    public List<(string Name, string Type, string Value)> DataAssetFields(string assetRef)
+    {
+        var result = new List<(string, string, string)>();
+        var count = EngineInterop.sky_editor_data_field_count(_ctx, assetRef);
+        for (var i = 0; i < count; ++i)
+        {
+            var index = i;
+            var name = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_data_field_name(_ctx, assetRef, index, b, n));
+            var type = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_data_field_type(_ctx, assetRef, index, b, n));
+            var value = EngineInterop.ReadString((b, n) =>
+                EngineInterop.sky_editor_data_field_value(_ctx, assetRef, index, b, n));
+            result.Add((name, type, value));
+        }
+        return result;
+    }
+
+    public void SetDataAssetField(string assetRef, string name, string type, string value) =>
+        EngineInterop.sky_editor_set_data_field(_ctx, assetRef, name, type, value);
+
     /// Regenerates the terrain from a seed and reloads the hierarchy (the
     /// scattered objects change).
     public int GenerateTerrain(ulong seed)
@@ -759,4 +789,88 @@ public sealed class EditorSession : IDisposable
             _ctx = IntPtr.Zero;
         }
     }
+}
+
+/// A data asset (.skydata) opened in the Inspector: its identity and the
+/// editable field rows. Field edits write straight through the engine.
+public sealed class DataAssetView : System.ComponentModel.INotifyPropertyChanged
+{
+    private readonly EditorSession _session;
+
+    public DataAssetView(EditorSession session, string assetRef)
+    {
+        _session = session;
+        Ref = assetRef;
+        TypeId = session.DataAssetTypeId(assetRef);
+        Reload();
+    }
+
+    public string Ref { get; }
+    public string TypeId { get; }
+    public string Name => EditorSession.MeshDisplayName(Ref);
+    public System.Collections.ObjectModel.ObservableCollection<DataAssetField>
+        Fields { get; } = new();
+
+    // The "add field" authoring row.
+    public string NewFieldName { get; set; } = string.Empty;
+    public string NewFieldType { get; set; } = "float";
+    public string NewFieldValue { get; set; } = "0";
+    public static string[] FieldTypes { get; } = { "float", "int", "bool", "string", "Vec3" };
+
+    public void AddField()
+    {
+        if (string.IsNullOrWhiteSpace(NewFieldName))
+            return;
+        _session.SetDataAssetField(Ref, NewFieldName.Trim(), NewFieldType, NewFieldValue);
+        NewFieldName = string.Empty;
+        OnPropertyChanged(nameof(NewFieldName));
+        Reload();
+    }
+
+    public void Reload()
+    {
+        Fields.Clear();
+        foreach (var (name, type, value) in _session.DataAssetFields(Ref))
+            Fields.Add(new DataAssetField(_session, Ref, name, type, value));
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+}
+
+/// One editable data-asset field; the setter persists through the engine.
+public sealed class DataAssetField : System.ComponentModel.INotifyPropertyChanged
+{
+    private readonly EditorSession _session;
+    private readonly string _ref;
+    private string _value;
+
+    public DataAssetField(EditorSession session, string assetRef, string name,
+                          string type, string value)
+    {
+        _session = session;
+        _ref = assetRef;
+        Name = name;
+        Type = type;
+        _value = value;
+    }
+
+    public string Name { get; }
+    public string Type { get; }
+    public string Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value)
+                return;
+            _value = value;
+            _session.SetDataAssetField(_ref, Name, Type, value);
+            PropertyChanged?.Invoke(this,
+                new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }

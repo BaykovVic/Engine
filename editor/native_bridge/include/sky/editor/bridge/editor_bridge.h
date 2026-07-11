@@ -355,6 +355,32 @@ SKY_BRIDGE_API void sky_editor_tick_play(SkyEditorContext* ctx, double dt);
 SKY_BRIDGE_API void sky_editor_set_key_state(SkyEditorContext* ctx, int32_t key,
                                              int32_t down);
 
+/* Data assets (ScriptableObject analog): typed field bags stored as
+ * Assets/Data/<name>.skydata. `ref` is a VFS-style path
+ * ("assets://Data/enemy.skydata"). Values travel as strings; `type` is one
+ * of float/int/bool/string/Vec3 (Vec3 formatted "x, y, z"). Setting a field
+ * persists immediately. Enumeration reflects the file itself; the engine
+ * resolves parent-chain inheritance at load time for gameplay reads. */
+SKY_BRIDGE_API int32_t sky_editor_data_asset_create(SkyEditorContext* ctx,
+                                                    const char* name,
+                                                    const char* typeId);
+SKY_BRIDGE_API int32_t sky_editor_data_type_id(SkyEditorContext* ctx, const char* ref,
+                                               char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_data_field_count(SkyEditorContext* ctx,
+                                                   const char* ref);
+SKY_BRIDGE_API int32_t sky_editor_data_field_name(SkyEditorContext* ctx,
+                                                  const char* ref, int32_t index,
+                                                  char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_data_field_type(SkyEditorContext* ctx,
+                                                  const char* ref, int32_t index,
+                                                  char* buffer, int32_t capacity);
+SKY_BRIDGE_API int32_t sky_editor_data_field_value(SkyEditorContext* ctx,
+                                                   const char* ref, int32_t index,
+                                                   char* buffer, int32_t capacity);
+SKY_BRIDGE_API void sky_editor_set_data_field(SkyEditorContext* ctx, const char* ref,
+                                              const char* name, const char* type,
+                                              const char* value);
+
 #ifdef __cplusplus
 }
 #endif

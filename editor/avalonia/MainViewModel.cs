@@ -155,6 +155,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (ReferenceEquals(_selected, value))
                 return;
             _selected = value;
+            if (value != null && SelectedDataAsset != null)
+                SelectedDataAsset = null; // an object and an asset never coexist
             LoadSelection();
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasSelection));
@@ -184,6 +186,41 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public void SelectById(ulong id) => SelectedObject = id == 0 ? null : Find(Roots, id);
+
+    // --- Data assets: selecting one shows it in the Inspector ---
+    private DataAssetView? _selectedDataAsset;
+    public DataAssetView? SelectedDataAsset
+    {
+        get => _selectedDataAsset;
+        set
+        {
+            if (ReferenceEquals(_selectedDataAsset, value))
+                return;
+            _selectedDataAsset = value;
+            if (value != null)
+                SelectedObject = null;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasDataAssetSelection));
+        }
+    }
+    public bool HasDataAssetSelection => _selectedDataAsset != null;
+
+    public bool IsDataAsset(ProjectEntry? e) =>
+        e is { IsDirectory: false } &&
+        e.Name.ToLowerInvariant().EndsWith(".skydata");
+
+    /// Creates Assets/Data/DataAsset[_N].skydata and opens it for editing.
+    public void CreateNewDataAsset()
+    {
+        var name = "DataAsset";
+        for (var i = 1; !_session.CreateDataAsset(name, "sky.data"); ++i)
+        {
+            if (i > 32) return;
+            name = $"DataAsset_{i}";
+        }
+        RefreshProject();
+        SelectedDataAsset = new DataAssetView(_session, $"assets://Data/{name}.skydata");
+    }
 
     /// Re-reads the selected object's transform from the engine and refreshes
     /// the Inspector fields. Called while a viewport gizmo drag mutates the
@@ -442,6 +479,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void OpenProjectEntry(ProjectEntry? entry)
     {
+        if (entry is { IsDirectory: false })
+        {
+            // Data assets open in the Inspector (Unity-style asset editing).
+            if (IsDataAsset(entry))
+                SelectedDataAsset = new DataAssetView(_session, AssetRefFor(entry));
+            return;
+        }
         if (entry is not { IsDirectory: true })
             return;
         if (entry.Name == "..")

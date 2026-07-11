@@ -1639,6 +1639,81 @@ void EditorContext::loadProjectMaterials() {
     }
 }
 
+namespace {
+/// "assets://<rel>" -> host path under the given root; empty otherwise.
+std::filesystem::path hostPathForRef(const std::filesystem::path& assetsRoot,
+                                     const std::string& ref) {
+    if (ref.rfind("assets://", 0) != 0) {
+        return {};
+    }
+    return assetsRoot / ref.substr(9);
+}
+} // namespace
+
+bool EditorContext::createDataAsset(const std::string& name,
+                                    const std::string& typeId) {
+    if (name.empty() || typeId.empty()) {
+        return false;
+    }
+    const auto file = assetsRoot / "Data" / (name + ".skydata");
+    std::error_code exists;
+    if (std::filesystem::exists(file, exists)) {
+        return false; // never silently overwrite an authored asset
+    }
+    component::DataAssetDesc desc;
+    desc.typeId = typeId;
+    if (!component::saveDataAsset(*storage, file, desc)) {
+        return false;
+    }
+    return assets->importAsset(file).has_value(); // GUID sidecar + registry
+}
+
+std::optional<component::DataAssetDesc> EditorContext::loadDataAssetByRef(
+    const std::string& ref) const {
+    const auto host = hostPathForRef(assetsRoot, ref);
+    if (host.empty()) {
+        return std::nullopt;
+    }
+    return component::loadDataAsset(*storage, host);
+}
+
+bool EditorContext::setDataAssetField(const std::string& ref,
+                                      const std::string& name,
+                                      const component::FieldValue& value) {
+    const auto host = hostPathForRef(assetsRoot, ref);
+    if (host.empty() || name.empty()) {
+        return false;
+    }
+    auto desc = component::loadDataAsset(*storage, host);
+    if (!desc) {
+        return false;
+    }
+    desc->fields[name] = value;
+    return component::saveDataAsset(*storage, host, *desc);
+}
+
+std::map<std::string, component::FieldValue>
+EditorContext::resolvedDataAssetFields(const std::string& ref) const {
+    // Walk up the parent chain (bounded against cycles), then overlay from
+    // the root ancestor down so nearer overrides win.
+    std::vector<component::DataAssetDesc> chain;
+    auto current = loadDataAssetByRef(ref);
+    for (int depth = 0; current && depth < 8; ++depth) {
+        chain.push_back(*current);
+        if (current->parentGuid == 0) {
+            break;
+        }
+        const auto parent = assets->resolve(asset::AssetId{current->parentGuid});
+        current = parent ? component::loadDataAsset(*storage, parent->sourcePath)
+                         : std::nullopt;
+    }
+    std::map<std::string, component::FieldValue> result;
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        result = component::mergedFields(result, it->fields);
+    }
+    return result;
+}
+
 void EditorContext::scanProjectAssets() {
     namespace fs = std::filesystem;
     if (assets == nullptr) {

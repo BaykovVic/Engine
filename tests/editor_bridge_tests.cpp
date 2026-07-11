@@ -922,6 +922,54 @@ void testBridgeCrateRain() {
 #endif
 }
 
+// Data assets through the ABI: create, author fields of every type, read
+// them back, and confirm the file persists into a fresh session.
+void testBridgeDataAssets() {
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+    const char* ref = "assets://Data/bridge_probe.skydata";
+
+    CHECK(sky_editor_data_asset_create(ctx, "bridge_probe", "game.enemy") == 1);
+    sky_editor_set_data_field(ctx, ref, "health", "float", "150");
+    sky_editor_set_data_field(ctx, ref, "lives", "int", "3");
+    sky_editor_set_data_field(ctx, ref, "boss", "bool", "true");
+    sky_editor_set_data_field(ctx, ref, "model", "string",
+                              "assets://Models/grunt.obj");
+    sky_editor_set_data_field(ctx, ref, "tint", "Vec3", "1, 0.4, 0.2");
+
+    char text[128] = {0};
+    sky_editor_data_type_id(ctx, ref, text, sizeof(text));
+    CHECK(std::strcmp(text, "game.enemy") == 0);
+    CHECK(sky_editor_data_field_count(ctx, ref) == 5);
+    // Fields enumerate name-sorted: boss, health, lives, model, tint.
+    sky_editor_data_field_name(ctx, ref, 1, text, sizeof(text));
+    CHECK(std::strcmp(text, "health") == 0);
+    sky_editor_data_field_type(ctx, ref, 1, text, sizeof(text));
+    CHECK(std::strcmp(text, "float") == 0);
+    sky_editor_data_field_value(ctx, ref, 1, text, sizeof(text));
+    CHECK(std::strcmp(text, "150") == 0);
+    sky_editor_data_field_value(ctx, ref, 4, text, sizeof(text));
+    CHECK(std::strcmp(text, "1, 0.4, 0.2") == 0);
+    // Unknown refs are empty, not fatal.
+    CHECK(sky_editor_data_field_count(ctx, "assets://Data/missing.skydata") == 0);
+    sky_editor_destroy(ctx);
+
+    // A fresh session sees the persisted asset.
+    ctx = sky_editor_create();
+    CHECK(sky_editor_data_field_count(ctx, ref) == 5);
+    sky_editor_data_field_value(ctx, ref, 0, text, sizeof(text));
+    CHECK(std::strcmp(text, "true") == 0); // boss
+    sky_editor_destroy(ctx);
+
+    // Leave the shared assets root clean.
+    namespace fs = std::filesystem;
+    const auto file = fs::temp_directory_path() / "sky_editor_assets" / "Data" /
+                      "bridge_probe.skydata";
+    std::error_code cleanup;
+    fs::remove(file, cleanup);
+    fs::remove(fs::path(file.string() + ".skymeta"), cleanup);
+}
+
 int main() {
     testBridgeLifecycleAndHierarchy();
     testBridgeAuthoring();
@@ -940,5 +988,6 @@ int main() {
     testBridgePackageInstall();
     testBridgePackageCode();
     testBridgeCrateRain();
+    testBridgeDataAssets();
     return sky::test::summary("editor_bridge_tests");
 }

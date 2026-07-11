@@ -83,8 +83,13 @@ UI есть только у редактора; внутри игры нет Can
   - [x] Персист материалов: правка в панели Materials пишет
         `Assets/Materials/<имя>.skymat`; при старте `.skymat` перекрывают
         встроенные дефолты. Тест `testMaterialEditsPersist` (две сессии).
-  - [ ] UI: Create → Data Asset в панели проекта, инспектор data-ассета.
-  - [ ] Managed `DataAsset.Load("assets://Data/…")` через reverse-API.
+  - [x] UI: кнопка «+ Data» в панели проекта (Assets/Data/DataAsset[_N]),
+        двойной клик по `.skydata` открывает его в инспекторе: поля
+        name/type/value, правка пишется сразу, строка добавления поля с
+        выбором типа. ABI: 7 функций `sky_editor_data_*`
+        (тест `testBridgeDataAssets`, включая персист между сессиями).
+  - [ ] Managed `DataAsset.Load("assets://Data/…")` — 13-й указатель
+        reverse-API + layout-guard (следующий инкремент).
   - [ ] Поле-ссылка `assetRef` у компонентов с выпадающим списком.
   - Все ингредиенты уже есть: `FieldValue`-инфраструктура (кормит инспектор,
     undo и сериализацию), `ISerializationBackend` (версии схем + миграции),
