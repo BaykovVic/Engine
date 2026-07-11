@@ -242,6 +242,10 @@ private:
     [[nodiscard]] std::vector<std::filesystem::path> scriptSourceDirs() const;
     void applyPackageLock();
     void writePackageLock();
+    /// Imports everything under the assets root (importers filter by
+    /// extension), so GUID lookups see every project asset — including
+    /// files renamed since the last session.
+    void scanProjectAssets();
     void startPlayScripts();
     void stopPlayScripts();
     /// endPlay reconciliation over the pre-play snapshots: survivors are

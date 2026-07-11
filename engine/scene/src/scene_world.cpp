@@ -10,8 +10,11 @@ namespace {
 constexpr const char* kSceneSchemaId = "sky.scene";
 // 1.0: hierarchy + transforms + component type ids.
 // 1.1: adds per-component field values.
+// 1.2: string fields carry the asset GUID (0 = not an asset reference), so
+//      renamed sources re-resolve on load.
 constexpr serialization::SchemaVersion kSceneSchemaLegacy{1, 0};
-constexpr serialization::SchemaVersion kSceneSchemaVersion{1, 1};
+constexpr serialization::SchemaVersion kSceneSchemaV11{1, 1};
+constexpr serialization::SchemaVersion kSceneSchemaVersion{1, 2};
 constexpr std::uint32_t kNoParent = 0xFFFFFFFFu;
 
 enum class FieldTag : std::uint32_t {
@@ -23,7 +26,7 @@ enum class FieldTag : std::uint32_t {
 };
 
 void writeField(serialization::ByteWriter& writer, const std::string& name,
-                const component::FieldValue& value) {
+                const component::FieldValue& value, std::uint64_t assetGuid) {
     writer.writeString(name);
     if (const auto* f = std::get_if<float>(&value)) {
         writer.writeU32(static_cast<std::uint32_t>(FieldTag::Float));
@@ -37,6 +40,8 @@ void writeField(serialization::ByteWriter& writer, const std::string& name,
     } else if (const auto* s = std::get_if<std::string>(&value)) {
         writer.writeU32(static_cast<std::uint32_t>(FieldTag::String));
         writer.writeString(*s);
+        // 1.2: the GUID rides along so a renamed source still resolves.
+        writer.writeU64(assetGuid);
     } else if (const auto* v = std::get_if<core::Vec3>(&value)) {
         writer.writeU32(static_cast<std::uint32_t>(FieldTag::Vec3));
         writer.writeF32(v->x);
@@ -45,8 +50,13 @@ void writeField(serialization::ByteWriter& writer, const std::string& name,
     }
 }
 
-std::optional<std::pair<std::string, component::FieldValue>> readField(
-    serialization::ByteReader& reader) {
+struct LoadedField {
+    std::string name;
+    component::FieldValue value;
+    std::uint64_t assetGuid = 0; // strings only; 0 = not an asset reference
+};
+
+std::optional<LoadedField> readField(serialization::ByteReader& reader) {
     const auto name = reader.readString();
     const auto tag = reader.readU32();
     if (!name || !tag) {
@@ -55,29 +65,36 @@ std::optional<std::pair<std::string, component::FieldValue>> readField(
     switch (static_cast<FieldTag>(*tag)) {
         case FieldTag::Float:
             if (const auto value = reader.readF32()) {
-                return std::pair{*name, component::FieldValue{*value}};
+                return LoadedField{*name, component::FieldValue{*value}};
             }
             break;
         case FieldTag::Int:
             if (const auto value = reader.readU64()) {
-                return std::pair{*name, component::FieldValue{
-                                            static_cast<std::int64_t>(*value)}};
+                return LoadedField{
+                    *name,
+                    component::FieldValue{static_cast<std::int64_t>(*value)}};
             }
             break;
         case FieldTag::Bool:
             if (const auto value = reader.readU32()) {
-                return std::pair{*name, component::FieldValue{*value != 0}};
+                return LoadedField{*name, component::FieldValue{*value != 0}};
             }
             break;
-        case FieldTag::String:
-            if (auto value = reader.readString()) {
-                return std::pair{*name, component::FieldValue{std::move(*value)}};
+        case FieldTag::String: {
+            auto value = reader.readString();
+            const auto guid = reader.readU64();
+            if (value && guid) {
+                return LoadedField{*name,
+                                   component::FieldValue{std::move(*value)},
+                                   *guid};
             }
             break;
+        }
         case FieldTag::Vec3: {
             const auto x = reader.readF32(), y = reader.readF32(), z = reader.readF32();
             if (x && y && z) {
-                return std::pair{*name, component::FieldValue{core::Vec3{*x, *y, *z}}};
+                return LoadedField{*name,
+                                   component::FieldValue{core::Vec3{*x, *y, *z}}};
             }
             break;
         }
@@ -131,6 +148,110 @@ std::optional<std::vector<std::byte>> migrateSceneV10ToV11(
     return writer.takeBuffer();
 }
 
+/// 1.1 -> 1.2: a zero asset GUID is appended after every string field value.
+std::optional<std::vector<std::byte>> migrateSceneV11ToV12(
+    const std::vector<std::byte>& payload) {
+    serialization::ByteReader reader(payload);
+    serialization::ByteWriter writer;
+
+    const auto sceneName = reader.readString();
+    const auto objectCount = reader.readU32();
+    if (!sceneName || !objectCount) {
+        return std::nullopt;
+    }
+    writer.writeString(*sceneName);
+    writer.writeU32(*objectCount);
+
+    for (std::uint32_t i = 0; i < *objectCount; ++i) {
+        const auto parentIndex = reader.readU32();
+        const auto name = reader.readString();
+        if (!parentIndex || !name) {
+            return std::nullopt;
+        }
+        writer.writeU32(*parentIndex);
+        writer.writeString(*name);
+        for (int f = 0; f < 10; ++f) {
+            const auto value = reader.readF32();
+            if (!value) {
+                return std::nullopt;
+            }
+            writer.writeF32(*value);
+        }
+        const auto componentCount = reader.readU32();
+        if (!componentCount) {
+            return std::nullopt;
+        }
+        writer.writeU32(*componentCount);
+        for (std::uint32_t c = 0; c < *componentCount; ++c) {
+            const auto typeId = reader.readString();
+            const auto fieldCount = reader.readU32();
+            if (!typeId || !fieldCount) {
+                return std::nullopt;
+            }
+            writer.writeString(*typeId);
+            writer.writeU32(*fieldCount);
+            for (std::uint32_t f = 0; f < *fieldCount; ++f) {
+                const auto fieldName = reader.readString();
+                const auto tag = reader.readU32();
+                if (!fieldName || !tag) {
+                    return std::nullopt;
+                }
+                writer.writeString(*fieldName);
+                writer.writeU32(*tag);
+                switch (static_cast<FieldTag>(*tag)) {
+                    case FieldTag::Float: {
+                        const auto v = reader.readF32();
+                        if (!v) {
+                            return std::nullopt;
+                        }
+                        writer.writeF32(*v);
+                        break;
+                    }
+                    case FieldTag::Int: {
+                        const auto v = reader.readU64();
+                        if (!v) {
+                            return std::nullopt;
+                        }
+                        writer.writeU64(*v);
+                        break;
+                    }
+                    case FieldTag::Bool: {
+                        const auto v = reader.readU32();
+                        if (!v) {
+                            return std::nullopt;
+                        }
+                        writer.writeU32(*v);
+                        break;
+                    }
+                    case FieldTag::String: {
+                        auto v = reader.readString();
+                        if (!v) {
+                            return std::nullopt;
+                        }
+                        writer.writeString(*v);
+                        writer.writeU64(0); // no GUID recorded in 1.1
+                        break;
+                    }
+                    case FieldTag::Vec3: {
+                        const auto x = reader.readF32(), y = reader.readF32(),
+                                   z = reader.readF32();
+                        if (!x || !y || !z) {
+                            return std::nullopt;
+                        }
+                        writer.writeF32(*x);
+                        writer.writeF32(*y);
+                        writer.writeF32(*z);
+                        break;
+                    }
+                    default:
+                        return std::nullopt;
+                }
+            }
+        }
+    }
+    return writer.takeBuffer();
+}
+
 struct SceneRecord {
     SceneDescriptor descriptor;
     SceneState state = SceneState::Loaded;
@@ -167,8 +288,11 @@ public:
     explicit SceneWorldImpl(const SceneWorldDeps& deps) : deps_(deps) {
         if (deps_.migrations != nullptr) {
             deps_.migrations->registerMigration(kSceneSchemaId, kSceneSchemaLegacy,
-                                                kSceneSchemaVersion,
+                                                kSceneSchemaV11,
                                                 migrateSceneV10ToV11);
+            deps_.migrations->registerMigration(kSceneSchemaId, kSceneSchemaV11,
+                                                kSceneSchemaVersion,
+                                                migrateSceneV11ToV12);
         }
     }
 
@@ -250,9 +374,18 @@ public:
                         unloadScene(handle);
                         return SceneHandle::invalid();
                     }
+                    // The GUID wins over the stored path: a source renamed
+                    // since the save re-resolves to its current ref.
+                    if (field->assetGuid != 0 && deps_.guidToRef) {
+                        auto current = deps_.guidToRef(field->assetGuid);
+                        if (!current.empty()) {
+                            field->value =
+                                component::FieldValue{std::move(current)};
+                        }
+                    }
                     if (deps_.componentData != nullptr && component.isValid()) {
-                        deps_.componentData->setField(component, field->first,
-                                                      std::move(field->second));
+                        deps_.componentData->setField(component, field->name,
+                                                      std::move(field->value));
                     }
                 }
             }
@@ -449,7 +582,13 @@ private:
                                         : std::map<std::string, component::FieldValue>{};
                 writer.writeU32(static_cast<std::uint32_t>(fields.size()));
                 for (const auto& [name, value] : fields) {
-                    writeField(writer, name, value);
+                    std::uint64_t guid = 0;
+                    if (deps_.refToGuid) {
+                        if (const auto* ref = std::get_if<std::string>(&value)) {
+                            guid = deps_.refToGuid(*ref);
+                        }
+                    }
+                    writeField(writer, name, value, guid);
                 }
             }
         }

@@ -6,6 +6,7 @@
 #include "sky/scene/scene_authoring.hpp"
 #include "sky/scene/scene_world.hpp"
 #include "sky/serialization/backends.hpp"
+#include "sky/serialization/byte_stream.hpp"
 #include "sky_test.hpp"
 
 namespace {
@@ -80,6 +81,152 @@ void testSceneRoundTrip() {
                                 "sky_engine_tests" / "scene");
 }
 
+void testGuidReferenceResolution() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "sky_engine_tests" / "scene" / "refs.scene";
+
+    // Save a scene whose mesh field is an asset ref; the bridge reports its
+    // GUID as 42 at save time.
+    {
+        SceneFixture fx;
+        fx.components->registerComponentType(
+            {"sky.mesh", "Mesh", false, "", {{"mesh", "string"}}});
+        sky::scene::SceneWorldDeps deps{*fx.objects,    *fx.objects,
+                                        *fx.objects,    *fx.components,
+                                        *fx.components, *fx.storage};
+        deps.componentData = fx.components.get();
+        deps.refToGuid = [](const std::string& ref) -> std::uint64_t {
+            return ref == "assets://Models/old.obj" ? 42u : 0u;
+        };
+        const auto scenes = sky::scene::createSceneWorld(deps);
+
+        const auto scene = scenes->createScene({"refs", path});
+        const auto object = fx.objects->createObject("model");
+        const auto mesh = fx.components->attach(object, "sky.mesh");
+        fx.components->setField(mesh, "mesh",
+                                std::string("assets://Models/old.obj"));
+        scenes->addRootObject(scene, object);
+        CHECK(scenes->saveScene(scene));
+    }
+
+    // Load in a fresh world where the asset has moved: GUID 42 now resolves
+    // to a different ref, and the field follows it.
+    {
+        SceneFixture fx;
+        fx.components->registerComponentType(
+            {"sky.mesh", "Mesh", false, "", {{"mesh", "string"}}});
+        sky::scene::SceneWorldDeps deps{*fx.objects,    *fx.objects,
+                                        *fx.objects,    *fx.components,
+                                        *fx.components, *fx.storage};
+        deps.componentData = fx.components.get();
+        deps.guidToRef = [](std::uint64_t guid) -> std::string {
+            return guid == 42u ? "assets://Models/renamed.obj" : "";
+        };
+        const auto scenes = sky::scene::createSceneWorld(deps);
+
+        const auto scene = scenes->loadScene(path);
+        CHECK(scene.isValid());
+        const auto models = fx.objects->findByName("model");
+        CHECK(models.size() == 1);
+        if (models.empty()) {
+            return; // the checks above already recorded the failure
+        }
+        const auto meshes = fx.components->componentsOf(models.front());
+        CHECK(!meshes.empty());
+        if (meshes.empty()) {
+            return;
+        }
+        const auto mesh = meshes.front();
+        const auto value = fx.components->field(mesh, "mesh");
+        CHECK(value.has_value());
+        const auto* text = std::get_if<std::string>(&*value);
+        CHECK(text != nullptr && *text == "assets://Models/renamed.obj");
+    }
+
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                "sky_engine_tests" / "scene");
+}
+
+void testLegacyV11SceneMigrates() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "sky_engine_tests" / "scene" / "legacy11.scene";
+
+    // A hand-written 1.1 payload: one object, one component, one field of
+    // every tag — the 1.1 -> 1.2 migration must walk all of them.
+    {
+        SceneFixture fx;
+        sky::serialization::ByteWriter writer;
+        writer.writeString("legacy");
+        writer.writeU32(1); // objects
+        writer.writeU32(0xFFFFFFFFu); // no parent
+        writer.writeString("relic");
+        for (int f = 0; f < 10; ++f) {
+            writer.writeF32(f == 7 ? 1.0f : 0.0f); // identity-ish transform
+        }
+        writer.writeU32(1); // components
+        writer.writeString("sky.mesh");
+        writer.writeU32(5); // fields
+        writer.writeString("f");
+        writer.writeU32(0); // Float
+        writer.writeF32(2.5f);
+        writer.writeString("i");
+        writer.writeU32(1); // Int
+        writer.writeU64(7);
+        writer.writeString("b");
+        writer.writeU32(2); // Bool
+        writer.writeU32(1);
+        writer.writeString("mesh");
+        writer.writeU32(3); // String — 1.1 stores no GUID after it
+        writer.writeString("assets://Models/relic.obj");
+        writer.writeString("v");
+        writer.writeU32(4); // Vec3
+        writer.writeF32(1.0f);
+        writer.writeF32(2.0f);
+        writer.writeF32(3.0f);
+        CHECK(fx.storage->write(path, {"sky.scene", {1, 1}, writer.takeBuffer()}));
+    }
+
+    // Loading runs the 1.1 -> 1.2 migration chain; every field survives.
+    {
+        SceneFixture fx;
+        fx.components->registerComponentType(
+            {"sky.mesh", "Mesh", false, "", {{"mesh", "string"}}});
+        const auto migrations =
+            sky::serialization::createSchemaMigrationService();
+        sky::scene::SceneWorldDeps deps{*fx.objects,    *fx.objects,
+                                        *fx.objects,    *fx.components,
+                                        *fx.components, *fx.storage};
+        deps.componentData = fx.components.get();
+        deps.migrations = migrations.get();
+        const auto scenes = sky::scene::createSceneWorld(deps);
+
+        const auto scene = scenes->loadScene(path);
+        CHECK(scene.isValid());
+        const auto relics = fx.objects->findByName("relic");
+        CHECK(relics.size() == 1);
+        if (relics.empty()) {
+            return; // the checks above already recorded the failure
+        }
+        const auto meshes = fx.components->componentsOf(relics.front());
+        CHECK(!meshes.empty());
+        if (meshes.empty()) {
+            return;
+        }
+        const auto mesh = meshes.front();
+        const auto ref = fx.components->field(mesh, "mesh");
+        CHECK(ref.has_value());
+        const auto* text = std::get_if<std::string>(&*ref);
+        CHECK(text != nullptr && *text == "assets://Models/relic.obj");
+        const auto number = fx.components->field(mesh, "f");
+        CHECK(number.has_value() && std::get<float>(*number) == 2.5f);
+        const auto vec = fx.components->field(mesh, "v");
+        CHECK(vec.has_value() && std::get<sky::core::Vec3>(*vec).z == 3.0f);
+    }
+
+    std::filesystem::remove_all(std::filesystem::temp_directory_path() /
+                                "sky_engine_tests" / "scene");
+}
+
 void testLoadRejectsCorruptScene() {
     SceneFixture fx;
     const auto path =
@@ -138,6 +285,8 @@ void testSceneAuthoring() {
 
 int main() {
     testSceneRoundTrip();
+    testGuidReferenceResolution();
+    testLegacyV11SceneMigrates();
     testLoadRejectsCorruptScene();
     testSceneAuthoring();
     return sky::test::summary("scene_tests");

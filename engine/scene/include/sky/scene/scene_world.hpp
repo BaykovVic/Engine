@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <string>
 
 #include "sky/component/component_world.hpp"
 #include "sky/ecs/ecs.hpp"
@@ -37,6 +40,13 @@ struct SceneWorldDeps {
     /// When provided, the scene world registers its format migrations here
     /// and runs legacy files through them on load.
     serialization::SchemaMigrationService* migrations = nullptr;
+    /// Optional asset-reference bridge (scene schema >= 1.2): string fields
+    /// holding asset refs are persisted together with the asset GUID, so a
+    /// renamed source (whose .skymeta travelled with it) still resolves.
+    /// refToGuid maps a ref ("assets://…") to its GUID at save (0 = none);
+    /// guidToRef maps a GUID back to the CURRENT ref at load ("" = unknown).
+    std::function<std::uint64_t(const std::string&)> refToGuid;
+    std::function<std::string(std::uint64_t)> guidToRef;
 };
 
 /// In-memory implementation of the Scene System: owns scene lifecycle, the

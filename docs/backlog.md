@@ -61,9 +61,13 @@ UI есть только у редактора; внутри игры нет Can
         `AssetId`; идентичность переживает перезапуск. Безаргументная
         `createAssetDatabase()` остаётся на path-hash (тесты/генерация).
         Тест `testSidecarGuidIdentity`.
-  - [ ] Ссылки в сценах/материалах по GUID (сейчас — `assets://`-пути,
-        резолв мимо AssetDatabase): нужен схемный шаг SKYB + резолв
-        путь↔GUID при загрузке/сохранении.
+  - [x] Ссылки в сценах по GUID: SKYB 1.2 (строковые поля несут GUID,
+        миграция 1.1→1.2 цепочкой), мосты refToGuid/guidToRef в
+        SceneWorldDeps, скан ассетов проекта при старте/открытии. Переименование
+        источника (+sidecar) переживает save→rename→open: тесты
+        `testGuidReferenceResolution`, `testLegacyV11SceneMigrates`,
+        `testAssetRenameSurvivesSceneReload`.
+  - [ ] Ссылки в материалах (`.skymat` придёт с B16) и префабах SKYP по GUID.
   - [ ] Импорт-кэш (Library), сжатие текстур BCn, мипмапы.
 - **B9. Скриптинг**: корутины, физические колбэки (`OnCollisionEnter`), доступ к
   иерархии из C# (parent/Find/GetComponent), отладчик (attach из IDE).

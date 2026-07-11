@@ -234,6 +234,60 @@ void testSceneRootsSyncOnSave() {
     fs::remove(path);
 }
 
+void testAssetRenameSurvivesSceneReload() {
+    namespace fs = std::filesystem;
+    const auto scenePath =
+        fs::temp_directory_path() / "sky_engine_tests" / "guid_scene.skybox";
+
+    // A dedicated OBJ (not shared demo content) referenced from a scene.
+    const auto assetsRoot = fs::temp_directory_path() / "sky_editor_assets";
+    const auto original = assetsRoot / "Models" / "guid_probe.obj";
+    const auto renamed = assetsRoot / "Models" / "guid_probe_renamed.obj";
+    const std::string objText = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+    {
+        EditorContext context;
+        std::vector<std::byte> bytes(objText.size());
+        for (std::size_t i = 0; i < objText.size(); ++i) {
+            bytes[i] = static_cast<std::byte>(objText[i]);
+        }
+        context.fileSystem->writeAll(original, bytes);
+        CHECK(context.assets->importAsset(original).has_value());
+        const auto probe =
+            context.createModelObject("GuidProbe",
+                                      "assets://Models/guid_probe.obj");
+        (void)probe;
+        CHECK(context.saveScene(scenePath));
+    }
+
+    // The source and its sidecar move; a fresh session re-scans, opens the
+    // scene and the mesh reference follows the GUID to the new name.
+    fs::rename(original, renamed);
+    fs::rename(fs::path(original.string() + ".skymeta"),
+               fs::path(renamed.string() + ".skymeta"));
+    {
+        EditorContext context;
+        CHECK(context.openScene(scenePath));
+        const auto probes = context.objects->findByName("GuidProbe");
+        CHECK(probes.size() == 1);
+        bool resolved = false;
+        for (const auto component : context.components->componentsOf(probes.front())) {
+            const auto value = context.components->field(component, "mesh");
+            if (!value) {
+                continue;
+            }
+            if (const auto* text = std::get_if<std::string>(&*value)) {
+                resolved = *text == "assets://Models/guid_probe_renamed.obj";
+            }
+        }
+        CHECK(resolved);
+    }
+
+    std::error_code cleanup;
+    fs::remove(renamed, cleanup);
+    fs::remove(fs::path(renamed.string() + ".skymeta"), cleanup);
+    fs::remove(scenePath, cleanup);
+}
+
 } // namespace
 
 int main() {
@@ -244,5 +298,6 @@ int main() {
     testToolCommandBus();
     testPlayModeFullRestore();
     testSceneRootsSyncOnSave();
+    testAssetRenameSurvivesSceneReload();
     return sky::test::summary("undo_tests");
 }

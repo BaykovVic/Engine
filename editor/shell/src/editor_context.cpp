@@ -250,6 +250,32 @@ EditorContext::EditorContext() {
     sceneDeps.ecsSync = ecsSync.get();
     sceneDeps.componentData = components.get();
     sceneDeps.migrations = migrations.get();
+    // Asset-reference bridge (SKYB >= 1.2): "assets://…" string fields are
+    // persisted with their sidecar GUID and re-resolved on load, so a
+    // renamed source keeps working. Deferred through `this`: the asset
+    // database is constructed later in this constructor.
+    sceneDeps.refToGuid = [this](const std::string& ref) -> std::uint64_t {
+        if (assets == nullptr || ref.rfind("assets://", 0) != 0) {
+            return 0;
+        }
+        const auto host = assetsRoot / ref.substr(9);
+        const auto id = assets->findBySourcePath(host);
+        return id ? id->value : 0;
+    };
+    sceneDeps.guidToRef = [this](std::uint64_t guid) -> std::string {
+        if (assets == nullptr) {
+            return {};
+        }
+        const auto descriptor = assets->resolve(asset::AssetId{guid});
+        if (!descriptor) {
+            return {};
+        }
+        const auto relative = descriptor->sourcePath.lexically_relative(assetsRoot);
+        if (relative.empty() || *relative.begin() == "..") {
+            return {};
+        }
+        return "assets://" + relative.generic_string();
+    };
     scenes = scene::createSceneWorld(sceneDeps);
     playMode = createPlayModeController(*scenes);
 
@@ -332,6 +358,7 @@ EditorContext::EditorContext() {
     assets->registerImporter(*fbxImporter);
     assets->registerImporter(*gltfImporter);
     assets->registerImporter(*pngImporter);
+    scanProjectAssets();
 
     // Starter material set; the Inspector edits assignments by name.
     materials = rendering::createMaterialLibrary();
@@ -1497,6 +1524,27 @@ void EditorContext::newScene() {
     initTerrain();
 }
 
+void EditorContext::scanProjectAssets() {
+    namespace fs = std::filesystem;
+    if (assets == nullptr) {
+        return;
+    }
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(assetsRoot, ec), end; it != end;
+         it.increment(ec)) {
+        if (ec) {
+            break;
+        }
+        if (!it->is_regular_file(ec)) {
+            continue;
+        }
+        if (it->path().extension() == ".skymeta") {
+            continue; // sidecars are identity, not assets
+        }
+        assets->importAsset(it->path()); // importers filter by supports()
+    }
+}
+
 bool EditorContext::saveScene(const std::filesystem::path& path) {
     // The editor owns the live root list (deletes/reparents mutate roots_,
     // the scene record only ever grew) — sync it so the save never walks
@@ -1507,6 +1555,9 @@ bool EditorContext::saveScene(const std::filesystem::path& path) {
 }
 
 bool EditorContext::openScene(const std::filesystem::path& path) {
+    // Re-scan first: files may have been added or renamed since the last
+    // scan, and GUID re-resolution needs their current locations.
+    scanProjectAssets();
     resetScene();
     activeScene = scenes->loadScene(path);
     if (!activeScene.isValid()) {
