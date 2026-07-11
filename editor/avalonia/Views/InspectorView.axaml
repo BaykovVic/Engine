@@ -114,6 +114,16 @@
                             </DataTemplate>
                           </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <!-- data-asset reference (ScriptableObject-style picker) -->
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" IsVisible="{Binding IsAssetRef}"
+                                  ItemsSource="{Binding DataAssetOptions}" SelectedItem="{Binding SelectedDataAssetOption, Mode=TwoWay}"
+                                  PlaceholderText="Select data asset...">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                              <TextBlock Text="{Binding Display}" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <!-- Vec3 as X/Y/Z -->
                         <Grid Grid.Column="1" IsVisible="{Binding IsVec3}" ColumnDefinitions="13,*,6,13,*,6,13,*">
                           <TextBlock Classes="axisX" Text="X" VerticalAlignment="Center"/>

@@ -77,6 +77,12 @@ internal static class Program
                 asset.NewFieldName = "tint"; asset.NewFieldType = "Vec3";
                 asset.NewFieldValue = "1, 0.4, 0.2"; asset.AddField();
             }
+            // A holder object with the assetRef dropdown, when requested.
+            if (Array.IndexOf(cmdArgs, "--asset-ref") >= 0)
+            {
+                dvm.CreateCube();
+                dvm.AddComponent("sky.gameConfig");
+            }
             Dispatcher.UIThread.RunJobs();
         }
 

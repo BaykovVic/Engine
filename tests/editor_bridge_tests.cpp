@@ -961,6 +961,29 @@ void testBridgeDataAssets() {
     CHECK(std::strcmp(text, "true") == 0); // boss
     sky_editor_destroy(ctx);
 
+    // assetRef component fields: the descriptor reports the type (the
+    // Inspector renders a data-asset dropdown from it) and the value is a
+    // plain ref string.
+    ctx = sky_editor_create();
+    const SkyObjectId holder =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "ConfigHolder");
+    sky_editor_add_component(ctx, holder, "sky.gameConfig");
+    int32_t config = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, holder); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, holder, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.gameConfig") == 0) {
+            config = i;
+        }
+    }
+    CHECK(config >= 0);
+    sky_editor_component_field_type(ctx, holder, config, 0, text, sizeof(text));
+    CHECK(std::strcmp(text, "assetRef") == 0);
+    sky_editor_set_component_field(ctx, holder, config, 0, ref);
+    sky_editor_component_field_value(ctx, holder, config, 0, text, sizeof(text));
+    CHECK(std::strcmp(text, ref) == 0);
+    sky_editor_destroy(ctx);
+
 #ifdef SKY_TEST_MANAGED
     // Gameplay path: a user script loads the asset through the reverse API
     // (DataAsset.Load) and logs the typed values.

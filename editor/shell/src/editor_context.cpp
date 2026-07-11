@@ -405,6 +405,9 @@ EditorContext::EditorContext() {
         {"sky.environment", "Environment", false, "",
          {{"horizon", "Vec3"}, {"zenith", "Vec3"}, {"exposure", "float"}},
          "Rendering"});
+    components->registerComponentType(
+        {"sky.gameConfig", "Game Config", false, "",
+         {{"config", "assetRef"}}, "Gameplay"});
 
     // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
     // Sidecar GUID identity: renaming a source (with its .skymeta) keeps

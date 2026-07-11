@@ -98,7 +98,14 @@ UI есть только у редактора; внутри игры нет Can
         user-script читает ассет и логирует значения (testBridgeDataAssets,
         SKY_TEST_MANAGED-секция); цепочка наследования —
         `testDataAssetInheritanceChain`.
-  - [ ] Поле-ссылка `assetRef` у компонентов с выпадающим списком.
+  - [x] Поле-ссылка `assetRef`: тип поля в дескрипторе компонента,
+        инспектор рендерит дропдаун по Assets/Data/*.skydata («None» +
+        текущее значение); компонент `sky.gameConfig` как носитель.
+        Тест в testBridgeDataAssets (тип "assetRef" + запись/чтение ссылки).
+
+  **B16 закрыт целиком** — аналог ScriptableObject: формат с наследованием,
+  GUID-идентичность, редактор (создание/правка/дропдаун-ссылки), managed
+  `DataAsset.Load`, персист материалов.
   - Все ингредиенты уже есть: `FieldValue`-инфраструктура (кормит инспектор,
     undo и сериализацию), `ISerializationBackend` (версии схем + миграции),
     VFS/AssetDatabase (тип ассета — строка).

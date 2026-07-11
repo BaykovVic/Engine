@@ -104,7 +104,28 @@ public sealed class ComponentField : System.ComponentModel.INotifyPropertyChange
     public bool IsBool => Type == "bool";
     public bool IsMeshRef => !_scriptParam && Name == "mesh";
     public bool IsScriptClass => !_scriptParam && Name == "class";
-    public bool IsScalar => !IsVec3 && !IsBool && !IsMeshRef && !IsScriptClass;
+    public bool IsAssetRef => Type == "assetRef";
+    public bool IsScalar =>
+        !IsVec3 && !IsBool && !IsMeshRef && !IsScriptClass && !IsAssetRef;
+
+    // --- Data-asset reference (dropdown over Assets/Data/*.skydata) ---
+    public System.Collections.Generic.List<MeshOption> DataAssetOptions =>
+        _session.AvailableDataAssets(_value);
+
+    public MeshOption? SelectedDataAssetOption
+    {
+        get
+        {
+            foreach (var o in DataAssetOptions)
+                if (o.Value == _value) return o;
+            return null;
+        }
+        set
+        {
+            if (value != null) Value = value.Value;
+            Raise(nameof(SelectedDataAssetOption));
+        }
+    }
 
     // --- Script class (managed ScriptComponent subclasses) ---
     public System.Collections.Generic.List<string> ScriptClassOptions =>
@@ -749,6 +770,22 @@ public sealed class EditorSession : IDisposable
                 var value = "assets://Models/" + e.Name;
                 list.Add(new MeshOption(MeshDisplayName(value), value));
             }
+        }
+        if (!string.IsNullOrEmpty(current) && !list.Exists(o => o.Value == current))
+            list.Add(new MeshOption(MeshDisplayName(current), current));
+        return list;
+    }
+
+    /// Every project data asset for the assetRef dropdowns, "(None)" first.
+    public List<MeshOption> AvailableDataAssets(string current)
+    {
+        var list = new List<MeshOption> { new MeshOption("None", "") };
+        foreach (var e in ListProject("assets://Data"))
+        {
+            if (e.IsDirectory || !e.Name.ToLowerInvariant().EndsWith(".skydata"))
+                continue;
+            var value = "assets://Data/" + e.Name;
+            list.Add(new MeshOption(MeshDisplayName(value), value));
         }
         if (!string.IsNullOrEmpty(current) && !list.Exists(o => o.Value == current))
             list.Add(new MeshOption(MeshDisplayName(current), current));
