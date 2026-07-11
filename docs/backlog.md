@@ -73,10 +73,19 @@ UI есть только у редактора; внутри игры нет Can
   иерархии из C# (parent/Find/GetComponent), отладчик (attach из IDE).
 - **B10. Редактор**: профилировщик (стыкуется с `feature/ecs-profiling`), окно
   анимации, настройки проекта/качества, мультивыделение.
-- **B16. Data-ассеты (аналог ScriptableObject)**: данных-как-ассетов нет —
-  конфиги/статы/таблицы можно хранить только полями компонентов на объектах
-  сцены. Смежная дыра: правки материалов в панели Materials не персистятся
-  (библиотека собирается в коде при старте).
+- **B16. Data-ассеты (аналог ScriptableObject)** — ядро сделано:
+  - [x] Формат `sky.data` (`DataAssetDesc`: typeId + parentGuid-наследование +
+        карта FieldValue) c save/load через ISerializationBackend и
+        `mergedFields` (Unigine-Properties-style overrides) — модуль component.
+        Тест `testDataAsset`.
+  - [x] `createDataImporter` (asset): `.skydata`→"data", `.skymat`→"material" —
+        data-ассеты получают GUID-sidecar и участвуют в B8-ссылках.
+  - [x] Персист материалов: правка в панели Materials пишет
+        `Assets/Materials/<имя>.skymat`; при старте `.skymat` перекрывают
+        встроенные дефолты. Тест `testMaterialEditsPersist` (две сессии).
+  - [ ] UI: Create → Data Asset в панели проекта, инспектор data-ассета.
+  - [ ] Managed `DataAsset.Load("assets://Data/…")` через reverse-API.
+  - [ ] Поле-ссылка `assetRef` у компонентов с выпадающим списком.
   - Все ингредиенты уже есть: `FieldValue`-инфраструктура (кормит инспектор,
     undo и сериализацию), `ISerializationBackend` (версии схем + миграции),
     VFS/AssetDatabase (тип ассета — строка).

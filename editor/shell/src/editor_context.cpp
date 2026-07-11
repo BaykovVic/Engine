@@ -8,6 +8,7 @@
 #include <fstream>
 #include <functional>
 
+#include "sky/component/data_asset.hpp"
 #include "sky/package/package_installer.hpp"
 #include "sky/package/package_lock.hpp"
 #include "sky/rendering_opengl/opengl_backend.hpp"
@@ -358,6 +359,8 @@ EditorContext::EditorContext() {
     assets->registerImporter(*fbxImporter);
     assets->registerImporter(*gltfImporter);
     assets->registerImporter(*pngImporter);
+    dataImporter = asset::createDataImporter();
+    assets->registerImporter(*dataImporter);
     scanProjectAssets();
 
     // Starter material set; the Inspector edits assignments by name.
@@ -499,6 +502,10 @@ EditorContext::EditorContext() {
         materials->createMaterial({"Crate", {1.0f, 1.0f, 1.0f}, 0.75f, 0.0f, {},
                                    texturePath.generic_string()});
     }
+
+    // Persisted material edits (Assets/Materials/*.skymat) override the
+    // built-in defaults created above.
+    loadProjectMaterials();
 
     initScripting();
     buildDemoScene();
@@ -1522,6 +1529,114 @@ void EditorContext::newScene() {
     resetScene();
     activeScene = scenes->createScene({"Untitled", {}});
     initTerrain();
+}
+
+namespace {
+
+// MaterialDesc <-> data-asset fields. uvTiling (Vec2) rides as two floats:
+// FieldValue has no Vec2 alternative.
+component::DataAssetDesc materialToDataAsset(const rendering::MaterialDesc& desc) {
+    component::DataAssetDesc data;
+    data.typeId = "sky.material";
+    data.fields["name"] = desc.name;
+    data.fields["baseColor"] = desc.baseColor;
+    data.fields["roughness"] = desc.roughness;
+    data.fields["metallic"] = desc.metallic;
+    data.fields["emissive"] = desc.emissive;
+    data.fields["texturePath"] = desc.texturePath;
+    data.fields["normalPath"] = desc.normalPath;
+    data.fields["roughnessPath"] = desc.roughnessPath;
+    data.fields["metallicPath"] = desc.metallicPath;
+    data.fields["occlusionPath"] = desc.occlusionPath;
+    data.fields["heightPath"] = desc.heightPath;
+    data.fields["uvTilingX"] = desc.uvTiling.x;
+    data.fields["uvTilingY"] = desc.uvTiling.y;
+    data.fields["parallaxDepth"] = desc.parallaxDepth;
+    data.fields["opacity"] = desc.opacity;
+    return data;
+}
+
+rendering::MaterialDesc materialFromDataAsset(const component::DataAssetDesc& data) {
+    rendering::MaterialDesc desc;
+    const auto text = [&](const char* key, std::string fallback = {}) {
+        const auto it = data.fields.find(key);
+        if (it != data.fields.end()) {
+            if (const auto* value = std::get_if<std::string>(&it->second)) {
+                return *value;
+            }
+        }
+        return fallback;
+    };
+    const auto number = [&](const char* key, float fallback) {
+        const auto it = data.fields.find(key);
+        if (it != data.fields.end()) {
+            if (const auto* value = std::get_if<float>(&it->second)) {
+                return *value;
+            }
+        }
+        return fallback;
+    };
+    const auto vector = [&](const char* key, core::Vec3 fallback) {
+        const auto it = data.fields.find(key);
+        if (it != data.fields.end()) {
+            if (const auto* value = std::get_if<core::Vec3>(&it->second)) {
+                return *value;
+            }
+        }
+        return fallback;
+    };
+    desc.name = text("name");
+    desc.baseColor = vector("baseColor", desc.baseColor);
+    desc.roughness = number("roughness", desc.roughness);
+    desc.metallic = number("metallic", desc.metallic);
+    desc.emissive = vector("emissive", desc.emissive);
+    desc.texturePath = text("texturePath");
+    desc.normalPath = text("normalPath");
+    desc.roughnessPath = text("roughnessPath");
+    desc.metallicPath = text("metallicPath");
+    desc.occlusionPath = text("occlusionPath");
+    desc.heightPath = text("heightPath");
+    desc.uvTiling = {number("uvTilingX", 1.0f), number("uvTilingY", 1.0f)};
+    desc.parallaxDepth = number("parallaxDepth", 0.0f);
+    desc.opacity = number("opacity", 1.0f);
+    return desc;
+}
+
+} // namespace
+
+void EditorContext::persistMaterial(rendering::MaterialHandle material) {
+    const auto& desc = materials->material(material);
+    if (desc.name.empty()) {
+        return;
+    }
+    const auto file = assetsRoot / "Materials" / (desc.name + ".skymat");
+    if (component::saveDataAsset(*storage, file, materialToDataAsset(desc))) {
+        assets->importAsset(file); // GUID sidecar + registry entry
+    }
+}
+
+void EditorContext::loadProjectMaterials() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    for (fs::directory_iterator it(assetsRoot / "Materials", ec), end; it != end;
+         it.increment(ec)) {
+        if (ec || !it->is_regular_file(ec) || it->path().extension() != ".skymat") {
+            continue;
+        }
+        const auto data = component::loadDataAsset(*storage, it->path());
+        if (!data || data->typeId != "sky.material") {
+            continue;
+        }
+        const auto desc = materialFromDataAsset(*data);
+        if (desc.name.empty()) {
+            continue;
+        }
+        if (const auto handle = materials->findMaterial(desc.name)) {
+            materials->updateMaterial(*handle, desc);
+        } else {
+            materials->createMaterial(desc);
+        }
+    }
 }
 
 void EditorContext::scanProjectAssets() {

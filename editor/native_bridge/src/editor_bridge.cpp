@@ -790,6 +790,9 @@ void sky_editor_set_material_field(SkyEditorContext* ctx, int32_t index, int32_t
     materialFieldSet(desc, field, value);
     if (const auto handle = ec(ctx).materials->findMaterial(desc.name)) {
         ec(ctx).materials->updateMaterial(*handle, desc);
+        // Materials are assets: every edit lands in Assets/Materials/*.skymat
+        // and survives a restart.
+        ec(ctx).persistMaterial(*handle);
     }
 }
 

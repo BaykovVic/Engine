@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "sky/asset/asset_database.hpp"
+#include "sky/asset/data_importer.hpp"
 #include "sky/asset/fbx_importer.hpp"
 #include "sky/asset/gltf_importer.hpp"
 #include "sky/asset/obj_importer.hpp"
@@ -82,6 +83,11 @@ public:
     void newScene();
     bool saveScene(const std::filesystem::path& path);
     bool openScene(const std::filesystem::path& path);
+
+    /// Writes a material to Assets/Materials/<name>.skymat (data-asset
+    /// format). The Materials panel calls it after every edit, so material
+    /// changes survive a restart.
+    void persistMaterial(rendering::MaterialHandle material);
 
     /// Drives the managed gameplay scripts one frame (call each frame while
     /// playing). No-op when scripting is unavailable or nothing is scripted.
@@ -221,6 +227,7 @@ public:
     std::unique_ptr<asset::IAssetImporter> fbxImporter;
     std::unique_ptr<asset::IAssetImporter> gltfImporter;
     std::unique_ptr<asset::IAssetImporter> pngImporter;
+    std::unique_ptr<asset::IAssetImporter> dataImporter;
     scene::SceneHandle activeScene;
     terrain::TerrainHandle terrainHandle;
     object::ObjectHandle terrainObject;
@@ -246,6 +253,8 @@ private:
     /// extension), so GUID lookups see every project asset — including
     /// files renamed since the last session.
     void scanProjectAssets();
+    /// Loads every Assets/Materials/*.skymat over the built-in defaults.
+    void loadProjectMaterials();
     void startPlayScripts();
     void stopPlayScripts();
     /// endPlay reconciliation over the pre-play snapshots: survivors are

@@ -1,9 +1,13 @@
 #include <cmath>
+#include <filesystem>
 #include <typeindex>
 
 #include "sky/component/component_world.hpp"
+#include "sky/component/data_asset.hpp"
 #include "sky/ecs/ecs_world.hpp"
 #include "sky/object/object_world.hpp"
+#include "sky/platform/platform_services.hpp"
+#include "sky/serialization/backends.hpp"
 #include "sky_test.hpp"
 
 namespace {
@@ -153,10 +157,61 @@ void testEcsWorld() {
 
 } // namespace
 
+void testDataAsset() {
+    namespace fs = std::filesystem;
+    const auto root = fs::temp_directory_path() / "sky_engine_tests" / "data_asset";
+    fs::remove_all(root);
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const auto storage =
+        sky::serialization::createFileSerializationBackend(*fileSystem);
+
+    // Round trip: every field type plus the inheritance pointer.
+    sky::component::DataAssetDesc enemy;
+    enemy.typeId = "game.enemy";
+    enemy.parentGuid = 0xABCDEFu;
+    enemy.fields["health"] = 150.0f;
+    enemy.fields["lives"] = std::int64_t{3};
+    enemy.fields["boss"] = true;
+    enemy.fields["model"] = std::string("assets://Models/grunt.obj");
+    enemy.fields["tint"] = sky::core::Vec3{1.0f, 0.4f, 0.2f};
+    const auto path = root / "grunt.skydata";
+    CHECK(sky::component::saveDataAsset(*storage, path, enemy));
+
+    const auto loaded = sky::component::loadDataAsset(*storage, path);
+    CHECK(loaded.has_value());
+    if (loaded) {
+        CHECK(loaded->typeId == "game.enemy");
+        CHECK(loaded->parentGuid == 0xABCDEFu);
+        CHECK(loaded->fields.size() == 5);
+        CHECK(std::get<float>(loaded->fields.at("health")) == 150.0f);
+        CHECK(std::get<bool>(loaded->fields.at("boss")));
+        CHECK(std::get<std::string>(loaded->fields.at("model")) ==
+              "assets://Models/grunt.obj");
+        CHECK(std::get<sky::core::Vec3>(loaded->fields.at("tint")).y == 0.4f);
+    }
+
+    // A foreign/corrupt file is rejected, not misread.
+    fileSystem->writeAll(root / "junk.skydata", {std::byte{0x42}});
+    CHECK(!sky::component::loadDataAsset(*storage, root / "junk.skydata")
+               .has_value());
+
+    // Inheritance merge: overrides win, base-only fields shine through.
+    std::map<std::string, sky::component::FieldValue> base{
+        {"health", 100.0f}, {"speed", 5.0f}};
+    std::map<std::string, sky::component::FieldValue> overrides{
+        {"health", 150.0f}};
+    const auto merged = sky::component::mergedFields(base, overrides);
+    CHECK(std::get<float>(merged.at("health")) == 150.0f);
+    CHECK(std::get<float>(merged.at("speed")) == 5.0f);
+
+    fs::remove_all(root);
+}
+
 int main() {
     testObjectHierarchy();
     testWorldTransformWriteback();
     testComponentWorld();
     testEcsWorld();
+    testDataAsset();
     return sky::test::summary("world_tests");
 }

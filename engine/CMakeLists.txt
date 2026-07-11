@@ -59,7 +59,8 @@ sky_add_module(sky_object object
     object/src/object_world.cpp)
 
 sky_add_module(sky_component component
-    component/src/component_world.cpp)
+    component/src/component_world.cpp
+    component/src/data_asset.cpp)
 
 sky_add_module(sky_ecs ecs
     ecs/src/ecs_world.cpp
@@ -96,6 +97,7 @@ target_compile_features(sky_third_party PUBLIC cxx_std_20)
 
 sky_add_module(sky_asset asset
     asset/src/asset_database.cpp
+    asset/src/data_importer.cpp
     asset/src/obj_importer.cpp
     asset/src/fbx_importer.cpp
     asset/src/gltf_importer.cpp

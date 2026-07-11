@@ -1,6 +1,7 @@
 // Undo/redo of editor commands against the real engine worlds. The command
 // layer is Qt-free, so it is verified here without the UI.
 
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <variant>
@@ -288,6 +289,47 @@ void testAssetRenameSurvivesSceneReload() {
     fs::remove(scenePath, cleanup);
 }
 
+void testMaterialEditsPersist() {
+    namespace fs = std::filesystem;
+    const auto skymat = fs::temp_directory_path() / "sky_editor_assets" /
+                        "Materials" / "Gold.skymat";
+    std::error_code ec;
+    fs::remove(skymat, ec); // a clean slate for the default material
+
+    // Session 1: edit Gold and persist it (as the Materials panel does).
+    {
+        EditorContext context;
+        const auto gold = context.materials->findMaterial("Gold");
+        CHECK(gold.has_value());
+        if (!gold) {
+            return;
+        }
+        auto desc = context.materials->material(*gold);
+        desc.roughness = 0.42f;
+        desc.baseColor = {0.9f, 0.1f, 0.2f};
+        context.materials->updateMaterial(*gold, desc);
+        context.persistMaterial(*gold);
+        CHECK(fs::exists(skymat));
+    }
+
+    // Session 2: the persisted values override the built-in defaults.
+    {
+        EditorContext context;
+        const auto gold = context.materials->findMaterial("Gold");
+        CHECK(gold.has_value());
+        if (gold) {
+            const auto& desc = context.materials->material(*gold);
+            CHECK(std::fabs(desc.roughness - 0.42f) < 1e-5f);
+            CHECK(std::fabs(desc.baseColor.y - 0.1f) < 1e-5f);
+        }
+    }
+
+    // Leave the shared assets root as we found it: other suites see the
+    // default Gold again.
+    fs::remove(skymat, ec);
+    fs::remove(fs::path(skymat.string() + ".skymeta"), ec);
+}
+
 } // namespace
 
 int main() {
@@ -299,5 +341,6 @@ int main() {
     testPlayModeFullRestore();
     testSceneRootsSyncOnSave();
     testAssetRenameSurvivesSceneReload();
+    testMaterialEditsPersist();
     return sky::test::summary("undo_tests");
 }
