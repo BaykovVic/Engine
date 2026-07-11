@@ -111,10 +111,59 @@ void testProjectRoundTrip() {
                                 "sky_engine_tests" / "asset_project");
 }
 
+void testSidecarGuidIdentity() {
+    namespace fs = std::filesystem;
+    const auto root = fs::temp_directory_path() / "sky_engine_tests" / "guid";
+    fs::remove_all(root);
+    fs::create_directories(root);
+
+    const auto fileSystem = sky::platform::createStdFileSystem();
+    const auto database = sky::asset::createAssetDatabase(*fileSystem);
+    FakeMeshImporter importer;
+    database->registerImporter(importer);
+
+    // First import writes the sidecar with a fresh GUID.
+    const auto source = root / "crate.mesh";
+    fileSystem->writeAll(source, std::vector<std::byte>{std::byte{1}});
+    const auto id = database->importAsset(source);
+    CHECK(id.has_value());
+    const auto sidecar = fs::path(source.string() + ".skymeta");
+    CHECK(fs::exists(sidecar));
+    // GUID identity, not the path hash.
+    CHECK(*id != sky::asset::assetIdFromPath(source));
+
+    // Re-importing the same file reuses the sidecar: identity is idempotent.
+    CHECK(database->importAsset(source) == *id);
+
+    // Rename with the sidecar travelling along: the identity survives.
+    const auto renamed = root / "barrel.mesh";
+    fs::rename(source, renamed);
+    fs::rename(sidecar, fs::path(renamed.string() + ".skymeta"));
+    CHECK(database->importAsset(renamed) == *id);
+    CHECK(database->findBySourcePath(renamed) == *id);
+    CHECK(database->resolve(*id)->sourcePath == renamed);
+
+    // A file without a sidecar is a new asset.
+    const auto other = root / "other.mesh";
+    fileSystem->writeAll(other, std::vector<std::byte>{std::byte{2}});
+    const auto otherId = database->importAsset(other);
+    CHECK(otherId.has_value());
+    CHECK(*otherId != *id);
+
+    // A second database session (fresh process analog) reads the same GUID
+    // back from the sidecar — identity persists across runs.
+    const auto secondSession = sky::asset::createAssetDatabase(*fileSystem);
+    secondSession->registerImporter(importer);
+    CHECK(secondSession->importAsset(renamed) == *id);
+
+    fs::remove_all(root);
+}
+
 } // namespace
 
 int main() {
     testAssetDatabase();
     testProjectRoundTrip();
+    testSidecarGuidIdentity();
     return sky::test::summary("asset_project_tests");
 }

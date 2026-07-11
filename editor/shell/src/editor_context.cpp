@@ -321,7 +321,9 @@ EditorContext::EditorContext() {
          "Rendering"});
 
     // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
-    assets = asset::createAssetDatabase();
+    // Sidecar GUID identity: renaming a source (with its .skymeta) keeps
+    // the asset id stable.
+    assets = asset::createAssetDatabase(*fileSystem);
     objImporter = asset::createObjImporter(*fileSystem);
     fbxImporter = asset::createFbxImporter(*fileSystem);
     gltfImporter = asset::createGltfImporter(*fileSystem);
