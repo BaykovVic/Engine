@@ -501,6 +501,75 @@ void testBridgeUserScripts() {
 #endif
 }
 
+// OnFixedUpdate end-to-end: a user script's override is detected through the
+// managed host, dispatched once per physics step, and observed from OnUpdate.
+void testBridgeFixedUpdate() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    char root[512] = {0};
+    sky_editor_assets_root(ctx, root, sizeof(root));
+    const std::filesystem::path scriptsDir = std::filesystem::path(root) / "Scripts";
+    std::error_code stale;
+    std::filesystem::remove_all(scriptsDir, stale);
+    std::filesystem::create_directories(scriptsDir);
+    {
+        std::ofstream source(scriptsDir / "FixedCounter.cs");
+        source << "namespace SkyProject;\n"
+               << "public class FixedCounter : SkyEngine.ScriptComponent\n"
+               << "{\n"
+               << "    private int _count;\n"
+               << "    public override void OnFixedUpdate(double dt) { _count++; }\n"
+               << "    public override void OnUpdate(double dt) "
+               << "{ SkyEngine.Debug.Log(\"fixed=\" + _count); }\n"
+               << "}\n";
+    }
+    CHECK(sky_editor_reload_scripts(ctx) == 1);
+
+    const SkyObjectId object =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "FixedCounter");
+    sky_editor_add_component(ctx, object, "sky.script");
+    int32_t script = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+    sky_editor_set_component_field(ctx, object, script, 0,
+                                   "SkyProject.FixedCounter");
+
+    // 60 frames at the fixed step: exactly one OnFixedUpdate per frame, run
+    // BEFORE that frame's OnUpdate (Unity's order), so the last log reads 60.
+    CHECK(sky_editor_play(ctx) == 1);
+    for (int i = 0; i < 60; ++i) {
+        sky_editor_tick_play(ctx, 1.0 / 60.0);
+    }
+    bool counted = false;
+    for (int32_t i = 0; i < sky_editor_log_count(ctx) && !counted; ++i) {
+        char line[256] = {0};
+        sky_editor_log_text(ctx, i, line, sizeof(line));
+        counted = std::strstr(line, "fixed=60") != nullptr;
+    }
+    if (!counted) {
+        for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+            char line[256] = {0};
+            sky_editor_log_text(ctx, i, line, sizeof(line));
+            std::printf("LOG[%d]: %s\n", i, line);
+        }
+    }
+    CHECK(counted);
+    sky_editor_stop(ctx);
+
+    sky_editor_destroy(ctx);
+    std::error_code cleanup;
+    std::filesystem::remove_all(scriptsDir, cleanup);
+#endif
+}
+
 std::string componentField(SkyEditorContext* ctx, SkyObjectId object,
                            const char* typeId, int32_t fieldIndex) {
     for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
@@ -1071,6 +1140,7 @@ int main() {
     testBridgeScriptClasses();
     testBridgeScriptFields();
     testBridgeUserScripts();
+    testBridgeFixedUpdate();
     testBridgePrefabs();
     testBridgeScriptEngineApi();
     testBridgePackagePersistence();

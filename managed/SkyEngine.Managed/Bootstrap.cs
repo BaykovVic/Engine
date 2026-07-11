@@ -162,6 +162,26 @@ public static class Bootstrap
         Instances.Remove(id);
     }
 
+    private static readonly Dictionary<Type, bool> FixedUpdateOverrides = new();
+
+    /// <summary>1 when the instance's type overrides OnFixedUpdate: the
+    /// engine schedules physics-step callbacks — and gives up the async
+    /// frame overlap — only for scripts that actually use them.</summary>
+    [UnmanagedCallersOnly]
+    public static int InstanceHasFixedUpdate(ulong id)
+    {
+        if (!Instances.TryGetValue(id, out var script))
+            return 0;
+        var type = script.GetType();
+        if (!FixedUpdateOverrides.TryGetValue(type, out var has))
+        {
+            has = type.GetMethod(nameof(ScriptComponent.OnFixedUpdate))?
+                      .DeclaringType != typeof(ScriptComponent);
+            FixedUpdateOverrides[type] = has;
+        }
+        return has ? 1 : 0;
+    }
+
     /// <summary>Event order mirrors the native ScriptLifecycleEvent enum.</summary>
     [UnmanagedCallersOnly]
     public static int InvokeLifecycle(ulong id, int lifecycleEvent, double deltaSeconds)

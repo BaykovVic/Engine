@@ -106,6 +106,16 @@ public:
     /// playing). No-op when scripting is unavailable or nothing is scripted.
     void tickScripts(double deltaSeconds);
 
+    /// Dispatches OnFixedUpdate to the scripts that override it. Invoked by
+    /// the scene world before every physics step (never called directly).
+    void fixedTickScripts(double fixedDeltaSeconds);
+    /// True while any live play script overrides OnFixedUpdate — the scene
+    /// world then keeps physics stepping synchronous so the callbacks can
+    /// interleave with the steps.
+    [[nodiscard]] bool hasFixedUpdateScripts() const {
+        return !fixedUpdateMids_.empty();
+    }
+
     /// Compiles the project's user scripts (Assets/Scripts/*.cs) into
     /// SkyProject.Scripts.dll and (re)loads it into the script host. False
     /// when there are no scripts, no .NET, or the build failed (the failure
@@ -296,6 +306,8 @@ private:
     std::unordered_set<std::uint64_t> disabled_;
     // Live managed script instances during play: (managedInstanceId, objectId).
     std::vector<std::pair<std::uint64_t, std::uint64_t>> playScripts_;
+    // The subset of playScripts_ whose type overrides OnFixedUpdate.
+    std::unordered_set<std::uint64_t> fixedUpdateMids_;
     std::unordered_set<int> keysDown_;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
     // Active package ids and their registry handles (registered on first

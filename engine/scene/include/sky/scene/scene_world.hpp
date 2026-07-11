@@ -48,6 +48,15 @@ struct SceneWorldDeps {
     /// guidToRef maps a GUID back to the CURRENT ref at load ("" = unknown).
     std::function<std::uint64_t(const std::string&)> refToGuid;
     std::function<std::string(std::uint64_t)> guidToRef;
+    /// Optional fixed-step script callback (Unity's FixedUpdate slot):
+    /// invoked once before EVERY physics step with the fixed dt, so scripts
+    /// see and influence each step, not just each frame. Only runs in
+    /// synchronous stepping; while wantsFixedUpdate() returns true the scene
+    /// keeps (or falls back to) sync stepping inside tick() even when a
+    /// physics job scheduler is attached — callback code may touch any
+    /// engine state, so it cannot run concurrently with the frame.
+    std::function<void(double)> fixedUpdate;
+    std::function<bool()> wantsFixedUpdate;
 };
 
 /// In-memory implementation of the Scene System: owns scene lifecycle, the

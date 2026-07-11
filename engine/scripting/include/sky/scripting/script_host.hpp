@@ -43,6 +43,14 @@ public:
     /// the managed side failed; failures never corrupt native state.
     virtual bool invokeLifecycle(std::uint64_t managedInstanceId,
                                  ScriptLifecycleEvent event, double deltaSeconds) = 0;
+
+    /// True when the managed instance's type overrides OnFixedUpdate — the
+    /// engine dispatches physics-step callbacks (and trades away the async
+    /// frame overlap) only for scripts that actually use them. Default
+    /// false, so hosts and test doubles without the feature need no change.
+    [[nodiscard]] virtual bool instanceHasFixedUpdate(std::uint64_t) {
+        return false;
+    }
 };
 
 /// Native-side contract: when and how the managed domain may be reloaded.

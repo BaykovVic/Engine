@@ -131,6 +131,19 @@ UI есть только у редактора; внутри игры нет Can
         Включено в плеере (1 worker), редактор синхронный — как у Unigine.
         Тест `testAsyncPhysicsMatchesSync`: 60 тиков sync и async дают
         бит-в-бит одинаковую позу тела.
+  - [x] OnFixedUpdate в скриптах (B17.2, инкремент 1): колбэк перед КАЖДЫМ
+        физическим шагом с фиксированным dt — порядок Unity (FixedUpdate →
+        step → … → Update). Managed: `ScriptComponent.OnFixedUpdate`,
+        `Bootstrap.InstanceHasFixedUpdate` (рефлексия с кэшем по типу);
+        нативно: `IScriptHost::instanceHasFixedUpdate`,
+        `SceneWorldDeps.fixedUpdate/wantsFixedUpdate`. Пока в сцене есть
+        хоть один такой скрипт, степпинг прижат к sync даже с шедулером
+        (авто-откат: колбэк может трогать любое состояние движка) —
+        `schedulePhysics` становится no-op, бит-в-бит с sync
+        (`testFixedUpdateInterleavesWithSteps`, `testBridgeFixedUpdate`).
+  - [ ] FixedUpdate инкремент 2: колбэки на физическом потоке с
+        ограниченным API (без Instantiate/Destroy) — вернёт async-перекрытие
+        сценам с FixedUpdate-скриптами.
   - [ ] Параллельный update ECS-систем по ядрам.
   - [ ] Многопоточный рендерер.
   - Туда же (дёшево, отдельно от double precision): **camera-relative

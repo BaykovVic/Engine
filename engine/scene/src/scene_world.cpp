@@ -472,16 +472,26 @@ public:
         if (context_.state != SceneState::RuntimeActive) {
             return;
         }
+        // FixedUpdate scripts pin the scene to synchronous stepping: their
+        // callbacks interleave with the steps and may touch anything.
+        const bool wantsFixed =
+            deps_.wantsFixedUpdate && deps_.wantsFixedUpdate();
         const bool asyncPhysics =
-            deps_.physicsWorld != nullptr && physicsJobs_ != nullptr;
+            deps_.physicsWorld != nullptr && physicsJobs_ != nullptr && !wantsFixed;
         if (asyncPhysics) {
             finishPendingPhysics();
         } else if (deps_.physicsWorld != nullptr) {
+            // A step scheduled before FixedUpdate scripts appeared may still
+            // be in flight — land it before stepping on this thread.
+            finishPendingPhysics();
             if (deps_.physicsSync != nullptr) {
                 deps_.physicsSync->pushKinematicState();
             }
             physicsAccumulator_ += deltaSeconds;
             while (physicsAccumulator_ >= kPhysicsFixedStep) {
+                if (deps_.fixedUpdate) {
+                    deps_.fixedUpdate(kPhysicsFixedStep);
+                }
                 deps_.physicsWorld->step(kPhysicsFixedStep);
                 physicsAccumulator_ -= kPhysicsFixedStep;
             }
@@ -516,7 +526,8 @@ public:
 
     void schedulePhysics(double deltaSeconds) override {
         if (context_.state != SceneState::RuntimeActive ||
-            deps_.physicsWorld == nullptr || physicsJobs_ == nullptr) {
+            deps_.physicsWorld == nullptr || physicsJobs_ == nullptr ||
+            (deps_.wantsFixedUpdate && deps_.wantsFixedUpdate())) {
             return; // synchronous mode already stepped inside tick()
         }
         beginAsyncPhysics(deltaSeconds);

@@ -336,6 +336,11 @@ EditorContext::EditorContext() {
         }
         return "assets://" + relative.generic_string();
     };
+    // FixedUpdate slot: the scene world calls back before every physics
+    // step while any live script overrides OnFixedUpdate (which also pins
+    // the stepping to synchronous mode).
+    sceneDeps.fixedUpdate = [this](double dt) { fixedTickScripts(dt); };
+    sceneDeps.wantsFixedUpdate = [this] { return hasFixedUpdateScripts(); };
     scenes = scene::createSceneWorld(sceneDeps);
     playMode = createPlayModeController(*scenes);
 
@@ -900,6 +905,7 @@ void EditorContext::initScripting() {
 
 void EditorContext::startPlayScripts() {
     playScripts_.clear();
+    fixedUpdateMids_.clear();
     playTime_ = 0.0;
     if (scriptHost == nullptr) {
         return;
@@ -971,6 +977,9 @@ void EditorContext::startScriptsFor(object::ObjectHandle object) {
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnCreate, 0.0);
             scriptHost->invokeLifecycle(mid, scripting::ScriptLifecycleEvent::OnStart, 0.0);
             playScripts_.emplace_back(mid, current.value);
+            if (scriptHost->instanceHasFixedUpdate(mid)) {
+                fixedUpdateMids_.insert(mid);
+            }
         }
     }
 }
@@ -1003,7 +1012,27 @@ void EditorContext::tickScripts(double deltaSeconds) {
         scriptHost->invokeLifecycle(it->first,
                                     scripting::ScriptLifecycleEvent::OnDestroy, 0.0);
         scriptHost->destroyInstance(it->first);
+        fixedUpdateMids_.erase(it->first);
         it = playScripts_.erase(it);
+    }
+}
+
+void EditorContext::fixedTickScripts(double fixedDeltaSeconds) {
+    if (scriptHost == nullptr || fixedUpdateMids_.empty()) {
+        return;
+    }
+    // Same iteration discipline as tickScripts: by index with a size
+    // snapshot, dead objects skipped (the per-frame sweep cleans them up).
+    // No beginFrame here — playTime_ belongs to the render frame.
+    const std::size_t liveCount = playScripts_.size();
+    for (std::size_t i = 0; i < liveCount; ++i) {
+        const auto [mid, objectId] = playScripts_[i];
+        if (fixedUpdateMids_.count(mid) == 0 ||
+            !objects->exists(object::ObjectHandle{objectId})) {
+            continue;
+        }
+        scriptHost->invokeLifecycle(
+            mid, scripting::ScriptLifecycleEvent::OnFixedUpdate, fixedDeltaSeconds);
     }
 }
 
@@ -1015,6 +1044,7 @@ void EditorContext::stopPlayScripts() {
         }
     }
     playScripts_.clear();
+    fixedUpdateMids_.clear();
 }
 
 object::ObjectHandle EditorContext::duplicateObject(object::ObjectHandle object) {

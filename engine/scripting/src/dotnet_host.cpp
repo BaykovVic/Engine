@@ -43,6 +43,7 @@ using managed_destroy_instance_fn = void (*)(std::uint64_t id);
 using managed_invoke_lifecycle_fn = std::int32_t (*)(std::uint64_t id,
                                                      std::int32_t lifecycleEvent,
                                                      double deltaSeconds);
+using managed_instance_has_fixed_update_fn = std::int32_t (*)(std::uint64_t id);
 using managed_get_probe_fn = std::int64_t (*)(std::uint64_t id);
 using managed_initialize_fn = void (*)(void* apiTable);
 using managed_set_object_id_fn = void (*)(std::uint64_t id, std::uint64_t objectId);
@@ -161,6 +162,7 @@ public:
         }
         started_ = true;
         // Reverse-boundary entry points (present since the engine API landed).
+        resolve(managedInstanceHasFixedUpdate_, "InstanceHasFixedUpdate");
         resolve(managedInitialize_, "Initialize");
         resolve(managedSetObjectId_, "SetObjectId");
         resolve(managedTickFrame_, "TickFrame");
@@ -209,6 +211,11 @@ public:
                managedInvokeLifecycle_(managedInstanceId,
                                        static_cast<std::int32_t>(event),
                                        deltaSeconds) != 0;
+    }
+
+    bool instanceHasFixedUpdate(std::uint64_t managedInstanceId) override {
+        return started_ && managedInstanceHasFixedUpdate_ != nullptr &&
+               managedInstanceHasFixedUpdate_(managedInstanceId) != 0;
     }
 
     // DotNetScriptHost
@@ -319,6 +326,7 @@ private:
     managed_create_instance_fn managedCreateInstance_ = nullptr;
     managed_destroy_instance_fn managedDestroyInstance_ = nullptr;
     managed_invoke_lifecycle_fn managedInvokeLifecycle_ = nullptr;
+    managed_instance_has_fixed_update_fn managedInstanceHasFixedUpdate_ = nullptr;
     managed_get_probe_fn managedGetProbe_ = nullptr;
     managed_initialize_fn managedInitialize_ = nullptr;
     managed_set_object_id_fn managedSetObjectId_ = nullptr;

@@ -280,6 +280,70 @@ void testAsyncPhysicsMatchesSync() {
     CHECK(syncRun.bodyY < 19.0f);               // and the body actually fell
 }
 
+void testFixedUpdateInterleavesWithSteps() {
+    // The FixedUpdate slot fires once before EVERY physics step with the
+    // fixed dt (Unity's contract), and it pins the scene to synchronous
+    // stepping: with a job scheduler attached and wantsFixedUpdate true, the
+    // run must be bit-exact with the schedulerless one.
+    struct Result {
+        int calls = 0;
+        float bodyY = 0;
+    };
+    const auto run = [](sky::core::IJobScheduler* jobs) {
+        SceneFixture fx;
+        const auto physics = sky::physics::createPhysicsWorld();
+        const auto sync =
+            sky::physics::createObjectPhysicsSync(*physics, *fx.objects);
+        sky::scene::SceneWorldDeps deps{*fx.objects,    *fx.objects,
+                                        *fx.objects,    *fx.components,
+                                        *fx.components, *fx.storage};
+        deps.physicsWorld = physics.get();
+        deps.physicsSync = sync.get();
+
+        int calls = 0;
+        sky::physics::RigidBodyHandle body{};
+        // The callback both counts steps and influences each one: zeroing
+        // the velocity every step keeps the body near its spawn height,
+        // which free fall (callback ignored) would visibly break.
+        deps.fixedUpdate = [&](double dt) {
+            CHECK(dt == 1.0 / 60.0);
+            ++calls;
+            physics->setBodyVelocity(body, {0, 0, 0});
+        };
+        deps.wantsFixedUpdate = [] { return true; };
+        const auto scenes = sky::scene::createSceneWorld(deps);
+        if (jobs != nullptr) {
+            scenes->setPhysicsJobScheduler(jobs);
+        }
+
+        const auto scene = scenes->createScene({"fixed", {}});
+        const auto crate = fx.objects->createObject("crate");
+        fx.objects->setLocalTransform(crate, {{0, 20, 0}, {}, {1, 1, 1}});
+        scenes->addRootObject(scene, crate);
+        body = physics->createBody(
+            {sky::physics::BodyType::Dynamic, 1.0f, {{0, 20, 0}, {}, {1, 1, 1}}});
+        sync->bind(body, crate);
+
+        scenes->activate(scene);
+        for (int i = 0; i < 59; ++i) {
+            scenes->tick(1.0 / 60.0);
+            scenes->schedulePhysics(1.0 / 60.0); // must no-op: FixedUpdate pins sync
+        }
+        scenes->tick(1.0 / 30.0); // a double-length frame yields two callbacks
+        scenes->deactivate(scene);
+        return Result{calls, physics->bodyTransform(body).position.y};
+    };
+
+    const auto plain = run(nullptr);
+    CHECK(plain.calls == 61); // 59 single-step ticks + one two-step tick
+    CHECK(plain.bodyY > 19.0f); // velocity zeroing held it up (free fall: ~15)
+
+    const auto jobs = sky::core::createThreadPoolScheduler(1);
+    const auto withScheduler = run(jobs.get());
+    CHECK(withScheduler.calls == plain.calls);
+    CHECK(withScheduler.bodyY == plain.bodyY); // fallback is bit-exact sync
+}
+
 void testLoadRejectsCorruptScene() {
     SceneFixture fx;
     const auto path =
@@ -341,6 +405,7 @@ int main() {
     testGuidReferenceResolution();
     testLegacyV11SceneMigrates();
     testAsyncPhysicsMatchesSync();
+    testFixedUpdateInterleavesWithSteps();
     testLoadRejectsCorruptScene();
     testSceneAuthoring();
     return sky::test::summary("scene_tests");
