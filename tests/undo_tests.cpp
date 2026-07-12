@@ -376,6 +376,57 @@ void testDataAssetInheritanceChain() {
 
 } // namespace
 
+void testAudioSourcePlayOnStart() {
+    EditorContext context;
+
+    // A minimal RIFF/WAVE (PCM16 mono, 4 frames at the mix rate), authored
+    // straight into the assets root like a user would drop a file in.
+    std::vector<std::byte> wav;
+    const auto u32 = [&](std::uint32_t v) {
+        for (int i = 0; i < 4; ++i) wav.push_back(std::byte((v >> (8 * i)) & 0xFF));
+    };
+    const auto u16 = [&](std::uint16_t v) {
+        wav.push_back(std::byte(v & 0xFF));
+        wav.push_back(std::byte((v >> 8) & 0xFF));
+    };
+    const auto tag = [&](const char* t) {
+        for (int i = 0; i < 4; ++i) wav.push_back(std::byte(t[i]));
+    };
+    tag("RIFF"); u32(36 + 8); tag("WAVE");
+    tag("fmt "); u32(16); u16(1); u16(1); u32(48000); u32(96000); u16(2); u16(16);
+    tag("data"); u32(8); u16(8000); u16(16000); u16(24000); u16(32000);
+    CHECK(context.fileSystem->writeAll(context.assetsRoot / "Sounds" / "beep.wav",
+                                       wav));
+
+    const auto chime = context.createEmpty("Chime");
+    const auto source = context.components->attach(chime, "sky.audioSource");
+    CHECK(source.isValid());
+    context.components->setField(source, "clip",
+                                  std::string("assets://Sounds/beep.wav"));
+    context.components->setField(source, "loop", true);
+    context.components->setField(source, "volume", 0.8f);
+
+    // playOnStart is unset and defaults to true: the voice appears with
+    // play and dies with it (loop keeps the device thread from ending it).
+    CHECK(context.audioMixer->activeVoices() == 0);
+    context.beginPlay();
+    CHECK(context.audioMixer->activeVoices() == 1);
+    context.endPlay();
+    CHECK(context.audioMixer->activeVoices() == 0);
+
+    // The script-facing entry shares the cache; bad refs refuse politely.
+    CHECK(!context.playAudioClip("assets://Sounds/missing.wav", 1.0f, false)
+               .isValid());
+    const auto voice =
+        context.playAudioClip("assets://Sounds/beep.wav", 1.0f, true);
+    CHECK(voice.isValid());
+    CHECK(context.audioMixer->isPlaying(voice));
+    context.audioMixer->stop(voice);
+
+    std::error_code cleanup;
+    std::filesystem::remove(context.assetsRoot / "Sounds" / "beep.wav", cleanup);
+}
+
 int main() {
     testTransformUndoRedo();
     testDeleteRestoresSubtree();
@@ -387,5 +438,6 @@ int main() {
     testAssetRenameSurvivesSceneReload();
     testMaterialEditsPersist();
     testDataAssetInheritanceChain();
+    testAudioSourcePlayOnStart();
     return sky::test::summary("undo_tests");
 }

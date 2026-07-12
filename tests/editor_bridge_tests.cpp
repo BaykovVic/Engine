@@ -570,6 +570,82 @@ void testBridgeFixedUpdate() {
 #endif
 }
 
+// Audio through the boundary: a user script starts a WAV voice via
+// Audio.Play (native decode + mixer) and stops it via Audio.Stop.
+void testBridgeAudio() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    char root[512] = {0};
+    sky_editor_assets_root(ctx, root, sizeof(root));
+    const std::filesystem::path assets(root);
+    // A minimal PCM16 mono WAV the script will play by reference.
+    {
+        std::filesystem::create_directories(assets / "Sounds");
+        std::ofstream wav(assets / "Sounds" / "chime.wav", std::ios::binary);
+        const auto u32 = [&](std::uint32_t v) { wav.write(reinterpret_cast<const char*>(&v), 4); };
+        const auto u16 = [&](std::uint16_t v) { wav.write(reinterpret_cast<const char*>(&v), 2); };
+        wav.write("RIFF", 4); u32(36 + 8); wav.write("WAVE", 4);
+        wav.write("fmt ", 4); u32(16); u16(1); u16(1); u32(48000); u32(96000); u16(2); u16(16);
+        wav.write("data", 4); u32(8); u16(8000); u16(16000); u16(24000); u16(32000);
+    }
+
+    const std::filesystem::path scriptsDir = assets / "Scripts";
+    std::error_code stale;
+    std::filesystem::remove_all(scriptsDir, stale);
+    std::filesystem::create_directories(scriptsDir);
+    {
+        std::ofstream source(scriptsDir / "ChimePlayer.cs");
+        source << "namespace SkyProject;\n"
+               << "public class ChimePlayer : SkyEngine.ScriptComponent\n"
+               << "{\n"
+               << "    public override void OnStart()\n"
+               << "    {\n"
+               << "        var voice = SkyEngine.Audio.Play("
+               << "\"assets://Sounds/chime.wav\", 1.0f, loop: true);\n"
+               << "        var missing = SkyEngine.Audio.Play(\"assets://Sounds/absent.wav\");\n"
+               << "        SkyEngine.Debug.Log(\"sound=\" + (voice != 0)"
+               << " + \" missing=\" + (missing != 0));\n"
+               << "        SkyEngine.Audio.Stop(voice);\n"
+               << "    }\n"
+               << "}\n";
+    }
+    CHECK(sky_editor_reload_scripts(ctx) == 1);
+
+    const SkyObjectId object =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "Chime");
+    sky_editor_add_component(ctx, object, "sky.script");
+    int32_t script = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+    sky_editor_set_component_field(ctx, object, script, 0,
+                                   "SkyProject.ChimePlayer");
+
+    CHECK(sky_editor_play(ctx) == 1);
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+    bool logged = false;
+    for (int32_t i = 0; i < sky_editor_log_count(ctx) && !logged; ++i) {
+        char line[256] = {0};
+        sky_editor_log_text(ctx, i, line, sizeof(line));
+        logged = std::strstr(line, "sound=True missing=False") != nullptr;
+    }
+    CHECK(logged);
+    sky_editor_stop(ctx);
+
+    sky_editor_destroy(ctx);
+    std::error_code cleanup;
+    std::filesystem::remove_all(scriptsDir, cleanup);
+    std::filesystem::remove(assets / "Sounds" / "chime.wav", cleanup);
+#endif
+}
+
 // The determinism contract, end to end: two identical play sessions — same
 // seed, same injected input, a mid-run Time.TimeScale change — produce
 // bit-identical script motion, the same fixed-step count and the same RNG
@@ -1259,6 +1335,7 @@ int main() {
     testBridgeScriptFields();
     testBridgeUserScripts();
     testBridgeFixedUpdate();
+    testBridgeAudio();
     testBridgeDeterministicReplay();
     testBridgePrefabs();
     testBridgeScriptEngineApi();

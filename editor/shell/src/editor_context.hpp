@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "sky/asset/asset_database.hpp"
+#include "sky/audio/audio.hpp"
 #include "sky/asset/data_importer.hpp"
 #include "sky/asset/fbx_importer.hpp"
 #include "sky/asset/gltf_importer.hpp"
@@ -105,6 +106,12 @@ public:
     /// Drives the managed gameplay scripts one frame (call each frame while
     /// playing). No-op when scripting is unavailable or nothing is scripted.
     void tickScripts(double deltaSeconds);
+
+    /// Plays a WAV by asset reference ("assets://…") through the shared
+    /// mixer; clips are decoded once and cached by ref. Invalid handle on
+    /// missing/undecodable files. Scripts reach this via Audio.Play.
+    audio::VoiceHandle playAudioClip(const std::string& ref, float volume,
+                                     bool loop);
 
     /// One play frame from real elapsed time: applies the time scale, then
     /// runs the frame in order — systems/physics, scripts, and (async mode)
@@ -252,6 +259,8 @@ public:
     std::unique_ptr<ecs::IEcsObjectSync> ecsSync;
     std::unique_ptr<physics::PhysicsWorld> physics;
     std::unique_ptr<physics::ObjectPhysicsSync> physicsSync;
+    std::unique_ptr<audio::IAudioClipLibrary> audioClips;
+    std::unique_ptr<audio::IAudioMixer> audioMixer;
     std::unique_ptr<serialization::SchemaMigrationService> migrations;
     std::unique_ptr<scene::SceneWorld> scenes;
     std::unique_ptr<scripting::DotNetScriptHost> scriptHost;
@@ -304,6 +313,9 @@ private:
     /// Creates managed instances for every sky.script in a subtree, pushes
     /// the authored field values and runs OnCreate/OnStart.
     void startScriptsFor(object::ObjectHandle object);
+    /// Starts every sky.audioSource with playOnStart (default true) when
+    /// play begins; endPlay stops the whole mixer.
+    void startAudioSources();
     object::ObjectHandle cloneSubtree(object::ObjectHandle source,
                                       object::ObjectHandle parent);
     void attachCrateBody(object::ObjectHandle object);
@@ -325,6 +337,10 @@ private:
     std::unordered_set<int> keysDown_;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
     double timeScale_ = 1.0; // Time.TimeScale; reset on play start
+    // Real-time audio drain (ALSA when a device opens, else the null
+    // output) and the decoded-clip cache behind playAudioClip.
+    std::unique_ptr<audio::IAudioOutput> audioOutput_;
+    std::unordered_map<std::string, audio::ClipHandle> audioClipCache_;
     // Active package ids and their registry handles (registered on first
     // activation, reused after).
     std::unordered_set<std::string> activePackages_;

@@ -38,6 +38,9 @@ if(SKY_DOTNET)
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Time.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Input.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Physics.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/DataAsset.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Random.cs
+                ${CMAKE_SOURCE_DIR}/managed/SkyEngine.Managed/Audio.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Spinner.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/Rotator.cs
                 ${CMAKE_SOURCE_DIR}/managed/SkyEngine.TestScripts/WasdMover.cs

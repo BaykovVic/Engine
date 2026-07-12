@@ -158,6 +158,8 @@ struct SkyScriptApi {
     void* raycast;
     void* dataAsset;
     void* timeScale;
+    void* playSound;
+    void* stopSound;
 };
 
 /// Serializes the resolved (inheritance applied) fields of a data asset as
@@ -219,9 +221,23 @@ double scriptTimeScale(double value, std::int32_t apply) {
     return g_scriptContext->timeScale();
 }
 
+std::uint64_t scriptPlaySound(const char* ref, float volume,
+                              std::int32_t loop) {
+    if (g_scriptContext == nullptr || ref == nullptr) {
+        return 0;
+    }
+    return g_scriptContext->playAudioClip(ref, volume, loop != 0).value;
+}
+
+void scriptStopSound(std::uint64_t voice) {
+    if (g_scriptContext != nullptr) {
+        g_scriptContext->audioMixer->stop(sky::audio::VoiceHandle{voice});
+    }
+}
+
 // Layout guard: the managed Api struct mirrors this table field for field;
 // a one-sided edit must fail the build, not corrupt memory at runtime.
-static_assert(sizeof(SkyScriptApi) == 14 * sizeof(void*),
+static_assert(sizeof(SkyScriptApi) == 16 * sizeof(void*),
               "SkyScriptApi changed: mirror the managed Engine.Api struct and "
               "update both counts");
 
@@ -238,7 +254,9 @@ SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptGetVelocity),
                          reinterpret_cast<void*>(&scriptRaycast),
                          reinterpret_cast<void*>(&scriptDataAsset),
-                         reinterpret_cast<void*>(&scriptTimeScale)};
+                         reinterpret_cast<void*>(&scriptTimeScale),
+                         reinterpret_cast<void*>(&scriptPlaySound),
+                         reinterpret_cast<void*>(&scriptStopSound)};
 
 /// Resolves an "assets://" VFS reference against the Assets root; plain
 /// filesystem paths pass through unchanged.
@@ -315,6 +333,15 @@ EditorContext::EditorContext() {
     ecsSync = ecs::createEcsObjectSync(*ecs, *objects);
     physics = physics::createPhysicsWorld();
     physicsSync = physics::createObjectPhysicsSync(*physics, *objects);
+    // Audio runs for the context's whole life: a real device when one
+    // opens, otherwise the null output — voices always advance and finish.
+    audioClips = audio::createAudioClipLibrary();
+    audioMixer = audio::createAudioMixer(*audioClips);
+    audioOutput_ = audio::createAlsaAudioOutput();
+    if (audioOutput_ == nullptr) {
+        audioOutput_ = audio::createNullAudioOutput();
+    }
+    audioOutput_->start(*audioMixer);
     migrations = serialization::createSchemaMigrationService();
     scene::SceneWorldDeps sceneDeps{*objects,    *objects, *objects,
                                     *components, *components, *storage};
@@ -427,6 +454,13 @@ EditorContext::EditorContext() {
     components->registerComponentType(
         {"sky.gameConfig", "Game Config", false, "",
          {{"config", "assetRef"}}, "Gameplay"});
+    components->registerComponentType(
+        {"sky.audioSource", "Audio Source", false, "",
+         {{"clip", "string"},
+          {"volume", "float"},
+          {"loop", "bool"},
+          {"playOnStart", "bool"}},
+         "Audio"});
 
     // Asset pipeline: own OBJ and PNG importers plus FBX via OpenFBX.
     // Sidecar GUID identity: renaming a source (with its .skymeta) keeps
@@ -680,10 +714,12 @@ void EditorContext::beginPlay() {
         reloadUserScripts();
     }
     startPlayScripts();
+    startAudioSources();
 }
 
 void EditorContext::endPlay() {
     stopPlayScripts();
+    audioMixer->stopAll(); // play-session sound never outlives the session
     // 1. Survivors go back under their pre-play parents first, so objects
     //    created during play never hold restored children when destroyed.
     for (const auto& root : playRoots_) {
@@ -1048,6 +1084,71 @@ void EditorContext::fixedTickScripts(double fixedDeltaSeconds) {
         }
         scriptHost->invokeLifecycle(
             mid, scripting::ScriptLifecycleEvent::OnFixedUpdate, fixedDeltaSeconds);
+    }
+}
+
+audio::VoiceHandle EditorContext::playAudioClip(const std::string& ref,
+                                                float volume, bool loop) {
+    auto handle = audio::ClipHandle::invalid();
+    if (const auto cached = audioClipCache_.find(ref);
+        cached != audioClipCache_.end()) {
+        handle = cached->second;
+    } else {
+        const auto bytes = fileSystem->readAll(resolveAssetPath(ref, assetsRoot));
+        if (!bytes) {
+            return audio::VoiceHandle::invalid();
+        }
+        handle = audioClips->loadWav(*bytes);
+        if (!handle.isValid()) {
+            return audio::VoiceHandle::invalid();
+        }
+        audioClipCache_.emplace(ref, handle);
+    }
+    return audioMixer->play(handle, {volume, loop});
+}
+
+void EditorContext::startAudioSources() {
+    std::vector<object::ObjectHandle> stack(roots_.begin(), roots_.end());
+    while (!stack.empty()) {
+        const auto object = stack.back();
+        stack.pop_back();
+        for (const auto child : objects->childrenOf(object)) {
+            stack.push_back(child);
+        }
+        for (const auto comp : components->componentsOf(object)) {
+            if (components->descriptorOf(comp).typeId != "sky.audioSource") {
+                continue;
+            }
+            // Unset fields keep Unity-like defaults: audible, one-shot,
+            // playing from the first frame.
+            std::string clip;
+            float volume = 1.0f;
+            bool loop = false;
+            bool playOnStart = true;
+            if (const auto f = components->field(comp, "clip")) {
+                if (const auto* s = std::get_if<std::string>(&*f)) {
+                    clip = *s;
+                }
+            }
+            if (const auto f = components->field(comp, "volume")) {
+                if (const auto* v = std::get_if<float>(&*f)) {
+                    volume = *v;
+                }
+            }
+            if (const auto f = components->field(comp, "loop")) {
+                if (const auto* b = std::get_if<bool>(&*f)) {
+                    loop = *b;
+                }
+            }
+            if (const auto f = components->field(comp, "playOnStart")) {
+                if (const auto* b = std::get_if<bool>(&*f)) {
+                    playOnStart = *b;
+                }
+            }
+            if (playOnStart && !clip.empty()) {
+                playAudioClip(clip, volume, loop);
+            }
+        }
     }
 }
 

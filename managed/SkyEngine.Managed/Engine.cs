@@ -47,6 +47,13 @@ public static class Engine
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate double TimeScaleFn(double value, int apply);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate ulong PlaySoundFn(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string clipRef, float volume, int loop);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void StopSoundFn(ulong voice);
+
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
@@ -61,8 +68,10 @@ public static class Engine
     internal static RaycastFn? Raycast;
     internal static DataAssetFn? DataAssetFields;
     internal static TimeScaleFn? TimeScale;
+    internal static PlaySoundFn? PlaySound;
+    internal static StopSoundFn? StopSound;
 
-    /// Layout must match the native SkyScriptApi struct (fourteen cdecl
+    /// Layout must match the native SkyScriptApi struct (sixteen cdecl
     /// pointers; the native side static_asserts the same count).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
@@ -81,11 +90,13 @@ public static class Engine
         public IntPtr Raycast;
         public IntPtr DataAsset;
         public IntPtr TimeScale;
+        public IntPtr PlaySound;
+        public IntPtr StopSound;
     }
 
     /// Both sides of the boundary must agree on the pointer count; keep in
     /// sync with the native static_assert on sizeof(SkyScriptApi).
-    private const int ExpectedApiPointers = 14;
+    private const int ExpectedApiPointers = 16;
 
     internal static void Install(IntPtr apiPtr)
     {
@@ -119,6 +130,10 @@ public static class Engine
             DataAssetFields = Marshal.GetDelegateForFunctionPointer<DataAssetFn>(api.DataAsset);
         if (api.TimeScale != IntPtr.Zero)
             TimeScale = Marshal.GetDelegateForFunctionPointer<TimeScaleFn>(api.TimeScale);
+        if (api.PlaySound != IntPtr.Zero)
+            PlaySound = Marshal.GetDelegateForFunctionPointer<PlaySoundFn>(api.PlaySound);
+        if (api.StopSound != IntPtr.Zero)
+            StopSound = Marshal.GetDelegateForFunctionPointer<StopSoundFn>(api.StopSound);
 
         // Layout guard: a one-sided table edit must be loud, not a silent
         // misroute of every call after the mismatch.

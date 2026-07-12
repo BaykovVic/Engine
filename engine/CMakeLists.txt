@@ -107,6 +107,17 @@ target_link_libraries(sky_asset PRIVATE sky_third_party)
 sky_add_module(sky_physics physics
     physics/src/physics_world.cpp)
 
+sky_add_module(sky_audio audio
+    audio/src/audio_engine.cpp
+    audio/src/alsa_output.cpp)
+# Real playback needs ALSA; without it the module still builds — the ALSA
+# factory returns nullptr and runtimes fall back to the null output.
+find_package(ALSA QUIET)
+if(ALSA_FOUND)
+    target_compile_definitions(sky_audio PRIVATE SKY_HAS_ALSA)
+    target_link_libraries(sky_audio PRIVATE ALSA::ALSA)
+endif()
+
 sky_add_module(sky_package package
     package/src/package_world.cpp
     package/src/package_installer.cpp)
@@ -139,6 +150,7 @@ target_link_libraries(sky_object        PUBLIC sky_core)
 target_link_libraries(sky_component     PUBLIC sky_object sky_scripting sky_serialization)
 target_link_libraries(sky_ecs           PUBLIC sky_core sky_object sky_physics sky_rendering)
 target_link_libraries(sky_physics       PUBLIC sky_core sky_object)
+target_link_libraries(sky_audio         PUBLIC sky_core)
 target_link_libraries(sky_rendering     PUBLIC sky_asset sky_platform)
 target_link_libraries(sky_scripting     PUBLIC sky_core sky_object PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(sky_terrain       PUBLIC sky_asset sky_serialization sky_rendering sky_physics)
@@ -179,5 +191,5 @@ add_library(sky_engine INTERFACE)
 add_library(sky::engine ALIAS sky_engine)
 target_link_libraries(sky_engine INTERFACE
     sky_platform sky_core sky_project sky_package sky_asset sky_serialization
-    sky_scene sky_object sky_component sky_ecs sky_physics sky_rendering
-    sky_scripting sky_terrain sky_mapgen)
+    sky_scene sky_object sky_component sky_ecs sky_physics sky_audio
+    sky_rendering sky_scripting sky_terrain sky_mapgen)
