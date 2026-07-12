@@ -160,6 +160,8 @@ struct SkyScriptApi {
     void* timeScale;
     void* playSound;
     void* stopSound;
+    void* keyEvent;
+    void* mouseState;
 };
 
 /// Serializes the resolved (inheritance applied) fields of a data asset as
@@ -221,6 +223,30 @@ double scriptTimeScale(double value, std::int32_t apply) {
     return g_scriptContext->timeScale();
 }
 
+/// One pointer for the whole key/mouse-button state machine: query 0 = held,
+/// 1 = pressed this frame, 2 = released this frame. Mouse buttons share the
+/// key space from code 323 (Mouse0).
+std::int32_t scriptKeyEvent(std::int32_t key, std::int32_t query) {
+    if (g_scriptContext == nullptr) {
+        return 0;
+    }
+    switch (query) {
+        case 0: return g_scriptContext->keyDown(key) ? 1 : 0;
+        case 1: return g_scriptContext->keyPressed(key) ? 1 : 0;
+        case 2: return g_scriptContext->keyReleased(key) ? 1 : 0;
+        default: return 0;
+    }
+}
+
+void scriptMouseState(float* x, float* y, float* wheel) {
+    if (g_scriptContext == nullptr) {
+        return;
+    }
+    if (x != nullptr) *x = g_scriptContext->mouseX();
+    if (y != nullptr) *y = g_scriptContext->mouseY();
+    if (wheel != nullptr) *wheel = g_scriptContext->mouseWheel();
+}
+
 std::uint64_t scriptPlaySound(const char* ref, float volume,
                               std::int32_t loop) {
     if (g_scriptContext == nullptr || ref == nullptr) {
@@ -237,7 +263,7 @@ void scriptStopSound(std::uint64_t voice) {
 
 // Layout guard: the managed Api struct mirrors this table field for field;
 // a one-sided edit must fail the build, not corrupt memory at runtime.
-static_assert(sizeof(SkyScriptApi) == 16 * sizeof(void*),
+static_assert(sizeof(SkyScriptApi) == 18 * sizeof(void*),
               "SkyScriptApi changed: mirror the managed Engine.Api struct and "
               "update both counts");
 
@@ -256,7 +282,9 @@ SkyScriptApi g_scriptApi{reinterpret_cast<void*>(&scriptSetLocalPosition),
                          reinterpret_cast<void*>(&scriptDataAsset),
                          reinterpret_cast<void*>(&scriptTimeScale),
                          reinterpret_cast<void*>(&scriptPlaySound),
-                         reinterpret_cast<void*>(&scriptStopSound)};
+                         reinterpret_cast<void*>(&scriptStopSound),
+                         reinterpret_cast<void*>(&scriptKeyEvent),
+                         reinterpret_cast<void*>(&scriptMouseState)};
 
 /// Resolves an "assets://" VFS reference against the Assets root; plain
 /// filesystem paths pass through unchanged.
@@ -958,6 +986,10 @@ void EditorContext::startPlayScripts() {
     fixedUpdateMids_.clear();
     playTime_ = 0.0;
     timeScale_ = 1.0; // a slow-motion experiment never outlives its session
+    // Edits made while not playing must not read as first-frame presses.
+    keysPressed_.clear();
+    keysReleased_.clear();
+    mouseWheel_ = 0.0f;
     if (scriptHost == nullptr) {
         return;
     }
@@ -1159,6 +1191,11 @@ void EditorContext::tickPlayFrame(double realDeltaSeconds) {
     // All script work is done: in async mode this frame's physics steps are
     // scheduled now and overlap the caller's render (no-op in sync mode).
     scenes->schedulePhysics(dt);
+    // Every script (fixed and per-frame) has seen this frame's input edges;
+    // the next frame starts with fresh latches.
+    keysPressed_.clear();
+    keysReleased_.clear();
+    mouseWheel_ = 0.0f;
 }
 
 void EditorContext::stopPlayScripts() {

@@ -29,8 +29,60 @@ public partial class GameView : UserControl
                 _viewport.SetContext(_vm.NativeContext);
         };
         // Clicking the Game view gives it keyboard focus, Unity-style.
-        PointerPressed += (_, _) => Focus();
+        PointerPressed += (_, e) =>
+        {
+            Focus();
+            SendMouseButton(e.GetCurrentPoint(this).Properties.PointerUpdateKind,
+                            down: true);
+            SendMousePosition(e.GetPosition(this));
+        };
+        PointerReleased += (_, e) =>
+        {
+            SendMouseButton(MapReleased(e.InitialPressMouseButton), down: false);
+            SendMousePosition(e.GetPosition(this));
+        };
+        PointerMoved += (_, e) => SendMousePosition(e.GetPosition(this));
+        PointerWheelChanged += (_, e) =>
+        {
+            if (_vm != null)
+                EngineInterop.sky_editor_add_mouse_wheel(
+                    _vm.NativeContext, (float)e.Delta.Y);
+        };
     }
+
+    /// Mouse position travels in this control's pixel space; gameplay code
+    /// reads it through Input.MousePosition.
+    private void SendMousePosition(Avalonia.Point position)
+    {
+        if (_vm == null) return;
+        EngineInterop.sky_editor_set_mouse_position(
+            _vm.NativeContext, (float)position.X, (float)position.Y);
+    }
+
+    /// Engine buttons: 0 = left, 1 = right, 2 = middle.
+    private void SendMouseButton(int button, bool down)
+    {
+        if (_vm == null || button < 0) return;
+        EngineInterop.sky_editor_set_mouse_button(_vm.NativeContext, button,
+                                                  down ? 1 : 0);
+    }
+
+    private void SendMouseButton(PointerUpdateKind kind, bool down) =>
+        SendMouseButton(kind switch
+        {
+            PointerUpdateKind.LeftButtonPressed => 0,
+            PointerUpdateKind.RightButtonPressed => 1,
+            PointerUpdateKind.MiddleButtonPressed => 2,
+            _ => -1,
+        }, down);
+
+    private static int MapReleased(MouseButton button) => button switch
+    {
+        MouseButton.Left => 0,
+        MouseButton.Right => 1,
+        MouseButton.Middle => 2,
+        _ => -1,
+    };
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
@@ -80,6 +132,12 @@ public partial class GameView : UserControl
         Key.Right => 263,
         Key.Up => 264,
         Key.Down => 265,
+        Key.Back => 266,
+        Key.Delete => 267,
+        Key.RightShift => 268,
+        Key.RightCtrl => 269,
+        Key.RightAlt => 270,
+        >= Key.F1 and <= Key.F12 => 271 + (key - Key.F1),
         _ => 0,
     };
 }

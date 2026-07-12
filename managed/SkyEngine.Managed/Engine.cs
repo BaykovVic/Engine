@@ -54,6 +54,14 @@ public static class Engine
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void StopSoundFn(ulong voice);
 
+    /// <summary>query: 0 = held, 1 = pressed this frame, 2 = released this
+    /// frame. Mouse buttons share the key space from code 323.</summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int KeyEventFn(int key, int query);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void MouseStateFn(out float x, out float y, out float wheel);
+
     internal static SetVec3Fn? SetLocalPosition;
     internal static SetVec3Fn? SetLocalEuler;
     internal static SetVec3Fn? SetLocalScale;
@@ -70,8 +78,10 @@ public static class Engine
     internal static TimeScaleFn? TimeScale;
     internal static PlaySoundFn? PlaySound;
     internal static StopSoundFn? StopSound;
+    internal static KeyEventFn? KeyEvent;
+    internal static MouseStateFn? MouseState;
 
-    /// Layout must match the native SkyScriptApi struct (sixteen cdecl
+    /// Layout must match the native SkyScriptApi struct (eighteen cdecl
     /// pointers; the native side static_asserts the same count).
     [StructLayout(LayoutKind.Sequential)]
     private struct Api
@@ -92,11 +102,13 @@ public static class Engine
         public IntPtr TimeScale;
         public IntPtr PlaySound;
         public IntPtr StopSound;
+        public IntPtr KeyEvent;
+        public IntPtr MouseState;
     }
 
     /// Both sides of the boundary must agree on the pointer count; keep in
     /// sync with the native static_assert on sizeof(SkyScriptApi).
-    private const int ExpectedApiPointers = 16;
+    private const int ExpectedApiPointers = 18;
 
     internal static void Install(IntPtr apiPtr)
     {
@@ -134,6 +146,10 @@ public static class Engine
             PlaySound = Marshal.GetDelegateForFunctionPointer<PlaySoundFn>(api.PlaySound);
         if (api.StopSound != IntPtr.Zero)
             StopSound = Marshal.GetDelegateForFunctionPointer<StopSoundFn>(api.StopSound);
+        if (api.KeyEvent != IntPtr.Zero)
+            KeyEvent = Marshal.GetDelegateForFunctionPointer<KeyEventFn>(api.KeyEvent);
+        if (api.MouseState != IntPtr.Zero)
+            MouseState = Marshal.GetDelegateForFunctionPointer<MouseStateFn>(api.MouseState);
 
         // Layout guard: a one-sided table edit must be loud, not a silent
         // misroute of every call after the mismatch.

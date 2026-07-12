@@ -1511,6 +1511,19 @@ void sky_editor_set_key_state(SkyEditorContext* ctx, int32_t key, int32_t down) 
     ec(ctx).setKeyDown(key, down != 0);
 }
 
+void sky_editor_set_mouse_position(SkyEditorContext* ctx, float x, float y) {
+    ec(ctx).setMousePosition(x, y);
+}
+
+void sky_editor_set_mouse_button(SkyEditorContext* ctx, int32_t button,
+                                 int32_t down) {
+    ec(ctx).setMouseButton(button, down != 0);
+}
+
+void sky_editor_add_mouse_wheel(SkyEditorContext* ctx, float delta) {
+    ec(ctx).addMouseWheel(delta);
+}
+
 void sky_editor_detach_viewport(SkyEditorContext* ctx) {
 #ifdef SKY_BRIDGE_X11
     auto* session = self(ctx);

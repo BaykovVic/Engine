@@ -49,7 +49,27 @@ int mapPlatformKey(std::int32_t keysym) {
         case 0xff53: return 263; // Right
         case 0xff52: return 264; // Up
         case 0xff54: return 265; // Down
-        default: return 0;
+        case 0xff08: return 266; // BackSpace
+        case 0xffff: return 267; // Delete
+        case 0xffe2: return 268; // Shift_R
+        case 0xffe4: return 269; // Control_R
+        case 0xffea: return 270; // Alt_R
+        default:
+            if (keysym >= 0xffbe && keysym <= 0xffc9) {
+                return 271 + (keysym - 0xffbe); // F1..F12
+            }
+            return 0;
+    }
+}
+
+// X11 buttons (1 = left, 2 = middle, 3 = right) -> engine mouse buttons
+// (0 = left, 1 = right, 2 = middle, mirroring Unity).
+int mapPlatformMouseButton(std::int32_t button) {
+    switch (button) {
+        case 1: return 0;
+        case 3: return 1;
+        case 2: return 2;
+        default: return -1;
     }
 }
 
@@ -129,6 +149,28 @@ int runWindowed(EditorContext& context, int frameLimit) {
                 context.setKeyDown(
                     key, event.type == sky::platform::InputEventType::KeyDown);
             }
+        }
+        // Mouse feeds the same input state (Input.MousePosition and the
+        // shared key/button latch mechanism).
+        switch (event.type) {
+            case sky::platform::InputEventType::MouseMove:
+                context.setMousePosition(event.mouseX, event.mouseY);
+                break;
+            case sky::platform::InputEventType::MouseButtonDown:
+            case sky::platform::InputEventType::MouseButtonUp:
+                context.setMousePosition(event.mouseX, event.mouseY);
+                if (const int button = mapPlatformMouseButton(event.mouseButton);
+                    button >= 0) {
+                    context.setMouseButton(
+                        button, event.type ==
+                                    sky::platform::InputEventType::MouseButtonDown);
+                }
+                break;
+            case sky::platform::InputEventType::MouseWheel:
+                context.addMouseWheel(event.wheelDelta);
+                break;
+            default:
+                break;
         }
     });
 

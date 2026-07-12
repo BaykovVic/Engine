@@ -427,6 +427,52 @@ void testAudioSourcePlayOnStart() {
     std::filesystem::remove(context.assetsRoot / "Sounds" / "beep.wav", cleanup);
 }
 
+void testInputEdgeLatches() {
+    EditorContext context;
+    context.beginPlay();
+
+    // A transition latches "pressed" until the end of the frame; the held
+    // state persists; OS auto-repeat never re-latches.
+    context.setKeyDown('W', true);
+    CHECK(context.keyDown('W'));
+    CHECK(context.keyPressed('W'));
+    context.tickPlayFrame(1.0 / 60.0);
+    CHECK(context.keyDown('W'));
+    CHECK(!context.keyPressed('W'));
+    context.setKeyDown('W', true); // auto-repeat while held
+    CHECK(!context.keyPressed('W'));
+
+    context.setKeyDown('W', false);
+    CHECK(!context.keyDown('W'));
+    CHECK(context.keyReleased('W'));
+    context.tickPlayFrame(1.0 / 60.0);
+    CHECK(!context.keyReleased('W'));
+
+    // Mouse buttons ride the same latch mechanism as keys 323..325; the
+    // wheel accumulates within a frame and resets with the latches.
+    context.setMousePosition(120.5f, 64.25f);
+    context.setMouseButton(0, true);
+    CHECK(context.keyDown(EditorContext::kMouseKeyBase));
+    CHECK(context.keyPressed(EditorContext::kMouseKeyBase));
+    context.addMouseWheel(1.5f);
+    context.addMouseWheel(-0.5f);
+    CHECK(context.mouseWheel() == 1.0f);
+    CHECK(context.mouseX() == 120.5f);
+    CHECK(context.mouseY() == 64.25f);
+    context.tickPlayFrame(1.0 / 60.0);
+    CHECK(context.mouseWheel() == 0.0f);
+    CHECK(context.keyDown(EditorContext::kMouseKeyBase)); // held across frames
+    CHECK(context.mouseX() == 120.5f); // position is state, not an event
+    context.endPlay();
+
+    // Editor-time events must not read as presses on the next play start.
+    context.setKeyDown('Q', true);
+    context.beginPlay();
+    CHECK(!context.keyPressed('Q'));
+    CHECK(context.keyDown('Q')); // but a physically held key stays held
+    context.endPlay();
+}
+
 int main() {
     testTransformUndoRedo();
     testDeleteRestoresSubtree();
@@ -439,5 +485,6 @@ int main() {
     testMaterialEditsPersist();
     testDataAssetInheritanceChain();
     testAudioSourcePlayOnStart();
+    testInputEdgeLatches();
     return sky::test::summary("undo_tests");
 }

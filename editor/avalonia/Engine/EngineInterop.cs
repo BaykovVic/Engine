@@ -168,6 +168,9 @@ internal static class EngineInterop
     [DllImport(Lib)] public static extern int sky_editor_play_state(IntPtr ctx);
     [DllImport(Lib)] public static extern void sky_editor_tick_play(IntPtr ctx, double dt);
     [DllImport(Lib)] public static extern void sky_editor_set_key_state(IntPtr ctx, int key, int down);
+    [DllImport(Lib)] public static extern void sky_editor_set_mouse_position(IntPtr ctx, float x, float y);
+    [DllImport(Lib)] public static extern void sky_editor_set_mouse_button(IntPtr ctx, int button, int down);
+    [DllImport(Lib)] public static extern void sky_editor_add_mouse_wheel(IntPtr ctx, float delta);
 
     // --- Prefabs ---
     [DllImport(Lib)] public static extern int sky_editor_save_prefab(IntPtr ctx, ulong obj, string path);

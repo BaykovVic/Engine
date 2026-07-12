@@ -570,6 +570,105 @@ void testBridgeFixedUpdate() {
 #endif
 }
 
+// Input edges and mouse through the boundary: a user script observes
+// GetKeyDown/GetKey/GetKeyUp latches, mouse buttons, position and wheel
+// across three scripted frames of injected events.
+void testBridgeInputEdgesAndMouse() {
+#ifdef SKY_TEST_MANAGED
+    SkyEditorContext* ctx = sky_editor_create();
+    CHECK(ctx != nullptr);
+
+    char root[512] = {0};
+    sky_editor_assets_root(ctx, root, sizeof(root));
+    const std::filesystem::path scriptsDir =
+        std::filesystem::path(root) / "Scripts";
+    std::error_code stale;
+    std::filesystem::remove_all(scriptsDir, stale);
+    std::filesystem::create_directories(scriptsDir);
+    {
+        std::ofstream source(scriptsDir / "EdgeProbe.cs");
+        source << "namespace SkyProject;\n"
+               << "using SkyEngine;\n"
+               << "public class EdgeProbe : SkyEngine.ScriptComponent\n"
+               << "{\n"
+               << "    private int _frame;\n"
+               << "    public override void OnUpdate(double dt)\n"
+               << "    {\n"
+               << "        _frame++;\n"
+               << "        var pos = Input.MousePosition;\n"
+               << "        Debug.Log(\"f\" + _frame"
+               << " + \" d=\" + Input.GetKeyDown(KeyCode.W)"
+               << " + \" h=\" + Input.GetKey(KeyCode.W)"
+               << " + \" u=\" + Input.GetKeyUp(KeyCode.W)"
+               << " + \" md=\" + Input.GetMouseButtonDown(0)"
+               << " + \" mh=\" + Input.GetMouseButton(0)"
+               << " + \" mu=\" + Input.GetMouseButtonUp(0)"
+               << " + \" x=\" + (int)pos.X + \" y=\" + (int)pos.Y"
+               << " + \" w=\" + (int)Input.MouseWheelDelta);\n"
+               << "    }\n"
+               << "}\n";
+    }
+    CHECK(sky_editor_reload_scripts(ctx) == 1);
+
+    const SkyObjectId object =
+        sky_editor_create_primitive(ctx, SKY_PRIMITIVE_CUBE, "EdgeProbe");
+    sky_editor_add_component(ctx, object, "sky.script");
+    int32_t script = -1;
+    for (int32_t i = 0; i < sky_editor_component_count(ctx, object); ++i) {
+        char type[64] = {0};
+        sky_editor_component_type(ctx, object, i, type, sizeof(type));
+        if (std::strcmp(type, "sky.script") == 0) {
+            script = i;
+        }
+    }
+    CHECK(script >= 0);
+    sky_editor_set_component_field(ctx, object, script, 0,
+                                   "SkyProject.EdgeProbe");
+
+    CHECK(sky_editor_play(ctx) == 1);
+    // Frame 1: W and the left button go down, cursor at (200, 100), wheel +3.
+    sky_editor_set_key_state(ctx, 'W', 1);
+    sky_editor_set_mouse_button(ctx, 0, 1);
+    sky_editor_set_mouse_position(ctx, 200.0f, 100.0f);
+    sky_editor_add_mouse_wheel(ctx, 3.0f);
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+    // Frame 2: nothing changes — held, no edges, wheel reset.
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+    // Frame 3: both released.
+    sky_editor_set_key_state(ctx, 'W', 0);
+    sky_editor_set_mouse_button(ctx, 0, 0);
+    sky_editor_tick_play(ctx, 1.0 / 60.0);
+
+    const char* expected[] = {
+        "f1 d=True h=True u=False md=True mh=True mu=False x=200 y=100 w=3",
+        "f2 d=False h=True u=False md=False mh=True mu=False x=200 y=100 w=0",
+        "f3 d=False h=False u=True md=False mh=False mu=True x=200 y=100 w=0",
+    };
+    for (const char* line : expected) {
+        bool found = false;
+        for (int32_t i = 0; i < sky_editor_log_count(ctx) && !found; ++i) {
+            char text[256] = {0};
+            sky_editor_log_text(ctx, i, text, sizeof(text));
+            found = std::strstr(text, line) != nullptr;
+        }
+        if (!found) {
+            std::printf("missing: %s\n", line);
+            for (int32_t i = 0; i < sky_editor_log_count(ctx); ++i) {
+                char text[256] = {0};
+                sky_editor_log_text(ctx, i, text, sizeof(text));
+                std::printf("LOG[%d]: %s\n", i, text);
+            }
+        }
+        CHECK(found);
+    }
+    sky_editor_stop(ctx);
+
+    sky_editor_destroy(ctx);
+    std::error_code cleanup;
+    std::filesystem::remove_all(scriptsDir, cleanup);
+#endif
+}
+
 // Audio through the boundary: a user script starts a WAV voice via
 // Audio.Play (native decode + mixer) and stops it via Audio.Stop.
 void testBridgeAudio() {
@@ -1335,6 +1434,7 @@ int main() {
     testBridgeScriptFields();
     testBridgeUserScripts();
     testBridgeFixedUpdate();
+    testBridgeInputEdgesAndMouse();
     testBridgeAudio();
     testBridgeDeterministicReplay();
     testBridgePrefabs();

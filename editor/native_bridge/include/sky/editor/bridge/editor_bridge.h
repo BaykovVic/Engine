@@ -355,6 +355,19 @@ SKY_BRIDGE_API void sky_editor_tick_play(SkyEditorContext* ctx, double dt);
 SKY_BRIDGE_API void sky_editor_set_key_state(SkyEditorContext* ctx, int32_t key,
                                              int32_t down);
 
+/* Mouse state for gameplay scripts (Input.MousePosition / GetMouseButton /
+ * MouseWheelDelta). Position is in the pixels of the surface feeding it
+ * (Game view control or player window). `button`: 0 = left, 1 = right,
+ * 2 = middle — internally these are key codes 323..325, so edge queries
+ * (GetMouseButtonDown/Up) ride the keyboard latch mechanism. The wheel
+ * accumulates within a frame and resets each play frame. */
+SKY_BRIDGE_API void sky_editor_set_mouse_position(SkyEditorContext* ctx, float x,
+                                                  float y);
+SKY_BRIDGE_API void sky_editor_set_mouse_button(SkyEditorContext* ctx,
+                                                int32_t button, int32_t down);
+SKY_BRIDGE_API void sky_editor_add_mouse_wheel(SkyEditorContext* ctx,
+                                               float delta);
+
 /* Data assets (ScriptableObject analog): typed field bags stored as
  * Assets/Data/<name>.skydata. `ref` is a VFS-style path
  * ("assets://Data/enemy.skydata"). Values travel as strings; `type` is one

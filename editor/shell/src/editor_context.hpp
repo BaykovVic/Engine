@@ -144,18 +144,52 @@ public:
     /// when a source changed since the last successful build.
     bool reloadUserScripts();
 
+    /// Mouse buttons live in the same key space as the keyboard (engine
+    /// codes 323..325 = left/right/middle, mirroring Unity's Mouse0..2), so
+    /// held/pressed/released logic is one mechanism for both.
+    static constexpr int kMouseKeyBase = 323;
+
     /// Keyboard state for gameplay scripts (portable key codes: ASCII
     /// uppercase for letters/digits, named keys from 256 — mirrored by the
     /// managed SkyEngine.KeyCode enum). Fed by the editor's Game view or the
-    /// player's window; read by scripts through Input.GetKey.
+    /// player's window; read by scripts through Input.GetKey. Transitions
+    /// are latched for edge queries (GetKeyDown/GetKeyUp) and cleared at
+    /// the end of each play frame; OS auto-repeat never re-latches.
     void setKeyDown(int key, bool down) {
         if (down) {
-            keysDown_.insert(key);
-        } else {
-            keysDown_.erase(key);
+            if (keysDown_.insert(key).second) {
+                keysPressed_.insert(key);
+            }
+        } else if (keysDown_.erase(key) != 0) {
+            keysReleased_.insert(key);
         }
     }
     [[nodiscard]] bool keyDown(int key) const { return keysDown_.contains(key); }
+    /// True only during the play frame after the key went down / up. Every
+    /// fixed step inside one frame sees the same edge state (the latch is
+    /// per render frame, not per physics step).
+    [[nodiscard]] bool keyPressed(int key) const {
+        return keysPressed_.contains(key);
+    }
+    [[nodiscard]] bool keyReleased(int key) const {
+        return keysReleased_.contains(key);
+    }
+
+    /// Mouse state for gameplay scripts. Position is in the pixels of
+    /// whatever surface feeds it (the player window, or the editor's Game
+    /// view control); the wheel accumulates within a frame and resets with
+    /// the edge latches.
+    void setMousePosition(float x, float y) {
+        mouseX_ = x;
+        mouseY_ = y;
+    }
+    void setMouseButton(int button, bool down) {
+        setKeyDown(kMouseKeyBase + button, down);
+    }
+    void addMouseWheel(float delta) { mouseWheel_ += delta; }
+    [[nodiscard]] float mouseX() const { return mouseX_; }
+    [[nodiscard]] float mouseY() const { return mouseY_; }
+    [[nodiscard]] float mouseWheel() const { return mouseWheel_; }
 
     /// Applies the active brush at a world-space point on the terrain.
     void applyTerrainBrush(core::Vec3 worldPoint);
@@ -335,6 +369,13 @@ private:
     // The subset of playScripts_ whose type overrides OnFixedUpdate.
     std::unordered_set<std::uint64_t> fixedUpdateMids_;
     std::unordered_set<int> keysDown_;
+    // Edge latches + per-frame wheel, cleared at the end of every play
+    // frame (and on play start, so stale editor-time events never leak in).
+    std::unordered_set<int> keysPressed_;
+    std::unordered_set<int> keysReleased_;
+    float mouseX_ = 0.0f;
+    float mouseY_ = 0.0f;
+    float mouseWheel_ = 0.0f;
     double playTime_ = 0.0; // seconds since play started (drives Time.TotalTime)
     double timeScale_ = 1.0; // Time.TimeScale; reset on play start
     // Real-time audio drain (ALSA when a device opens, else the null
